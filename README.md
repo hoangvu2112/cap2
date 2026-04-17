@@ -128,7 +128,7 @@ DB_PASS=
 DB_NAME=agrirend
 PORT=5000
 JWT_SECRET=mysecretkey
-CLERK_SECRET_KEY=
+GOOGLE_CLIENT_ID=
 ```
 
 - 📁 Frontend
@@ -137,7 +137,7 @@ CLERK_SECRET_KEY=
 - Trong .env:
 ```bash
 VITE_API_URL=http://localhost:5000/api
-VITE_CLERK_PUBLISHABLE_KEY=
+VITE_GOOGLE_CLIENT_ID=
 ```
 
 # Chạy Dự Án

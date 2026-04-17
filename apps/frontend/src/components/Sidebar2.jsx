@@ -2,7 +2,6 @@
 
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
-import { useClerk } from "@clerk/clerk-react"
 import { useState, useEffect } from "react"
 import api from "@/lib/api"
 import {
@@ -28,7 +27,6 @@ import {
   Shield,
 } from "lucide-react"
 
-/* ───────── NAV CONFIG ───────── */
 const USER_NAV = [
   { path: "/", icon: Home, label: "Bảng giá" },
   { path: "/news", icon: Newspaper, label: "Tin tức" },
@@ -48,17 +46,14 @@ const ADMIN_NAV = [
   { path: "/admin/settings", icon: Settings, label: "Cài đặt" },
 ]
 
-/* ───────── SIDEBAR ───────── */
 export default function Sidebar2() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { signOut } = useClerk()
 
   const [collapsed, setCollapsed] = useState(false)
   const [watchlist, setWatchlist] = useState([])
 
-  // Load mini watchlist (top 3 favorites)
   useEffect(() => {
     const loadWatchlist = async () => {
       try {
@@ -73,23 +68,22 @@ export default function Sidebar2() {
         const items = prodRes.data
           .filter((p) => favIds.includes(p.id))
           .slice(0, 3)
+
         setWatchlist(items)
       } catch {
-        // Silently fail — watchlist is optional
+        // Optional widget, ignore errors
       }
     }
+
     loadWatchlist()
   }, [])
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     try {
-      if (window.Clerk?.session) {
-        await signOut()
-      }
       logout()
       navigate("/login")
     } catch (error) {
-      console.error("❌ Lỗi khi đăng xuất:", error)
+      console.error("Logout error:", error)
     }
   }
 
@@ -110,7 +104,6 @@ export default function Sidebar2() {
           "linear-gradient(180deg, hsl(149 58% 95% / 0.96), hsl(143 44% 92% / 0.92) 45%, hsl(44 64% 90% / 0.88))",
       }}
     >
-      {/* ─── Logo ─── */}
       <div className="h-14 flex items-center gap-2.5 px-4 border-b border-border/40 shrink-0">
         <Link to="/" className="flex items-center gap-2.5 group min-w-0">
           <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center transition-colors duration-200 shrink-0">
@@ -124,9 +117,7 @@ export default function Sidebar2() {
         </Link>
       </div>
 
-      {/* ─── Main Navigation ─── */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-        {/* Section: Menu chính */}
         {!collapsed && (
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-2">
             Menu chính
@@ -149,7 +140,6 @@ export default function Sidebar2() {
                 }
               `}
             >
-              {/* Active indicator bar */}
               {active && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-r-full" />
               )}
@@ -159,7 +149,6 @@ export default function Sidebar2() {
           )
         })}
 
-        {/* Section: Admin */}
         {user?.role === "admin" && (
           <>
             {!collapsed && (
@@ -197,7 +186,6 @@ export default function Sidebar2() {
           </>
         )}
 
-        {/* Section: Watchlist */}
         {!collapsed && watchlist.length > 0 && (
           <>
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-5 pb-2">
@@ -209,6 +197,7 @@ export default function Sidebar2() {
                 const change = item.currentPrice - (item.previousPrice || item.currentPrice)
                 const isUp = change > 0
                 const isDown = change < 0
+
                 return (
                   <Link
                     key={item.id}
@@ -234,11 +223,9 @@ export default function Sidebar2() {
         )}
       </nav>
 
-      {/* ─── User Profile + Collapse ─── */}
       <div className="border-t border-border/40 p-2 space-y-1 shrink-0">
-        {/* Collapse Toggle */}
         <button
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={() => setCollapsed((value) => !value)}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
         >
@@ -252,7 +239,6 @@ export default function Sidebar2() {
           )}
         </button>
 
-        {/* User Info */}
         {user && (
           <Link
             to="/profile"
@@ -282,7 +268,6 @@ export default function Sidebar2() {
           </Link>
         )}
 
-        {/* Logout */}
         <button
           onClick={handleLogout}
           className={`

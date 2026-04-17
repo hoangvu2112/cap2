@@ -37,7 +37,7 @@ api.interceptors.response.use(
     if (isTokenError) {
       console.warn("⚠️ Token hết hạn hoặc không hợp lệ — tiến hành đăng xuất...");
 
-      // Xóa toàn bộ dữ liệu đăng nhập (dù là Clerk hay local)
+      // Xóa toàn bộ dữ liệu đăng nhập hiện tại
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       localStorage.removeItem("loginType");
