@@ -1,0 +1,14 @@
+{
+  "name": "agricultural-price-tracker",
+  "private": true,
+  "workspaces": [
+    "apps/backend",
+    "apps/frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix apps/backend\" \"npm run dev --prefix apps/frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

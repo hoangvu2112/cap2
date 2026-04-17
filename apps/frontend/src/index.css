@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==== Custom theme variables ==== */
+:root {
+  --color-primary: #1a7a3a;
+  --color-primary-dark: #145e2d;
+  --color-secondary: #d4912a;
+  --color-danger: #dc4444;
+  --color-success: #10b981;
+  --color-background: #f4f3ee;
+  --color-surface: #fdfcf7;
+  --color-text: #1a3a25;
+  --color-text-secondary: #5a7862;
+  --color-border: #dde3d5;
+  --radius: 0.5rem;
+}
+
+/* ==== Global styles ==== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}

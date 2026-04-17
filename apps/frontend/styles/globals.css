@@ -1,0 +1,186 @@
+@import "tw-animate-css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  :root {
+    /* 🌿 Agriculture-friendly warm palette */
+    --background: hsl(80 25% 96%);          /* Warm sage-tinted off-white */
+    --foreground: hsl(148 40% 15%);         /* Deep forest green (not pure black) */
+    --card: hsl(60 30% 98%);               /* Warm cream-white */
+    --card-foreground: hsl(148 35% 18%);    /* Dark green-brown */
+    --popover: hsl(60 25% 98%);
+    --popover-foreground: hsl(148 35% 18%);
+    --primary: hsl(148 60% 35%);            /* Rich agricultural green */
+    --primary-foreground: hsl(60 30% 98%);
+    --secondary: hsl(38 85% 52%);           /* Harvest gold/amber */
+    --secondary-foreground: hsl(38 20% 15%);
+    --muted: hsl(80 18% 93%);              /* Soft sage muted */
+    --muted-foreground: hsl(148 15% 38%);   /* Green-tinted gray text */
+    --accent: hsl(80 25% 90%);              /* Light sage accent */
+    --accent-foreground: hsl(148 40% 15%);
+    --destructive: hsl(0 72% 55%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --border: hsl(80 18% 88%);              /* Warm sage border */
+    --input: hsl(80 15% 90%);
+    --ring: hsl(148 60% 35%);
+    --radius: 1rem;
+    --chart-1: oklch(0.52 0.15 145);
+    --chart-2: oklch(0.75 0.15 75);
+    --chart-3: oklch(0.68 0.14 130);
+    --chart-4: oklch(0.828 0.189 84.429);
+    --chart-5: oklch(0.769 0.188 70.08);
+    --sidebar: hsl(80 15% 97%);
+    --sidebar-foreground: hsl(148 35% 18%);
+    --sidebar-primary: oklch(0.52 0.15 145);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: hsl(80 18% 93%);
+    --sidebar-accent-foreground: hsl(148 35% 18%);
+    --sidebar-border: hsl(80 15% 89%);
+    --sidebar-ring: oklch(0.52 0.15 145);
+  }
+
+  .dark {
+    --background: hsl(160 50% 5%);
+    --foreground: hsl(150 30% 90%);
+    --card: hsl(160 50% 8%);
+    --card-foreground: hsl(150 30% 90%);
+    --popover: hsl(160 50% 8%);
+    --popover-foreground: hsl(150 30% 90%);
+    --primary: hsl(150 60% 45%);
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: hsl(35 80% 50%);
+    --secondary-foreground: hsl(0 0% 100%);
+    --muted: hsl(160 30% 15%);
+    --muted-foreground: hsl(150 20% 60%);
+    --accent: hsl(160 30% 15%);
+    --accent-foreground: hsl(150 30% 90%);
+    --destructive: hsl(0 62% 30%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --border: hsl(160 30% 15%);
+    --input: hsl(160 30% 15%);
+    --ring: hsl(150 60% 45%);
+    --chart-1: oklch(0.488 0.243 264.376);
+    --chart-2: oklch(0.696 0.17 162.48);
+    --chart-3: oklch(0.769 0.188 70.08);
+    --chart-4: oklch(0.627 0.265 303.9);
+    --chart-5: oklch(0.645 0.246 16.439);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(0.269 0 0);
+    --sidebar-ring: oklch(0.439 0 0);
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 30s linear infinite;
+}
+
+.animate-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* 🌾 Agriculture-themed content area enhancements */
+
+/* Warm cream-tinted cards */
+.bg-card,
+[class*="bg-card"] {
+  border-color: hsl(80, 15%, 88%) !important;
+}
+
+/* Subtle warm shadow for elevated elements */
+.shadow-sm {
+  box-shadow: 0 1px 3px 0 hsla(80, 30%, 40%, 0.06), 0 1px 2px -1px hsla(80, 30%, 40%, 0.06);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 6px -1px hsla(80, 30%, 40%, 0.08), 0 2px 4px -2px hsla(80, 30%, 40%, 0.06);
+}
+
+/* Smooth warm hover states */
+.hover\:bg-muted:hover {
+  background-color: hsl(80, 18%, 93%);
+}
+
+/* Warm scrollbar for main content */
+main::-webkit-scrollbar {
+  width: 8px;
+}
+
+main::-webkit-scrollbar-track {
+  background: hsl(80, 15%, 95%);
+}
+
+main::-webkit-scrollbar-thumb {
+  background: hsl(148, 20%, 78%);
+  border-radius: 4px;
+}
+
+main::-webkit-scrollbar-thumb:hover {
+  background: hsl(148, 25%, 65%);
+}
