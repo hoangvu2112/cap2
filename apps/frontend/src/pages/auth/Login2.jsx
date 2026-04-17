@@ -1,39 +1,93 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
-import { SignInButton, useUser, useSession, useClerk, UserButton } from "@clerk/clerk-react"
 import AuthLayout from "@/components/AuthLayout"
 import { Sprout } from "lucide-react"
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const GOOGLE_SCRIPT_SRC = "https://accounts.google.com/gsi/client"
 
 export default function Login2() {
   const [email, setEmail] = useState("admin@agriprice.vn")
   const [password, setPassword] = useState("admin123")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const googleButtonRef = useRef(null)
 
-  const { login, loginWithClerk } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
 
-  const { isSignedIn, user } = useUser()
-  const { session } = useSession()
-  const { signOut } = useClerk()
-
   useEffect(() => {
-    const syncClerkLogin = async () => {
-      if (isSignedIn && session) {
-        try {
-          const token = await session.getToken()
-          await loginWithClerk(token)
-          navigate("/")
-        } catch (err) {
-          console.error("Lỗi đồng bộ Clerk:", err)
+    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return
+
+    let cancelled = false
+
+    const handleGoogleCredential = async (response) => {
+      if (!response?.credential || cancelled) return
+
+      setError("")
+      setGoogleLoading(true)
+
+      try {
+        const user = await loginWithGoogle(response.credential)
+        navigate(user.role === "admin" ? "/admin" : "/")
+      } catch (err) {
+        setError(err.response?.data?.error || "Đăng nhập Google thất bại")
+      } finally {
+        if (!cancelled) {
+          setGoogleLoading(false)
         }
       }
     }
-    syncClerkLogin()
-  }, [isSignedIn, session])
+
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current || cancelled) return
+
+      googleButtonRef.current.innerHTML = ""
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+      })
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+        logo_alignment: "left",
+        width: Math.max(260, googleButtonRef.current.offsetWidth || 320),
+      })
+    }
+
+    const existingScript = document.querySelector(`script[src="${GOOGLE_SCRIPT_SRC}"]`)
+
+    if (window.google?.accounts?.id) {
+      renderGoogleButton()
+    } else if (existingScript) {
+      existingScript.addEventListener("load", renderGoogleButton, { once: true })
+    } else {
+      const script = document.createElement("script")
+      script.src = GOOGLE_SCRIPT_SRC
+      script.async = true
+      script.defer = true
+      script.onload = renderGoogleButton
+      document.body.appendChild(script)
+    }
+
+    return () => {
+      cancelled = true
+      if (window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.cancel()
+        } catch {
+          // ignore Google cleanup errors
+        }
+      }
+    }
+  }, [loginWithGoogle, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -42,11 +96,7 @@ export default function Login2() {
 
     try {
       const user = await login(email, password)
-      if (user.role === "admin") {
-        navigate("/admin")
-      } else {
-        navigate("/")
-      }
+      navigate(user.role === "admin" ? "/admin" : "/")
     } catch (err) {
       setError(err.response?.data?.error || "Đăng nhập thất bại")
     } finally {
@@ -56,7 +106,6 @@ export default function Login2() {
 
   return (
     <AuthLayout>
-      {/* Logo mobile */}
       <div className="flex items-center gap-2 mb-5 md:hidden">
         <div className="w-9 h-9 bg-[hsl(148,60%,55%)]/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-[hsl(148,60%,55%)]/20">
           <Sprout className="text-[hsl(148,60%,55%)] w-5 h-5" />
@@ -64,7 +113,6 @@ export default function Login2() {
         <span className="font-bold text-xl text-[hsl(148,60%,55%)]">AgroInsight</span>
       </div>
 
-      {/* Heading — chữ xanh */}
       <div className="mb-5">
         <h1 className="text-xl font-bold text-[hsl(148,60%,55%)] mb-1">Đăng nhập</h1>
         <p className="text-[hsl(148,50%,55%)]/60 text-sm">Chào mừng bạn quay lại hệ thống</p>
@@ -107,7 +155,6 @@ export default function Login2() {
           </Link>
         </div>
 
-        {/* Nút đăng nhập — màu vàng mật ong để tương phản với chữ xanh */}
         <button
           type="submit"
           disabled={loading}
@@ -124,7 +171,6 @@ export default function Login2() {
         </Link>
       </div>
 
-      {/* Đăng nhập Google */}
       <div className="mt-4">
         <div className="flex items-center my-4">
           <div className="flex-grow h-px bg-white/15"></div>
@@ -132,25 +178,19 @@ export default function Login2() {
           <div className="flex-grow h-px bg-white/15"></div>
         </div>
 
-        <SignInButton mode="modal">
-          <button className="flex items-center justify-center gap-2 w-full border border-white/15 rounded-xl py-2 px-4 hover:bg-white/15 transition-all duration-200 bg-white/8 backdrop-blur-sm text-sm">
-            <img src="https://img.clerk.com/static/google.svg" alt="Google" className="w-4 h-4" />
-            <span className="text-white font-medium">Đăng nhập với Google</span>
-          </button>
-        </SignInButton>
+        {!GOOGLE_CLIENT_ID ? (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+            Thiếu VITE_GOOGLE_CLIENT_ID trong file môi trường frontend.
+          </div>
+        ) : (
+          <div className="rounded-xl border border-white/15 bg-white/8 px-3 py-3 backdrop-blur-sm">
+            <div ref={googleButtonRef} className="flex min-h-11 items-center justify-center" />
+            {googleLoading && (
+              <p className="mt-2 text-center text-xs text-white/60">Đang xác thực với Google...</p>
+            )}
+          </div>
+        )}
       </div>
-
-      {isSignedIn && (
-        <div className="mt-4 text-center">
-          <UserButton />
-          <button
-            onClick={() => signOut()}
-            className="mt-2 bg-red-500/80 hover:bg-red-500 text-white text-sm font-medium py-1.5 px-4 rounded-xl transition-colors"
-          >
-            Đăng xuất Clerk
-          </button>
-        </div>
-      )}
     </AuthLayout>
   )
 }

@@ -1,14 +1,40 @@
 import express from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+import axios from "axios"
 import pool from "../db.js"
 import nodemailer from "nodemailer";
 import rateLimit from "express-rate-limit";
-import { verifyClerkToken } from "../middleware/verifyClerk.js"
 import { authenticateToken } from "../middleware/auth.js"
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+
+const verifyGoogleCredential = async (credential) => {
+  if (!credential) {
+    throw new Error("Missing Google credential")
+  }
+
+  const { data } = await axios.get("https://oauth2.googleapis.com/tokeninfo", {
+    params: { id_token: credential },
+  })
+
+  if (GOOGLE_CLIENT_ID && data.aud !== GOOGLE_CLIENT_ID) {
+    throw new Error("Google client ID mismatch")
+  }
+
+  if (data.email_verified !== "true") {
+    throw new Error("Google email is not verified")
+  }
+
+  return {
+    email: data.email,
+    name: data.name || data.given_name || data.email?.split("@")[0] || "Người dùng Google",
+    imageUrl: data.picture || "",
+    googleId: data.sub,
+  }
+}
 
 // Rate limiter cho endpoint forgot-password (giảm spam)
 const forgotLimiter = rateLimit({
@@ -295,48 +321,72 @@ router.post("/login", async (req, res) => {
   }
 })
 
-// Đăng nhập qua Clerk (Google, Email, v.v.)
-router.post("/clerk-login", verifyClerkToken, async (req, res) => {
+router.post("/google-login", async (req, res) => {
   try {
-    const { email, name, id: clerkId, imageUrl } = req.clerkUser
+    const { credential } = req.body
+    const { email, name, imageUrl, googleId } = await verifyGoogleCredential(credential)
 
     if (!email) {
-      return res.status(400).json({ error: "Email không tồn tại trong tài khoản Clerk" })
+      return res.status(400).json({ error: "Không lấy được email từ Google" })
     }
 
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [email])
 
     let user
     if (rows.length === 0) {
-      const fullName = name || "Người dùng Clerk"
-      const dummyPassword = await bcrypt.hash(clerkId || "clerk_default_password", 5)
-
+      const dummyPassword = await bcrypt.hash(googleId || email, 5)
       const [result] = await pool.query(
         "INSERT INTO users (name, email, avatar_url, password, role, status, joinDate) VALUES (?, ?, ?, ?, 'user', 'active', CURDATE())",
-        [fullName, email, imageUrl, dummyPassword]
+        [name, email, imageUrl, dummyPassword]
       )
 
-      user = { id: result.insertId, email, name: fullName, avatar_url: imageUrl, role: "user" }
+      user = {
+        id: result.insertId,
+        email,
+        name,
+        avatar_url: imageUrl,
+        role: "user",
+      }
     } else {
       user = rows[0]
+
+      if ((!user.avatar_url && imageUrl) || (name && user.name !== name)) {
+        await pool.query(
+          "UPDATE users SET name = COALESCE(NULLIF(?, ''), name), avatar_url = COALESCE(NULLIF(?, ''), avatar_url) WHERE id = ?",
+          [name, imageUrl, user.id]
+        )
+        user = {
+          ...user,
+          name: name || user.name,
+          avatar_url: imageUrl || user.avatar_url,
+        }
+      }
     }
 
-    // Nếu tài khoản bị khóa
     if (user.status === "banned") {
-      return res.status(403).json({ error: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." });
+      return res.status(403).json({ error: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." })
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, avatar_url: user.avatar_url },
       JWT_SECRET,
       { expiresIn: "1h" }
     )
 
-    res.json({ token, user, loginType: "clerk" })
-    // console.log("✅ Clerk login successful for user:", user)
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        role: user.role,
+      },
+      loginType: "google",
+    })
   } catch (error) {
-    console.error("❌ Lỗi Clerk login:", error)
-    res.status(500).json({ error: "Clerk login failed" })
+    console.error("Google login failed:", error.response?.data || error.message || error)
+    res.status(401).json({ error: "Đăng nhập Google thất bại" })
   }
 })
 

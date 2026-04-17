@@ -3,41 +3,31 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { useLayout } from "../context/LayoutContext"
-import { Home, Heart, Bell, BarChart3, Users, User, LogOut, Menu, X, Map, Sprout } from "lucide-react" // Thêm icon Sprout cho logo
+import { Home, Heart, Bell, BarChart3, Users, User, LogOut, Menu, X, Map, Sprout } from "lucide-react"
 import { useState } from "react"
-import { useClerk } from "@clerk/clerk-react"
 
 export default function Navbar() {
-  // Ẩn Navbar khi đang trong MainLayout2 (tránh double navigation)
   const { hasLayout } = useLayout()
   if (hasLayout) return null
 
   const { user, logout } = useAuth()
-  console.log("👤 Thông tin user hiện tại:", user)
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { signOut } = useClerk()
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     try {
-      if (window.Clerk?.session) {
-        await window.Clerk.signOut()
-        console.log("✅ Clerk session signed out")
-      }
       logout()
       navigate("/login")
     } catch (error) {
-      console.error("❌ Lỗi khi đăng xuất:", error)
+      console.error("Logout error:", error)
     }
   }
 
   return (
-    // GLASSMORPHISM: bg-background/60 + backdrop-blur-xl
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 transition-all">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2 group">
-            {/* Logo sống động hơn với Gradient */}
             <div className="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-green-500/50 transition-all duration-300">
               <Sprout className="text-white w-5 h-5" />
             </div>
@@ -46,7 +36,6 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-1">
             <NavLink to="/" icon={Home} label="Trang chủ" />
             <NavLink to="/favorites" icon={Heart} label="Yêu thích" />
@@ -73,7 +62,7 @@ export default function Navbar() {
                     <User className="w-4 h-4" />
                   </div>
                 )}
-                <span className="text-sm font-medium text-foreground">{user?.name || user?.email}</span>
+                <span className="text-sm font-medium text-foreground">{user.name || user.email}</span>
               </Link>
             )}
 
@@ -91,7 +80,6 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Menu (Cũng có hiệu ứng mờ nhẹ) */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-border/50 bg-background/95 backdrop-blur-md animate-in slide-in-from-top-2">
             <div className="flex flex-col gap-2 p-2">
@@ -115,7 +103,6 @@ export default function Navbar() {
   )
 }
 
-// Component phụ cho Desktop Link gọn gàng hơn
 function NavLink({ to, icon: Icon, label }) {
   return (
     <Link
@@ -128,7 +115,6 @@ function NavLink({ to, icon: Icon, label }) {
   )
 }
 
-// Component phụ cho Mobile Link
 function MobileNavLink({ to, icon: Icon, label, onClick }) {
   return (
     <Link
