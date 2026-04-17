@@ -1,0 +1,56 @@
+# ==============================
+# 🌱 GLOBAL IGNORE SETTINGS
+# ==============================
+
+# Dependencies
+**/node_modules/
+
+# Build / Output directories
+.next/
+**/build/
+**/dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test coverage
+**/coverage/
+
+# Local runtime files
+*.pid
+*.seed
+*.log
+
+# ==============================
+# ⚙️ BACKEND SPECIFIC (Node.js / Express)
+# ==============================
+apps/backend/.env
+apps/backend/.env.*
+apps/backend/uploads/
+apps/backend/tmp/
+apps/backend/logs/
+apps/backend/scraped/all_regions.json
+
+# ==============================
+# 💻 FRONTEND SPECIFIC (React + Vite)
+# ==============================
+apps/frontend/.env
+apps/frontend/.env.*
+apps/frontend/.vite/
+apps/frontend/.cache/
+apps/frontend/dist/
