@@ -563,6 +563,94 @@ router.post("/posts/:postId/comments", authenticateToken, async (req, res) => {
   }
 })
 
+router.put("/posts/:postId/comments/:commentId", authenticateToken, async (req, res) => {
+  try {
+    const postId = Number(req.params.postId)
+    const commentId = Number(req.params.commentId)
+    const userId = req.user.id
+    const content = req.body.content?.trim()
+
+    if (!content) {
+      return res.status(400).json({ error: "Nội dung trống" })
+    }
+
+    const [[commentRow]] = await pool.query(
+      "SELECT id, post_id, user_id FROM community_comments WHERE id = ?",
+      [commentId]
+    )
+
+    if (!commentRow || Number(commentRow.post_id) !== postId) {
+      return res.status(404).json({ error: "Không tìm thấy bình luận" })
+    }
+
+    if (commentRow.user_id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Không có quyền sửa bình luận" })
+    }
+
+    await pool.query(
+      "UPDATE community_comments SET content = ? WHERE id = ?",
+      [content, commentId]
+    )
+
+    const [[updatedComment]] = await pool.query(
+      `
+        SELECT c.*, u.name AS author_name, u.avatar_url
+        FROM community_comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.id = ?
+      `,
+      [commentId]
+    )
+
+    ioRef.io?.emit("community:comment_updated", {
+      postId,
+      comment: updatedComment,
+    })
+
+    res.json({ message: "Đã cập nhật bình luận", data: updatedComment })
+  } catch (error) {
+    console.error("PUT comment error:", error)
+    res.status(500).json({ error: "Lỗi máy chủ" })
+  }
+})
+
+router.delete("/posts/:postId/comments/:commentId", authenticateToken, async (req, res) => {
+  try {
+    const postId = Number(req.params.postId)
+    const commentId = Number(req.params.commentId)
+    const userId = req.user.id
+
+    const [[commentRow]] = await pool.query(
+      "SELECT id, post_id, user_id FROM community_comments WHERE id = ?",
+      [commentId]
+    )
+
+    if (!commentRow || Number(commentRow.post_id) !== postId) {
+      return res.status(404).json({ error: "Không tìm thấy bình luận" })
+    }
+
+    if (commentRow.user_id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Không có quyền xoá bình luận" })
+    }
+
+    await pool.query("DELETE FROM community_comments WHERE id = ?", [commentId])
+    await pool.query(
+      "UPDATE community_posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = ?",
+      [postId]
+    )
+
+    ioRef.io?.emit("community:comment_deleted", {
+      postId,
+      commentId,
+    })
+
+    res.json({ message: "Đã xoá bình luận", data: { id: commentId } })
+  } catch (error) {
+    console.error("DELETE comment error:", error)
+    res.status(500).json({ error: "Lỗi máy chủ" })
+  }
+})
+
 router.get("/posts/:postId/comments", async (req, res) => {
   try {
     const postId = req.params.postId

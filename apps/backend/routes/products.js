@@ -13,96 +13,130 @@ export const ioRef = { io: null }
  * @param {Array} news - Tin tức liên quan
  * @returns {object} - Gồm { summary: string, sentiment: string }
  */
-function generateAnalysis(product, stats, history, news) {
+function generateUniqueAnalysis(product, stats, history, news) {
   const analysisPoints = [];
-  let sentimentScore = 0; 
-  const currentPrice = Number(product.currentPrice);
-  const avg_30d = Number(stats.avg_30d);
-  const diff = currentPrice - avg_30d;
+  let sentimentScore = 0;
+  const currentPrice = Number(product.currentPrice) || 0;
+  const previousPrice = Number(product.previousPrice) || currentPrice;
+  const avg30d = Number(stats.avg_30d) || currentPrice;
+  const high30d = Number(stats.high_30d) || currentPrice;
+  const low30d = Number(stats.low_30d) || currentPrice;
+  const intradayChangePct = previousPrice > 0 ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0;
+  const gapVsAvgPct = avg30d > 0 ? ((currentPrice - avg30d) / avg30d) * 100 : 0;
+  const rangeWidth = Math.max(high30d - low30d, 1);
+  const positionInRange = (currentPrice - low30d) / rangeWidth;
+  const nameLower = product.name.toLowerCase();
 
-  // Nhận diện loại hàng để phân tích có tâm hơn
-  const isSầuRiêng = product.name.toLowerCase().includes("sầu riêng");
-
-  if (product.trend === 'up') {
-    analysisPoints.push(`Xu hướng ${product.name} tại ${product.region} đang ghi nhận đà tăng trưởng tích cực.`);
-    sentimentScore++;
-  } else if (product.trend === 'down') {
-    analysisPoints.push(`Thị trường ${product.name} đang đối mặt với áp lực giảm giá ngắn hạn.`);
-    sentimentScore--;
+  if (product.trend === "up") {
+    analysisPoints.push(`Giá ${product.name} tại ${product.region} đang giữ nhịp tăng, cho thấy lực mua ngắn hạn vẫn nghiêng về phía chủ động.`);
+    sentimentScore += 1;
+  } else if (product.trend === "down") {
+    analysisPoints.push(`Giá ${product.name} tại ${product.region} đang điều chỉnh giảm, phản ánh tâm lý giao dịch thận trọng hơn trong ngắn hạn.`);
+    sentimentScore -= 1;
+  } else {
+    analysisPoints.push(`Giá ${product.name} tại ${product.region} đang đi ngang, cho thấy cung cầu tạm thời ở trạng thái cân bằng.`);
   }
 
-  if (avg_30d > 0) {
-    if (currentPrice > avg_30d * 1.05) {
-      analysisPoints.push("Mức giá hiện tại đang neo ở vùng cao so với trung bình 30 ngày qua.");
-    } else if (currentPrice < avg_30d * 0.95) {
-      analysisPoints.push("Giá đang điều chỉnh về vùng hỗ trợ thấp, tạo cơ hội tích lũy cho nhà đầu tư.");
-    }
+  if (positionInRange >= 0.8) {
+    analysisPoints.push(`Mức giá hiện tại đang áp sát vùng đỉnh 30 ngày (${high30d.toLocaleString("vi-VN")}đ), nên dư địa tăng thêm có nhưng vùng rủi ro cũng bắt đầu rõ hơn.`);
+    sentimentScore += 1;
+  } else if (positionInRange <= 0.2) {
+    analysisPoints.push(`Giá hiện nằm gần vùng đáy 30 ngày (${low30d.toLocaleString("vi-VN")}đ), phù hợp hơn với góc nhìn chờ xác nhận nền giá thay vì mua đuổi.`);
+    sentimentScore -= 1;
+  } else {
+    analysisPoints.push(`Giá vẫn đang ở giữa biên độ 30 ngày, cho thấy thị trường chưa rơi vào trạng thái quá nóng hoặc quá suy yếu.`);
   }
 
-  if (isSầuRiêng) {
-    analysisPoints.push("Nhu cầu tiêu thụ nội địa và xuất khẩu đang ảnh hưởng mạnh đến biến động giá sầu riêng.");
+  if (gapVsAvgPct >= 6) {
+    analysisPoints.push(`So với mức trung bình 30 ngày (${Math.round(avg30d).toLocaleString("vi-VN")}đ), giá hiện cao hơn khoảng ${gapVsAvgPct.toFixed(1)}%, thể hiện mặt bằng premium ngắn hạn.`);
+    sentimentScore += 1;
+  } else if (gapVsAvgPct <= -6) {
+    analysisPoints.push(`Giá hiện thấp hơn trung bình 30 ngày khoảng ${Math.abs(gapVsAvgPct).toFixed(1)}%, cho thấy thị trường vẫn đang giao dịch dưới vùng cân bằng quen thuộc.`);
+    sentimentScore -= 1;
+  } else {
+    analysisPoints.push(`Khoảng cách với giá trung bình 30 ngày chưa lớn, nên áp lực lệch pha hiện chưa thật sự cực đoan.`);
   }
 
-  const direction = sentimentScore >= 1 ? "up" : sentimentScore <= -1 ? "down" : "side";
-  const change_amount = Math.abs(Math.round(diff * 0.08 / 100) * 100) || 1500;
+  if (Math.abs(intradayChangePct) >= 2.5) {
+    analysisPoints.push(`Biến động so với phiên trước đạt ${intradayChangePct > 0 ? "+" : ""}${intradayChangePct.toFixed(2)}%, xác nhận nhịp giao dịch trong ngày tương đối mạnh.`);
+  } else {
+    analysisPoints.push(`Biến động ngày chỉ quanh ${intradayChangePct > 0 ? "+" : ""}${intradayChangePct.toFixed(2)}%, nên xu hướng hiện tại đang dịch chuyển khá chậm và chọn lọc.`);
+  }
+
+  if (nameLower.includes("sầu riêng")) {
+    analysisPoints.push(`Mặt hàng ${product.name} đang chịu tác động từ nhịp độ thu hoạch và sức mua xuất khẩu tại ${product.region}.`);
+  } else if (nameLower.includes("cà phê")) {
+    analysisPoints.push(`Thị trường cà phê ${product.name} phản ứng với các tín hiệu từ sàn giao dịch và tâm lý chốt lời của đại lý.`);
+  } else {
+    analysisPoints.push(`Xu hướng giá của ${product.name} phụ thuộc vào cung cầu thực tế và biến động chi phí vận chuyển tại khu vực.`);
+  }
+
+  const direction = sentimentScore >= 2 ? "up" : sentimentScore <= -2 ? "down" : "side";
+  const change_amount = Math.max(Math.round(Math.abs(currentPrice - avg30d) * 0.12 / 100) * 100, 1000);
+  const volatility = rangeWidth / Math.max(avg30d, 1) > 0.15 ? "Cao" : rangeWidth / Math.max(avg30d, 1) > 0.07 ? "Trung bình" : "Thấp";
 
   return {
-    summary: analysisPoints.join(" ") || "Thị trường đang trong trạng thái cân bằng, các nhà giao dịch đang chờ đợi những tín hiệu mới từ nhu cầu xuất khẩu.",
+    summary: analysisPoints.join(" "),
     sentiment: sentimentScore >= 1 ? "Tích cực" : sentimentScore <= -1 ? "Tiêu cực" : "Trung tính",
-    predictedPrice: direction === "up" ? currentPrice + change_amount : currentPrice - change_amount,
-    confidence: 75,
-    volatility: "Trung bình",
-    signal: direction === "up" ? "Duy trì vị thế mua" : direction === "down" ? "Thận trọng quan sát" : "Ưu tiên tích lũy",
-    direction: direction,
-    change_amount: change_amount,
-    recommendation: sentimentScore >= 1 ? "Mua" : sentimentScore <= -1 ? "Bán" : "Giữ"
+    predictedPrice: direction === "up" ? currentPrice + change_amount : direction === "down" ? Math.max(currentPrice - change_amount, 0) : currentPrice,
+    confidence: volatility === "Cao" ? 68 : volatility === "Trung bình" ? 76 : 84,
+    volatility,
+    signal: direction === "up" ? "Canh giữ vị thế mạnh" : direction === "down" ? "Ưu tiên chờ cân bằng" : "Theo dõi thêm tín hiệu",
+    direction,
+    change_amount,
+    recommendation: sentimentScore >= 2 ? "Mua" : sentimentScore <= -2 ? "Bán" : "Giữ"
   };
 }
-// --- KẾT THÚC BỘ NÃO AI (RULE-BASED FALLBACK) ---
 
+function getPromptForProduct(p) {
+  const name = p.name, region = p.region || "", stats = p.stats;
+  const nameLower = name.toLowerCase(), regionLower = region.toLowerCase();
+  const info = `Sản phẩm: ${name}, Vùng: ${region}, Giá: ${p.currentPrice}đ/${p.unit}, 30 ngày: Cao ${stats.high_30d}, Thấp ${stats.low_30d}, TB ${Math.round(stats.avg_30d)}`;
 
-// ===========================================
-// --- 🚀 BỘ NÃO PHÂN TÍCH GỘP (BATCH ANALYSIS - TIẾT KIỆM CREDIT) ---
-// ===========================================
-async function generateBatchAnalysisWithGroq(productsData) {
+  let role = `chuyên gia phân tích thị trường ${name} tại ${region}`, req = `Phân tích xu hướng giá và cung cầu tại ${region}.`;
+
+  if (nameLower.includes("cà phê")) {
+    req = `Phân tích giá ${name}, so sánh mặt bằng chung và dự báo ngắn hạn.`;
+    if (nameLower.includes("đắk lắk") || regionLower.includes("đắk lắk")) 
+      req = `Tập trung biến động Đắk Lắk, tình hình thu mua kho lớn và thời tiết Tây Nguyên.`;
+    else if (nameLower.includes("lâm đồng") || regionLower.includes("lâm đồng")) 
+      req = `Chú ý chất lượng hạt, nhu cầu rang xay và xuất khẩu đặc thù Lâm Đồng.`;
+  } else if (nameLower.includes("sầu riêng")) {
+    req = `Sức mua xuất khẩu, tiến độ đóng hàng vựa và biến động theo size (A, B, C).`;
+    if (nameLower.includes("ri6")) req = `Thị hiếu Trung Quốc với Ri6, độ chín vụ và giá thu mua tại vườn.`;
+  } else if (nameLower.includes("lúa") || nameLower.includes("gạo")) {
+    req = `Chú ý hợp đồng xuất khẩu gạo, an ninh lương thực và giá lúa tươi tại ruộng.`;
+  }
+
+  return `Bạn là ${role}. Dữ liệu: ${info}. YÊU CẦU: ${req}. LƯU Ý: KHÔNG sử dụng các câu văn mẫu lặp đi lặp lại, hãy phân tích thực tế và khác biệt cho từng loại mặt hàng.`;
+}
+
+// Hàm bổ sung cho phần định dạng JSON
+const getJsonFormatRequirement = (productId) => `
+YÊU CẦU TRẢ VỀ: TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC SAU:
+{
+  "id": ${productId},
+  "summary": "...",
+  "sentiment": "Tích cực" | "Tiêu cực" | "Trung tính",
+  "predictedPrice": <số>,
+  "confidence": <50-98>,
+  "volatility": "Thấp" | "Trung bình" | "Cao",
+  "signal": "...",
+  "direction": "up" | "down" | "side",
+  "change_amount": <số>,
+  "recommendation": "Mua" | "Bán" | "Giữ"
+}`;
+
+/**
+ * 🚀 PHÂN TÍCH ĐƠN LẺ (SINGLE ANALYSIS) - GIÚP NỘI DUNG ĐA DẠNG
+ */
+async function generateSingleProductAnalysisWithGroq(product) {
   try {
     if (!process.env.GROQ_API_KEY) throw new Error("Chưa có GROQ_API_KEY");
 
-    // Tạo danh sách sản phẩm cho prompt
-    const productListText = productsData.map((p, i) => `
-    SẢN PHẨM #${i + 1} (ID: ${p.id}):
-    - Tên: ${p.name} | Vùng: ${p.region}
-    - Giá hiện tại: ${p.currentPrice} đ/${p.unit}
-    - Thống kê 30 ngày: Cao nhất ${p.stats.high_30d}, Thấp nhất ${p.stats.low_30d}, TB ${Math.round(p.stats.avg_30d)}
-    `).join("\n");
-
-    const prompt = `Bạn là chuyên gia phân tích thị trường nông sản chuyên nghiệp. 
-Hãy phân tích danh sách ${productsData.length} sản phẩm sau đây và trả về kết quả dưới dạng MẢNG JSON.
-
-DANH SÁCH:
-${productListText}
-
-YÊU CẦU CHO MỖI SẢN PHẨM:
-1. Summary: Phân tích 3-4 câu sắc bén về xu hướng.
-2. predictedPrice: Giá dự báo phiên tới.
-3. signal: Nhận định kỹ thuật (10 từ).
-
-ĐỊNH DẠNG TRẢ VỀ (CHỈ TRẢ VỀ JSON):
-[
-  {
-    "id": <ID sản phẩm>,
-    "summary": "...",
-    "sentiment": "Tích cực" | "Tiêu cực" | "Trung tính",
-    "predictedPrice": <số>,
-    "confidence": <50-98>,
-    "volatility": "Thấp" | "Trung bình" | "Cao",
-    "signal": "...",
-    "direction": "up" | "down" | "side",
-    "change_amount": <số>,
-    "recommendation": "Mua" | "Bán" | "Giữ"
-  },
-  ...
-]`;
+    const promptBase = getPromptForProduct(product);
+    const jsonFormat = getJsonFormatRequirement(product.id);
+    const fullPrompt = `${promptBase}\n\n${jsonFormat}`;
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -111,8 +145,8 @@ YÊU CẦU CHO MỖI SẢN PHẨM:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{ "role": "user", "content": prompt }],
+        "model": "llama-3.1-8b-instant",
+        "messages": [{ "role": "user", "content": fullPrompt }],
         "response_format": { "type": "json_object" }
       })
     });
@@ -121,12 +155,9 @@ YÊU CẦU CHO MỖI SẢN PHẨM:
     if (data.error) throw new Error(data.error.message);
 
     const content = data.choices[0].message.content;
-    const results = JSON.parse(content);
-    
-    // Nếu AI không trả về mảng trực tiếp, hãy tìm mảng trong object
-    return Array.isArray(results) ? results : results.results || results.analyses || [];
+    return JSON.parse(content);
   } catch (err) {
-    console.error("❌ Lỗi Phân tích Gộp Groq:", err.message);
+    console.error(`❌ Lỗi Phân tích Groq cho sản phẩm #${product.id}:`, err.message);
     return null;
   }
 }
@@ -146,79 +177,94 @@ const calculateSMA = (data, window, key = "price") => {
   });
 };
 
+async function rebuildAnalysisForProduct(productId) {
+  const [productRows] = await pool.query("SELECT * FROM products WHERE id = ?", [productId]);
+  if (productRows.length === 0) return null;
+
+  const [statsRows] = await pool.query(
+    "SELECT MAX(price) AS high_30d, MIN(price) AS low_30d, AVG(price) AS avg_30d FROM price_history WHERE product_id = ? AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
+    [productId]
+  );
+
+  const product = productRows[0];
+  const stats = statsRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
+  
+  // Gọi AI thay vì Rule-based
+  let analysis = await generateSingleProductAnalysisWithGroq({ ...product, stats });
+  
+  if (!analysis) {
+    analysis = generateUniqueAnalysis(product, stats, [], []);
+  }
+
+  const analysisJson = JSON.stringify(analysis);
+  await pool.query(
+    "INSERT INTO analysis_data (product_id, analysis_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE analysis_json = ?",
+    [productId, analysisJson, analysisJson]
+  );
+
+  await pool.query("UPDATE products SET analysis_at = NOW() WHERE id = ?", [productId]);
+  return analysis;
+}
+
 async function performBatchUpdate(productIds) {
-    try {
-        console.log(`📦 [Batch Update] Đang chuẩn bị dữ liệu cho nhóm ${productIds.length} sản phẩm: ${productIds.join(", ")}`);
-        
-        const productsData = [];
-        for (const id of productIds) {
-            const [pRows] = await pool.query("SELECT * FROM products WHERE id = ?", [id]);
-            if (pRows.length === 0) continue;
-            const product = pRows[0];
+  try {
+    console.log(`📦 [Batch Update] Đang chuẩn bị dữ liệu cho nhóm ${productIds.length} sản phẩm: ${productIds.join(", ")}`);
 
-            const [sRows] = await pool.query(
-                "SELECT MAX(price) AS high_30d, MIN(price) AS low_30d, AVG(price) AS avg_30d FROM price_history WHERE product_id = ? AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
-                [id]
-            );
-            const stats = sRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
-            
-            productsData.push({ ...product, stats });
-        }
+    const productsData = [];
+    for (const id of productIds) {
+      const [pRows] = await pool.query("SELECT * FROM products WHERE id = ?", [id]);
+      if (pRows.length === 0) continue;
+      const product = pRows[0];
 
-        if (productsData.length === 0) return;
+      const [sRows] = await pool.query(
+        "SELECT MAX(price) AS high_30d, MIN(price) AS low_30d, AVG(price) AS avg_30d FROM price_history WHERE product_id = ? AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
+        [id]
+      );
+      const stats = sRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
 
-        // 1. Gọi AI Phân tích Gộp
-        let batchResults = await generateBatchAnalysisWithGroq(productsData);
-
-        // 2. Nếu AI lỗi, fallback về từng cái (Rule-based)
-        for (const product of productsData) {
-            let analysis = batchResults ? batchResults.find(r => r.id == product.id) : null;
-            
-            if (!analysis) {
-                console.log(`💡 [Fallback] Sử dụng Rule-based cho sản phẩm #${product.id}`);
-                analysis = generateAnalysis(product, product.stats, [], []);
-            }
-
-            // 3. Cơ chế "Di cư dữ liệu": Cất bản cũ vào Lịch sử trước khi lưu bản mới
-            const [oldAnalysis] = await pool.query("SELECT analysis_json FROM analysis_data WHERE product_id = ?", [product.id]);
-            if (oldAnalysis.length > 0) {
-                // Ép kiểu JSON thành string để tránh lỗi "Column count doesn't match"
-                const oldDataStr = typeof oldAnalysis[0].analysis_json === 'string' 
-                    ? oldAnalysis[0].analysis_json 
-                    : JSON.stringify(oldAnalysis[0].analysis_json);
-                await pool.query("INSERT INTO analysis_history (product_id, analysis_json) VALUES (?, ?)", [product.id, oldDataStr]);
-            }
-
-            // 4. Lưu bản mới vào analysis_data (Upsert)
-            const analysisJson = JSON.stringify(analysis);
-            await pool.query(
-                "INSERT INTO analysis_data (product_id, analysis_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE analysis_json = ?", 
-                [product.id, analysisJson, analysisJson]
-            );
-            
-            // Cập nhật timestamp ở bảng products
-            await pool.query("UPDATE products SET analysis_at = NOW() WHERE id = ?", [product.id]);
-        }
-        
-        console.log(`✅ [Batch Update] Hoàn thành cập nhật cho nhóm ${productIds.length} sản phẩm.`);
-    } catch (err) {
-        console.error("❌ Lỗi performBatchUpdate:", err.message);
+      productsData.push({ ...product, stats });
     }
-}
 
-function getNewsKeywords(productName) {
-  const lower = productName.toLowerCase();
-  if (lower.includes("cà phê")) return "cà phê";
-  if (lower.includes("lúa") || lower.includes("gạo")) return "lúa gạo";
-  if (lower.includes("tiêu")) return "tiêu";
-  if (lower.includes("xoài")) return "xoài";
-  if (lower.includes("thanh long")) return "thanh long";
-  if (lower.includes("cao su")) return "cao su";
-  if (lower.includes("ca cao")) return "ca cao";
-  return null;
-}
-// --- HẾT HÀM HELPER ---
+    if (productsData.length === 0) return;
 
+    // 1. Chạy phân tích cho từng sản phẩm song song
+    const analysisPromises = productsData.map(p => generateSingleProductAnalysisWithGroq(p));
+    const results = await Promise.all(analysisPromises);
+
+    // 2. Duyệt qua kết quả và cập nhật
+    for (let i = 0; i < productsData.length; i++) {
+      const product = productsData[i];
+      let analysis = results[i];
+
+      if (!analysis) {
+        console.log(`💡 [Fallback] Sử dụng Rule-based cho sản phẩm #${product.id}`);
+        analysis = generateUniqueAnalysis(product, product.stats, [], []);
+      }
+
+      // 3. Cơ chế "Di cư dữ liệu": Cất bản cũ vào Lịch sử trước khi lưu bản mới
+      const [oldAnalysis] = await pool.query("SELECT analysis_json FROM analysis_data WHERE product_id = ?", [product.id]);
+      if (oldAnalysis.length > 0) {
+        const oldDataStr = typeof oldAnalysis[0].analysis_json === 'string'
+          ? oldAnalysis[0].analysis_json
+          : JSON.stringify(oldAnalysis[0].analysis_json);
+        await pool.query("INSERT INTO analysis_history (product_id, analysis_json) VALUES (?, ?)", [product.id, oldDataStr]);
+      }
+
+      // 4. Lưu bản mới vào analysis_data (Upsert)
+      const analysisJson = JSON.stringify(analysis);
+      await pool.query(
+        "INSERT INTO analysis_data (product_id, analysis_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE analysis_json = ?",
+        [product.id, analysisJson, analysisJson]
+      );
+
+      await pool.query("UPDATE products SET analysis_at = NOW() WHERE id = ?", [product.id]);
+    }
+
+    console.log(`✅ [Batch Update] Hoàn thành cập nhật cho nhóm ${productIds.length} sản phẩm.`);
+  } catch (err) {
+    console.error("❌ Lỗi performBatchUpdate:", err.message);
+  }
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -361,7 +407,7 @@ router.get("/categories", async (req, res) => {
 
 router.get("/categorie", async (req, res) => {
   try {
-    // Sửa lỗi: Chỉ lấy các category CÓ SẢN PHẨM
+    // Lấy toàn bộ danh sách danh mục (phục vụ cho việc chọn loại khi tạo/sửa sản phẩm ở Admin)
     const [rows] = await pool.query(`
       SELECT DISTINCT c.id, c.name
       FROM categories c
@@ -574,28 +620,12 @@ router.get("/:id", async (req, res) => {
       analysis_at: products[0].analysis_at
     }
 
-    // 5. Lấy Tin tức
-    // const productName = products[0].name;
-    // const keyword = getNewsKeywords(productName);
-    // let newsRows = [];
-    // if (keyword) {
-    //   const [fetchedNews] = await pool.query(
-    //     `SELECT id, title, url, source, published_at, snippet
-    //      FROM news_articles
-    //      WHERE relevance_keywords LIKE ?
-    //      ORDER BY published_at DESC
-    //      LIMIT 5`,
-    //     [`%${keyword}%`]
-    //   );
-    //   newsRows = fetchedNews;
-    // }
-    let newsRows = []; // ✅ Thêm dòng này
+    let newsRows = [];
     const stats = statsRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
     const percentChange = product.previousPrice > 0
       ? ((product.currentPrice - product.previousPrice) / product.previousPrice * 100).toFixed(2)
       : 0;
 
-    // 7. Gộp kết quả (KHÔNG CÒN GỌI AI TRỰC TIẾP)
     res.json({
       ...product,
       history: historyWithForecast,
@@ -605,7 +635,7 @@ router.get("/:id", async (req, res) => {
         avg_30d: Number(stats.avg_30d) || 0,
       },
       relevantNews: newsRows,
-      percentChange: Number(percentChange) 
+      percentChange: Number(percentChange)
     })
   } catch (error) {
     console.error("❌ Lỗi khi lấy chi tiết sản phẩm:", error)
@@ -613,31 +643,38 @@ router.get("/:id", async (req, res) => {
   }
 })
 
-// ===========================================
-// --- 🚀 API HIỂN THỊ: CHẾ ĐỘ DB-CENTRIC (Tốc độ tối đa) ---
-// ===========================================
 router.get("/:id/analysis", async (req, res) => {
   try {
     const productId = req.params.id;
+    const force = req.query.force === "true";
 
-    // Chỉ thực hiện truy vấn bảng phân tích chuyên biệt
-    const [rows] = await pool.query(
-      `SELECT ad.analysis_json AS analysis_data, p.analysis_at 
-       FROM analysis_data ad
-       JOIN products p ON ad.product_id = p.id
-       WHERE ad.product_id = ?`,
-      [productId]
-    );
+    // 1. Nếu không force, kiểm tra xem đã có dữ liệu trong DB chưa
+    if (!force) {
+      const [rows] = await pool.query(
+        "SELECT analysis_json FROM analysis_data WHERE product_id = ?",
+        [productId]
+      );
 
-    if (rows.length === 0 || !rows[0].analysis_data) {
-      return res.status(200).json({ 
-        summary: "Đang phân tích dữ liệu thị trường...", 
-        status: "pending" 
+      if (rows.length > 0 && rows[0].analysis_json) {
+        const analysis = typeof rows[0].analysis_json === 'string'
+          ? JSON.parse(rows[0].analysis_json)
+          : rows[0].analysis_json;
+        return res.json(analysis);
+      }
+    }
+
+    // 2. Nếu chưa có hoặc force=true, thực hiện rebuild (gọi AI)
+    console.log(`🤖 [AI Rebuild] Đang phân tích mới cho sản phẩm #${productId}${force ? " (Force)" : ""}`);
+    const analysis = await rebuildAnalysisForProduct(productId);
+
+    if (!analysis) {
+      return res.status(200).json({
+        summary: "Đang phân tích dữ liệu thị trường...",
+        status: "pending"
       });
     }
 
-    // Trả về dữ liệu từ DB (Nhanh, ổn định)
-    res.json(rows[0].analysis_data);
+    return res.json(analysis);
 
   } catch (error) {
     console.error("❌ Lỗi truy vấn phân tích từ DB:", error);
@@ -649,57 +686,47 @@ router.get("/:id/analysis", async (req, res) => {
  * 🔄 HỆ THỐNG TỰ ĐỘNG HÓA AI (AGENTIC AUTOMATION)
  */
 
-// 1. Hàm làm mới sản phẩm theo chế độ "NHỎ GIỌT" (Chạy mỗi 1 phút - Cực kỳ tiết kiệm và ổn định)
 async function refreshAllProductsAnalysis() {
-    console.log("🕒 [Automation] Đang kiểm tra sản phẩm cũ nhất để cập nhật (Drip Mode)...");
-    try {
-        // Tìm 1 sản phẩm có thời gian phân tích cũ nhất (hoặc chưa bao giờ phân tích)
-        const [products] = await pool.query(
-            "SELECT id, name FROM products ORDER BY analysis_at ASC LIMIT 1"
-        );
-        
-        if (products.length === 0) return;
+  console.log("🕒 [Automation] Đang kiểm tra sản phẩm cũ nhất để cập nhật (Drip Mode)...");
+  try {
+    const [products] = await pool.query(
+      "SELECT id, name FROM products ORDER BY analysis_at ASC LIMIT 1"
+    );
 
-        const product = products[0];
-        console.log(`📡 [Drip Update] Đang ưu tiên cập nhật cho: ${product.name} (#${product.id})`);
-        
-        // Thực hiện cập nhật phân tích (sử dụng BatchUpdate cho 1 cái để tận dụng logic Groq đã viết)
-        await performBatchUpdate([product.id]);
-        
-    } catch (err) {
-        console.error("❌ [Automation] Lỗi khi chạy cập nhật nhỏ giọt:", err.message);
-    }
+    if (products.length === 0) return;
+
+    const product = products[0];
+    console.log(`📡 [Drip Update] Đang ưu tiên cập nhật cho: ${product.name} (#${product.id})`);
+    await performBatchUpdate([product.id]);
+
+  } catch (err) {
+    console.error("❌ [Automation] Lỗi khi chạy cập nhật nhỏ giọt:", err.message);
+  }
 }
 
-// 2. Hàm dọn dẹp dữ liệu cũ (Xóa sau 1 tuần)
 async function cleanupOldAnalysisHistory() {
-    console.log("🧹 [Automation] Đang quét dọn lịch sử phân tích cũ (> 1 tuần)...");
-    try {
-        const [result] = await pool.query(
-            "DELETE FROM analysis_history WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)"
-        );
-        console.log(`🗑️ [Automation] Đã xóa ${result.affectedRows} bản ghi cũ.`);
-    } catch (err) {
-        console.error("❌ [Automation] Lỗi dọn dẹp lịch sử:", err.message);
-    }
+  console.log("🧹 [Automation] Đang quét dọn lịch sử phân tích cũ (> 1 tuần)...");
+  try {
+    const [result] = await pool.query(
+      "DELETE FROM analysis_history WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)"
+    );
+    console.log(`🗑️ [Automation] Đã xóa ${result.affectedRows} bản ghi cũ trong analysis_history.`);
+  } catch (err) {
+    console.error("❌ [Automation] Lỗi dọn dẹp lịch sử:", err.message);
+  }
 }
 
-// 🚀 THIẾT LẬP BỘ HẸN GIỜ (CRON-LIKE)
+
 const ONE_MINUTE = 60 * 1000;
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
-// Khởi chạy ngay khi server start (đợi 5s cho DB kết nối ổn định)
 setTimeout(() => {
-    refreshAllProductsAnalysis(); // Chạy ngay lần đầu
-    cleanupOldAnalysisHistory();
-    
-    // Đặt lịch định kỳ: Cập nhật nhỏ giọt mỗi phút
-    setInterval(refreshAllProductsAnalysis, ONE_MINUTE);
-    setInterval(cleanupOldAnalysisHistory, TWENTY_FOUR_HOURS);
+  refreshAllProductsAnalysis();
+  cleanupOldAnalysisHistory();
+  setInterval(refreshAllProductsAnalysis, ONE_MINUTE);
+  setInterval(cleanupOldAnalysisHistory, TWENTY_FOUR_HOURS);
 }, 5000);
-;
 
-// Tạo sản phẩm mới (Admin)
 router.post("/", authenticateToken, isAdmin, async (req, res) => {
   try {
     const { name, category, currentPrice, unit, region } = req.body
@@ -743,7 +770,6 @@ router.post("/", authenticateToken, isAdmin, async (req, res) => {
   }
 })
 
-// Cập nhật sản phẩm
 router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
   try {
     const { name, category, currentPrice, unit, region } = req.body
@@ -799,7 +825,6 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
   }
 })
 
-// Xóa sản phẩm
 router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
   try {
     const productId = req.params.id
@@ -833,33 +858,19 @@ router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
 router.post("/compare", async (req, res) => {
   try {
     const { productIds, range = "30d" } = req.body;
-
-    // 1. Kiểm tra dữ liệu đầu vào (Tránh lỗi sập server)
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-      return res.json([]); // Trả về mảng rỗng nếu không có ID nào
+      return res.json([]);
     }
-
-    console.log(`📊 Đang so sánh các ID: ${productIds} trong ${range}`);
-
-    // 2. Lấy tên sản phẩm để làm Key cho biểu đồ
     const [products] = await pool.query(
       `SELECT id, name FROM products WHERE id IN (?)`,
       [productIds]
     );
-    
     if (products.length === 0) return res.json([]);
-
-    // Tạo Map để tra cứu nhanh: ID -> Tên
     const nameMap = new Map(products.map(p => [p.id, p.name]));
-
-    // 3. Xác định khoảng thời gian truy vấn
     let interval = 30;
     if (range === "7d") interval = 7;
     if (range === "6m") interval = 180;
     if (range === "1y") interval = 365;
-
-    // 4. Lấy lịch sử giá từ DB
-    // GROUP BY DATE(updated_at) để lấy giá chốt mỗi ngày (tránh bị trùng nhiều giá trong 1 ngày)
     const [historyRows] = await pool.query(
       `
       SELECT 
@@ -874,69 +885,39 @@ router.post("/compare", async (req, res) => {
       `,
       [productIds, interval]
     );
-
-    // 5. Thuật toán "Chuẩn hóa Tăng trưởng" (Normalization)
-    // Mục tiêu: Đưa tất cả về mốc 0% tại ngày đầu tiên xuất hiện để so sánh tốc độ tăng.
-    
-    const basePriceMap = new Map(); // Lưu giá gốc (giá ngày đầu tiên) của từng sản phẩm
-    const normalizedDataMap = new Map(); // Lưu dữ liệu đã tính toán theo ngày
-
-    // Bước 5a: Tìm giá gốc cho từng sản phẩm
+    const basePriceMap = new Map();
+    const normalizedDataMap = new Map();
     for (const id of productIds) {
-      // Tìm bản ghi đầu tiên của sản phẩm này trong lịch sử lấy được
       const firstEntry = historyRows.find(h => h.product_id === id);
       if (firstEntry) {
         basePriceMap.set(id, Number(firstEntry.price));
       }
     }
-
-    // Bước 5b: Duyệt qua lịch sử và tính % chênh lệch
     historyRows.forEach(row => {
-      // Format ngày tháng cho đẹp (dd/mm)
       const dateObj = new Date(row.dateStr);
       const dateKey = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}`;
-
-      // Khởi tạo object cho ngày này nếu chưa có
       if (!normalizedDataMap.has(dateKey)) {
         normalizedDataMap.set(dateKey, { date: dateKey });
       }
-
       const basePrice = basePriceMap.get(row.product_id);
       const productName = nameMap.get(row.product_id);
-
-      // Chỉ tính nếu có giá gốc và giá hiện tại hợp lệ
       if (basePrice && productName && basePrice > 0) {
         const currentPrice = Number(row.price);
-        
-        // CÔNG THỨC: (Giá hiện tại / Giá gốc) * 100
-        // Ví dụ: Gốc 100k, Nay 120k -> 120% (Tức là còn giữ 100% gốc + tăng 20%)
-        // Frontend đang vẽ mốc 100%, nên ta dùng công thức này.
         const normalizedValue = (currentPrice / basePrice) * 100;
-
-        // Gán vào object: { date: "25/11", "Cà phê": 120.5, "Tiêu": 98.2 }
         normalizedDataMap.get(dateKey)[productName] = Number(normalizedValue.toFixed(2));
       }
     });
-
-    // 6. Chuyển Map thành Array để trả về cho Recharts
     const finalChartData = Array.from(normalizedDataMap.values());
-    
-    // Sort lại lần cuối để đảm bảo ngày tháng tăng dần (phòng trường hợp Map bị lộn xộn)
     finalChartData.sort((a, b) => {
-        const [d1, m1] = a.date.split("/").map(Number);
-        const [d2, m2] = b.date.split("/").map(Number);
-        return m1 - m2 || d1 - d2; // So tháng trước, rồi so ngày
+      const [d1, m1] = a.date.split("/").map(Number);
+      const [d2, m2] = b.date.split("/").map(Number);
+      return m1 - m2 || d1 - d2;
     });
-
     res.json(finalChartData);
-
   } catch (error) {
     console.error("❌ Lỗi API Compare:", error);
-    // Trả về lỗi 500 nhưng kèm message rõ ràng để debug
     res.status(500).json({ error: "Lỗi máy chủ khi xử lý so sánh", details: error.message });
   }
 });
-
-// ... (các route khác giữ nguyên)
 
 export default router
