@@ -1,6 +1,8 @@
 import express from "express"
 import pool from "../db.js"
 import { authenticateToken, isAdmin } from "../middleware/auth.js"
+import fs from "fs"
+import path from "path"
 
 const router = express.Router()
 export const ioRef = { io: null }
@@ -194,6 +196,16 @@ async function rebuildAnalysisForProduct(productId) {
   
   if (!analysis) {
     analysis = generateUniqueAnalysis(product, stats, [], []);
+  }
+
+  // Chuẩn hóa dữ liệu: Đảm bảo change_amount luôn dương và direction khớp với giá trị
+  if (analysis.change_amount < 0) {
+    analysis.change_amount = Math.abs(analysis.change_amount);
+    analysis.direction = "down";
+  }
+  if (analysis.direction === "down" && analysis.change_amount === 0) {
+      // Nếu là down mà amount = 0, có thể do AI thiếu dữ liệu, để mặc định là side
+      analysis.direction = "side";
   }
 
   const analysisJson = JSON.stringify(analysis);
@@ -407,7 +419,7 @@ router.get("/categories", async (req, res) => {
 
 router.get("/categorie", async (req, res) => {
   try {
-    // Lấy toàn bộ danh sách danh mục (phục vụ cho việc chọn loại khi tạo/sửa sản phẩm ở Admin)
+    // Sửa lỗi: Chỉ lấy các category CÓ SẢN PHẨM
     const [rows] = await pool.query(`
       SELECT DISTINCT c.id, c.name
       FROM categories c
@@ -716,6 +728,57 @@ async function cleanupOldAnalysisHistory() {
   }
 }
 
+async function cleanupScrapedJsonFile() {
+  console.log("🧹 [Automation] Đang dọn dẹp file JSON thô (all_regions.json)...");
+  try {
+    const filePath = path.join(process.cwd(), "scraped/all_regions.json");
+    if (!fs.existsSync(filePath)) {
+      console.log("⚠️ [Automation] Không tìm thấy file JSON để dọn dẹp.");
+      return;
+    }
+
+    const raw = fs.readFileSync(filePath, "utf8");
+    const data = JSON.parse(raw);
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - 7); // Giữ lại 7 ngày
+
+    let removed = 0;
+    let kept = 0;
+
+    const parseNgay = (str) => {
+      if (!str || typeof str !== "string") return null;
+      const s = str.trim();
+      if (s.includes("-")) {
+        const [y, m, d] = s.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      }
+      const parts = s.split("/").map(Number);
+      if (parts.length !== 3) return null;
+      return new Date(parts[2], parts[1] - 1, parts[0]);
+    };
+
+    for (const region of data.regions || []) {
+      const arr = region.data || [];
+      const next = [];
+      for (const row of arr) {
+        const d = parseNgay(row["Ngày"]);
+        if (d && d >= cutoff) {
+          next.push(row);
+          kept++;
+        } else {
+          removed++;
+        }
+      }
+      region.data = next;
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+    console.log(`🗑️ [Automation] Đã dọn dẹp JSON: Giữ ${kept}, Xóa ${removed} bản ghi cũ.`);
+  } catch (err) {
+    console.error("❌ [Automation] Lỗi dọn dẹp file JSON:", err.message);
+  }
+}
 
 const ONE_MINUTE = 60 * 1000;
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
@@ -723,8 +786,10 @@ const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 setTimeout(() => {
   refreshAllProductsAnalysis();
   cleanupOldAnalysisHistory();
+  cleanupScrapedJsonFile();
   setInterval(refreshAllProductsAnalysis, ONE_MINUTE);
   setInterval(cleanupOldAnalysisHistory, TWENTY_FOUR_HOURS);
+  setInterval(cleanupScrapedJsonFile, TWENTY_FOUR_HOURS);
 }, 5000);
 
 router.post("/", authenticateToken, isAdmin, async (req, res) => {

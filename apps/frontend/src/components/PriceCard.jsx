@@ -85,10 +85,10 @@ export default function PriceCard({ item, onCreateAlert, showAlertButton = false
     return (
         <Link to={`/product/${product.id}`} className="block group">
             <Card className={cn(
-                "rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden ring-1 ring-gray-100",
+                "rounded-[2rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden ring-1 ring-gray-100 h-full",
                 isUpdating && (priceChange > 0 ? "ring-2 ring-emerald-400" : "ring-2 ring-red-400")
             )}>
-                <CardContent className="p-5 space-y-3">
+                <CardContent className="p-5 space-y-3 flex flex-col h-full">
                     {/* Header: Name & Region */}
                     <div className="flex justify-between items-start">
                         <div className="space-y-0.5">
@@ -139,122 +139,118 @@ export default function PriceCard({ item, onCreateAlert, showAlertButton = false
                         </div>
                     </div>
 
-                    {/* AI Insight Section */}
-                    <div className={cn(
-                        "rounded-xl p-3.5 border transition-all duration-500",
-                        analysisLoading ? "bg-gray-50 border-gray-100 animate-pulse" : 
-                        cn("bg-emerald-50/50 border-emerald-100 shadow-sm")
-                    )}>
-                        {analysisLoading ? (
-                            <div className="space-y-1.5">
-                                <div className="h-3 w-20 bg-gray-200 rounded" />
-                                <div className="h-2 w-full bg-gray-200 rounded" />
-                            </div>
-                        ) : analysis ? (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5 text-emerald-700">
-                                        <Sparkles className="w-3.5 h-3.5" />
-                                        <span className="text-[11px] font-bold">Insight AI</span>
-                                        {analysis.confidence > 90 && (
-                                            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[8px] font-black uppercase ring-1 ring-emerald-200 ml-1 shadow-sm animate-in fade-in zoom-in duration-500">
-                                                <CheckCircle2 className="w-2.5 h-2.5" />
-                                                Xác thực
-                                            </div>
-                                        )}
+                    {/* AI Intelligence Hub - Đồng bộ hóa không gian */}
+                    <div className="flex-1 flex flex-col gap-3">
+                        {/* 1. Phân tích văn bản (Stretch to fill) */}
+                        <div className={cn(
+                            "flex-1 rounded-2xl p-4 border transition-all duration-500 relative overflow-hidden group/insight flex flex-col justify-start",
+                            analysisLoading ? "bg-gray-50 border-gray-100 animate-pulse" : 
+                            "bg-gradient-to-br from-emerald-50/80 to-white border-emerald-100/50 shadow-sm"
+                        )}>
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-100/10 rounded-full blur-2xl" />
+
+                            {analysisLoading ? (
+                                <div className="space-y-2">
+                                    <div className="h-3 w-20 bg-gray-200 rounded-full" />
+                                    <div className="h-2 w-full bg-gray-200 rounded-full" />
+                                    <div className="h-2 w-2/3 bg-gray-200 rounded-full" />
+                                </div>
+                            ) : analysis ? (
+                                <div className="space-y-2 relative z-10">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 text-emerald-700">
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            <span className="text-[10px] font-black uppercase tracking-wider">Insight AI</span>
+                                        </div>
+                                        <Badge className={cn(
+                                            "px-1.5 py-0 text-[8px] font-black border shadow-none uppercase",
+                                            analysis.sentiment === "Tích cực" ? "bg-emerald-500 text-white border-emerald-400" : 
+                                            analysis.sentiment === "Tiêu cực" ? "bg-red-500 text-white border-red-400" : 
+                                            "bg-blue-500 text-white border-blue-400"
+                                        )}>
+                                            {analysis.sentiment === "Tích cực" ? "Tăng" : analysis.sentiment === "Tiêu cực" ? "Giảm" : "Ngang"}
+                                        </Badge>
                                     </div>
-                                    <span className="text-[10px] font-black uppercase text-emerald-600 bg-white px-2 py-0.5 rounded-lg border border-emerald-100 shadow-sm italic">
-                                        {analysis.sentiment === "Tích cực" ? "🔥 Tăng mạnh" : 
-                                         analysis.sentiment === "Tiêu cực" ? "❄️ Giảm mạnh" : "⚓ Đi ngang"}
+                                    <p className="text-[11px] leading-relaxed text-gray-700 font-semibold italic">
+                                        "{analysis.summary?.replace(/<[^>]*>?/gm, '')}"
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="text-center py-2 text-gray-400 text-[10px] font-medium italic">
+                                    Đang tổng hợp...
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 2. Grid thông số kỹ thuật (Fixed height blocks) */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <div className="rounded-2xl bg-gray-50/80 p-3 ring-1 ring-gray-100/50 hover:bg-white transition-colors">
+                                <span className="text-[8px] uppercase tracking-widest font-black text-gray-400 block mb-1">Dự báo ngắn</span>
+                                <div className="flex items-center gap-1.5">
+                                    <div className={cn(
+                                        "p-1 rounded-md",
+                                        (analysis?.direction === "up" || (analysis?.change_amount > 0 && analysis?.direction !== "down")) ? "bg-emerald-100 text-emerald-600" : 
+                                        (analysis?.direction === "down" || analysis?.change_amount < 0) ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"
+                                    )}>
+                                        {(analysis?.direction === "up" || (analysis?.change_amount > 0 && analysis?.direction !== "down")) ? <TrendingUp className="w-2.5 h-2.5" /> : 
+                                         (analysis?.direction === "down" || analysis?.change_amount < 0) ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+                                    </div>
+                                    <span className={cn(
+                                        "text-[13px] font-black tracking-tighter",
+                                        (analysis?.direction === "up" || (analysis?.change_amount > 0 && analysis?.direction !== "down")) ? "text-emerald-600" : 
+                                        (analysis?.direction === "down" || analysis?.change_amount < 0) ? "text-red-600" : "text-gray-600"
+                                    )}>
+                                        {analysis?.change_amount ? `${(analysis.direction === "up" || (analysis?.change_amount > 0 && analysis?.direction !== "down")) ? "+" : "-"}${Math.abs(Number(analysis.change_amount)).toLocaleString()}đ` : "---"}
                                     </span>
                                 </div>
-                                <p className="text-[10px] leading-relaxed text-gray-700 font-medium">
-                                    {analysis.summary?.replace(/<[^>]*>?/gm, '')}
-                                </p>
                             </div>
-                        ) : (
-                            <div className="flex items-center gap-2 text-gray-400">
-                                <Bot className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-medium">Đang chuẩn bị...</span>
-                            </div>
-                        )}
-                    </div>
 
-                    {/* Prediction Grid: Tích hợp phân tích dữ liệu AI chuyên sâu */}
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-xl bg-gray-50/50 p-3 ring-1 ring-gray-100 flex flex-col justify-between">
-                            <div>
-                                <span className="text-[9px] uppercase tracking-wider font-extrabold text-gray-400">Dự đoán AI</span>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                    <p className="text-[13px] font-black text-gray-900">
-                                        {analysis?.direction === "up" ? "↑" : analysis?.direction === "down" ? "↓" : "→"}
+                            <div className="rounded-2xl bg-gray-50/80 p-3 ring-1 ring-gray-100/50 hover:bg-white transition-colors">
+                                <span className="text-[8px] uppercase tracking-widest font-black text-gray-400 block mb-1">Tín hiệu</span>
+                                <div className="flex flex-col justify-between h-full">
+                                    <p className="text-[10px] font-black text-gray-700 leading-tight line-clamp-2 mb-2">
+                                        {analysis?.signal || "Đang phân tích..."}
                                     </p>
-                                    <p className={cn(
-                                        "text-[12px] font-black",
-                                        analysis?.direction === "up" ? "text-emerald-600" : analysis?.direction === "down" ? "text-red-600" : "text-gray-600"
+                                    <div className={cn(
+                                        "h-1 w-full rounded-full bg-gray-100 overflow-hidden"
                                     )}>
-                                        {analysis?.change_amount ? `${analysis.direction === "up" ? "+" : "-"}${Number(analysis.change_amount).toLocaleString()}đ` : "---"}
-                                    </p>
+                                        <div className={cn(
+                                            "h-full transition-all duration-1000",
+                                            analysis?.recommendation === "Mua" ? "bg-emerald-500 w-full" :
+                                            analysis?.recommendation === "Bán" ? "bg-red-500 w-full" :
+                                            "bg-blue-500 w-1/2"
+                                        )} />
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between mt-2">
-                                <span className="text-[9px] font-bold text-gray-400">
-                                    Mục tiêu: {analysis ? (
-                                        `${Number(product.currentPrice + (analysis.direction === "up" ? analysis.change_amount : -analysis.change_amount)).toLocaleString()}đ`
-                                    ) : "---đ"}
-                                </span>
-                                <span className={cn(
-                                    "text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase",
-                                    analysis?.volatility === "Cao" ? "bg-red-100 text-red-700" :
-                                    analysis?.volatility === "Trung bình" ? "bg-orange-100 text-orange-700" :
-                                    "bg-emerald-100 text-emerald-700"
-                                )}>
-                                    {analysis?.volatility || "Thấp"}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="rounded-xl bg-gray-50/50 p-3 ring-1 ring-gray-100 flex flex-col justify-between min-h-[85px]">
-                            <div>
-                                <span className="text-[9px] uppercase tracking-wider font-extrabold text-gray-400">Tín hiệu / Lệnh</span>
-                                <p className="text-[10px] font-bold text-gray-700 mt-1 leading-tight">
-                                    {analysis?.signal || "Đang phân tích..."}
-                                </p>
-                            </div>
-                            <div className="mt-2 text-right">
-                                <span className={cn(
-                                    "inline-flex px-2 py-0.5 rounded-md text-[10px] font-black uppercase border shadow-sm",
-                                    analysis?.recommendation === "Mua" ? "bg-emerald-500 text-white border-emerald-600" :
-                                    analysis?.recommendation === "Bán" ? "bg-red-500 text-white border-red-600" :
-                                    "bg-blue-500 text-white border-blue-600"
-                                )}>
-                                    {analysis?.recommendation || "Giữ"}
-                                </span>
-                            </div>
                         </div>
                     </div>
 
-                    {/* Dealer Section */}
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/50 ring-1 ring-dashed ring-gray-200">
-                        <span className="text-[10px] font-bold text-gray-600">3 đại lý đang giao dịch</span>
-                        <div className="flex items-center gap-1 text-emerald-700 text-[10px] font-black group-hover:gap-1.5 transition-all">
-                            <span>Xem mua bán</span>
-                            <ArrowRight className="w-3 h-3" />
+                    {/* Bottom Sticky Section */}
+                    <div className="pt-3 space-y-3">
+                        {/* Dealer Section */}
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/50 ring-1 ring-dashed ring-gray-200">
+                            <span className="text-[10px] font-bold text-gray-600">3 đại lý đang giao dịch</span>
+                            <div className="flex items-center gap-1 text-emerald-700 text-[10px] font-black group-hover:gap-1.5 transition-all">
+                                <span>Xem mua bán</span>
+                                <ArrowRight className="w-3 h-3" />
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Footer */}
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-50">
-                        <Badge variant="outline" className="rounded-lg px-2 py-0.5 text-[9px] font-black uppercase text-gray-400 border-gray-100">
-                            <Tag className="w-2.5 h-2.5 mr-1 text-emerald-600 opacity-70" /> {product.category}
-                        </Badge>
-                        <span className="text-[9px] font-bold text-gray-300 tracking-tighter uppercase font-mono">
-                            {new Date(product.lastUpdate).toLocaleString("vi-VN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                day: "2-digit",
-                                month: "2-digit",
-                            })}
-                        </span>
+                        {/* Footer */}
+                        <div className="flex items-center justify-between pt-3 border-t border-gray-50">
+                            <Badge variant="outline" className="rounded-lg px-2 py-0.5 text-[9px] font-black uppercase text-gray-400 border-gray-100">
+                                <Tag className="w-2.5 h-2.5 mr-1 text-emerald-600 opacity-70" /> {product.category}
+                            </Badge>
+                            <span className="text-[9px] font-bold text-gray-300 tracking-tighter uppercase font-mono">
+                                {new Date(product.lastUpdate).toLocaleString("vi-VN", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                })}
+                            </span>
+                        </div>
                     </div>
 
                     {showAlertButton && (
