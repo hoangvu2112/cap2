@@ -10,9 +10,7 @@ import { spawn } from "child_process";
 import * as cron from "node-cron";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
-import costRoutes from "./routes/costs.js";
-import pool from "./db.js";
-import chatbotRoutes from "./routes/chatbot.js";
+
 // Import routes
 import authRoutes from "./routes/auth.js";
 import productRoutes, { ioRef } from "./routes/products.js";
@@ -21,10 +19,13 @@ import alertRoutes from "./routes/alerts.js";
 import newsRoutes from "./routes/news.js";
 import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js";
 import favoritesRouter from "./routes/favorites.js";
-import chatRouter from "./routes/chat.js";
-import testRoutes from "./routes/test.js";
+import costRoutes from "./routes/costs.js";
+import chatbotRoutes from "./routes/chatbot.js";
 import statsRoutes from "./routes/stats.js";
+import chatRouter from "./routes/chat.js";
+import pool from "./db.js";
 import { syncProducts } from "./cron/syncProducts.js";
+import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
 
@@ -40,6 +41,20 @@ app.use(express.urlencoded({ extended: true }));
 
 app.set("io", io);
 communityIoRef.io = io;
+ioRef.io = io; // Cho phép emit từ router
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/alerts", alertRoutes);
+app.use("/api/news", newsRoutes);
+app.use("/api/community", communityRoutes);
+app.use("/api/favorites", favoritesRouter);
+app.use("/api/costs", costRoutes);
+app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/stats", statsRoutes); 
+app.use("/api/chat", chatRouter);
 
 io.use((socket, next) => {
   try {
@@ -56,24 +71,7 @@ io.use((socket, next) => {
     return next(new Error("INVALID_SOCKET_TOKEN"));
   }
 });
-ioRef.io = io; // Cho phép emit từ router
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/alerts", alertRoutes);
-app.use("/api/news", newsRoutes);
-app.use("/api/community", communityRoutes);
-app.use("/api/favorites", favoritesRouter);
-app.use("/api/costs", costRoutes);
-app.use("/api/test", testRoutes);
-app.use("/api/chatbot", chatbotRoutes);
-app.use("/api/stats", statsRoutes); 
-app.use("/api/chat", chatRouter);
-
-// Admin: Kích hoạt Scraper thủ công
-import { authenticateToken, isAdmin } from "./middleware/auth.js";
 app.post("/api/admin/scrape-trigger", authenticateToken, isAdmin, async (req, res) => {
   try {
     if (isScraping) {
