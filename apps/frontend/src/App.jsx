@@ -1,4 +1,6 @@
+import { useEffect } from "react"
 import { Routes, Route, Navigate } from "react-router-dom"
+import { socket } from "./socket"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import ProtectedRoute from "./components/ProtectedRoute"
 import AdminRoute from "./components/AdminRoute"
@@ -34,6 +36,23 @@ import ChatBotWidget from "./components/ChatBotWidget"
 function AppContent() {
   const { user } = useAuth()
   console.log("Current user in AppContent:", user);
+
+  useEffect(() => {
+    // Lắng nghe sự kiện socket kết nối thành công ở phạm vi toàn cục
+    socket.on("connect", () => {
+      console.log("🟢 Global Socket Connected! ID:", socket.id);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("🔴 Global Socket Disconnected!");
+    });
+
+    // Cleanup khi unmount
+    return () => {
+      socket.off("connect");
+      socket.off("disconnect");
+    };
+  }, []);
 
   return (
     <>

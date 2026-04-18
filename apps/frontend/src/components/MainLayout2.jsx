@@ -2,31 +2,10 @@
 
 import Sidebar2 from "./Sidebar2"
 import Header2 from "./Header2"
-import Footer2 from "./Footer2"
+import Footer from "./Footer"
 import { LayoutProvider } from "../context/LayoutContext"
 
-/**
- * MainLayout2 — Layout wrapper cho toàn bộ app sau khi đăng nhập.
- *
- * Cấu trúc:
- * ┌─────────┬──────────────────────────────┐
- * │ Sidebar │  Header (sticky)             │
- * │         │  ┌────────────────────────┐   │
- * │         │  │  Main Content (scroll) │   │
- * │         │  └────────────────────────┘   │
- * │         │  Footer                       │
- * └─────────┴──────────────────────────────┘
- *
- * Thay thế pattern cũ:
- *   <Navbar />
- *   {children}
- *   <Footer />
- *
- * Cách dùng trong App.jsx:
- *   <MainLayout2>
- *     <Dashboard2 />
- *   </MainLayout2>
- */
+
 export default function MainLayout2({ children }) {
   return (
     <div
@@ -58,7 +37,7 @@ export default function MainLayout2({ children }) {
         </main>
 
         {/* Footer — bottom */}
-        <Footer2 />
+        <Footer variant="compact" />
       </div>
     </div>
   )
