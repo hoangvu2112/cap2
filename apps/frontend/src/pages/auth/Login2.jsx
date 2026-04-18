@@ -1,56 +1,57 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "../../context/AuthContext"
-import AuthLayout from "@/components/AuthLayout"
-import { Sprout } from "lucide-react"
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import AuthLayout from "@/components/AuthLayout";
+import { Sprout } from "lucide-react";
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
-const GOOGLE_SCRIPT_SRC = "https://accounts.google.com/gsi/client"
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
 export default function Login2() {
-  const [email, setEmail] = useState("admin@agriprice.vn")
-  const [password, setPassword] = useState("admin123")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const googleButtonRef = useRef(null)
+  const [email, setEmail] = useState("admin@agriprice.vn");
+  const [password, setPassword] = useState("admin123");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const googleButtonRef = useRef(null);
 
-  const { login, loginWithGoogle } = useAuth()
-  const navigate = useNavigate()
+  const { login, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return
+    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return;
 
-    let cancelled = false
+    let cancelled = false;
 
     const handleGoogleCredential = async (response) => {
-      if (!response?.credential || cancelled) return
+      if (!response?.credential || cancelled) return;
 
-      setError("")
-      setGoogleLoading(true)
+      setError("");
+      setGoogleLoading(true);
 
       try {
-        const user = await loginWithGoogle(response.credential)
-        navigate(user.role === "admin" ? "/admin" : "/")
+        const user = await loginWithGoogle(response.credential);
+        navigate(user.role === "admin" ? "/admin" : "/");
       } catch (err) {
-        setError(err.response?.data?.error || "Đăng nhập Google thất bại")
+        setError(err.response?.data?.error || "Đăng nhập Google thất bại");
       } finally {
         if (!cancelled) {
-          setGoogleLoading(false)
+          setGoogleLoading(false);
         }
       }
-    }
+    };
 
     const renderGoogleButton = () => {
-      if (!window.google?.accounts?.id || !googleButtonRef.current || cancelled) return
+      if (!window.google?.accounts?.id || !googleButtonRef.current || cancelled)
+        return;
 
-      googleButtonRef.current.innerHTML = ""
+      googleButtonRef.current.innerHTML = "";
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: handleGoogleCredential,
-      })
+      });
       window.google.accounts.id.renderButton(googleButtonRef.current, {
         type: "standard",
         theme: "outline",
@@ -59,50 +60,54 @@ export default function Login2() {
         shape: "pill",
         logo_alignment: "left",
         width: Math.max(260, googleButtonRef.current.offsetWidth || 320),
-      })
-    }
+      });
+    };
 
-    const existingScript = document.querySelector(`script[src="${GOOGLE_SCRIPT_SRC}"]`)
+    const existingScript = document.querySelector(
+      `script[src="${GOOGLE_SCRIPT_SRC}"]`,
+    );
 
     if (window.google?.accounts?.id) {
-      renderGoogleButton()
+      renderGoogleButton();
     } else if (existingScript) {
-      existingScript.addEventListener("load", renderGoogleButton, { once: true })
+      existingScript.addEventListener("load", renderGoogleButton, {
+        once: true,
+      });
     } else {
-      const script = document.createElement("script")
-      script.src = GOOGLE_SCRIPT_SRC
-      script.async = true
-      script.defer = true
-      script.onload = renderGoogleButton
-      document.body.appendChild(script)
+      const script = document.createElement("script");
+      script.src = GOOGLE_SCRIPT_SRC;
+      script.async = true;
+      script.defer = true;
+      script.onload = renderGoogleButton;
+      document.body.appendChild(script);
     }
 
     return () => {
-      cancelled = true
+      cancelled = true;
       if (window.google?.accounts?.id) {
         try {
-          window.google.accounts.id.cancel()
+          window.google.accounts.id.cancel();
         } catch {
           // ignore Google cleanup errors
         }
       }
-    }
-  }, [loginWithGoogle, navigate])
+    };
+  }, [loginWithGoogle, navigate]);
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
     try {
-      const user = await login(email, password)
-      navigate(user.role === "admin" ? "/admin" : "/")
+      const user = await login(email, password);
+      navigate(user.role === "admin" ? "/admin" : "/");
     } catch (err) {
-      setError(err.response?.data?.error || "Đăng nhập thất bại")
+      setError(err.response?.data?.error || "Đăng nhập thất bại");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <AuthLayout>
@@ -110,12 +115,18 @@ export default function Login2() {
         <div className="w-9 h-9 bg-[hsl(148,60%,55%)]/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-[hsl(148,60%,55%)]/20">
           <Sprout className="text-[hsl(148,60%,55%)] w-5 h-5" />
         </div>
-        <span className="font-bold text-xl text-[hsl(148,60%,55%)]">AgroInsight</span>
+        <span className="font-bold text-xl text-[hsl(148,60%,55%)]">
+          AgroInsight
+        </span>
       </div>
 
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-[hsl(148,60%,55%)] mb-1">Đăng nhập</h1>
-        <p className="text-[hsl(148,50%,55%)]/60 text-sm">Chào mừng bạn quay lại hệ thống</p>
+        <h1 className="text-xl font-bold text-[hsl(148,60%,55%)] mb-1">
+          Đăng nhập
+        </h1>
+        <p className="text-[hsl(148,50%,55%)]/60 text-sm">
+          Chào mừng bạn quay lại hệ thống
+        </p>
       </div>
 
       {error && (
@@ -126,7 +137,9 @@ export default function Login2() {
 
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <div>
-          <label className="block text-xs font-medium text-[hsl(148,60%,55%)]/80 mb-1">Email</label>
+          <label className="block text-xs font-medium text-[hsl(148,60%,55%)]/80 mb-1">
+            Email
+          </label>
           <input
             type="email"
             value={email}
@@ -138,7 +151,9 @@ export default function Login2() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-[hsl(148,60%,55%)]/80 mb-1">Mật khẩu</label>
+          <label className="block text-xs font-medium text-[hsl(148,60%,55%)]/80 mb-1">
+            Mật khẩu
+          </label>
           <input
             type="password"
             value={password}
@@ -150,7 +165,10 @@ export default function Login2() {
         </div>
 
         <div className="flex justify-end">
-          <Link to="/forgot-password" className="text-[hsl(38,85%,65%)] hover:text-[hsl(38,85%,75%)] text-xs font-medium transition-colors">
+          <Link
+            to="/forgot-password"
+            className="text-[hsl(38,85%,65%)] hover:text-[hsl(38,85%,75%)] text-xs font-medium transition-colors"
+          >
             Quên mật khẩu?
           </Link>
         </div>
@@ -166,7 +184,10 @@ export default function Login2() {
 
       <div className="mt-4 text-center text-xs text-[hsl(148,50%,55%)]/50">
         Chưa có tài khoản?{" "}
-        <Link to="/register" className="text-[hsl(38,85%,65%)] hover:text-[hsl(38,85%,75%)] font-semibold transition-colors">
+        <Link
+          to="/register"
+          className="text-[hsl(38,85%,65%)] hover:text-[hsl(38,85%,75%)] font-semibold transition-colors"
+        >
           Đăng ký ngay
         </Link>
       </div>
@@ -184,13 +205,18 @@ export default function Login2() {
           </div>
         ) : (
           <div className="rounded-xl border border-white/15 bg-white/8 px-3 py-3 backdrop-blur-sm">
-            <div ref={googleButtonRef} className="flex min-h-11 items-center justify-center" />
+            <div
+              ref={googleButtonRef}
+              className="flex min-h-11 items-center justify-center"
+            />
             {googleLoading && (
-              <p className="mt-2 text-center text-xs text-white/60">Đang xác thực với Google...</p>
+              <p className="mt-2 text-center text-xs text-white/60">
+                Đang xác thực với Google...
+              </p>
             )}
           </div>
         )}
       </div>
     </AuthLayout>
-  )
+  );
 }
