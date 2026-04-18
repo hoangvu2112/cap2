@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,8 +18,15 @@ export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
     const { user } = useAuth();
     const [showComments, setShowComments] = useState(false);
     const [likes, setLikes] = useState(post.likes || 0);
+    const [commentsCount, setCommentsCount] = useState(post.comments_count || 0);
     const [liked, setLiked] = useState(post.liked || false);
     const [showEdit, setShowEdit] = useState(false);
+
+    useEffect(() => {
+        setLikes(post.likes || 0);
+        setCommentsCount(post.comments_count || 0);
+        setLiked(post.liked || false);
+    }, [post.likes, post.comments_count, post.liked]);
 
 
     // ⭐ LIKE
@@ -138,7 +145,7 @@ export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
                             onClick={() => setShowComments(v => !v)}
                         >
                             <MessageCircle className="h-4 w-4 mr-2" />
-                            {post.comments_count}
+                            {commentsCount}
                         </Button>
 
                         {post.user_id !== user?.id && onMessageUser && (
@@ -156,7 +163,11 @@ export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
             </Card>
 
             {showComments && (
-                <CommentModal post={post} onClose={() => setShowComments(false)} />
+                <CommentModal
+                    post={{ ...post, comments_count: commentsCount }}
+                    onClose={() => setShowComments(false)}
+                    onCommentCountChange={setCommentsCount}
+                />
             )}
             {showEdit && (
                 <EditPostModal
