@@ -47,105 +47,114 @@ export async function syncProducts(io) {
             console.log(`🆕 Thêm category mới: ${categoryName}`);
         }
 
-        const name = `${regionObj.name}`;
+        const name = regionObj.name.trim();
 
         const sortedRows = rows
             .map(r => ({
                 ...r,
                 date: parseDate(r.Ngày),
-                // Ưu tiên dùng priceValue đã parse sẵn từ scraper (xử lý giá dạng khoảng "60.000 – 65.000")
-                // Nếu không có thì mới parse lại từ chuỗi Giá
                 priceValue: r.priceValue || parsePriceString(r.Giá),
             }))
             .sort((a, b) => b.date - a.date);
 
-        const [exists] = await pool.query("SELECT * FROM products WHERE name = ?", [name]);
+        // 🔍 Tìm sản phẩm (so khớp linh hoạt hơn)
+        const [exists] = await pool.query(
+            "SELECT * FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))", 
+            [name]
+        );
+
+        let productId;
+        let product;
 
         if (exists.length === 0) {
-            // ⏩ [Skip] Bỏ qua vì không có trong Database (Chế độ kiểm soát chặt chẽ)
-            // console.log(`⏩ [Sync] Bỏ qua sản phẩm mới: ${name} (Region: ${regionName})`);
-            continue;
+            // 🆕 Tự động tạo sản phẩm mới nếu chưa có
+            console.log(`🆕 [Sync] Tạo sản phẩm mới: ${name} (Region: ${regionName})`);
+            const [insertProd] = await pool.query(
+                "INSERT INTO products (name, category_id, region, currentPrice, previousPrice, trend, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+                [name, categoryId, regionName, sortedRows[0].priceValue, sortedRows[0].priceValue, "stable"]
+            );
+            productId = insertProd.insertId;
+            product = { id: productId, name, currentPrice: sortedRows[0].priceValue, previousPrice: sortedRows[0].priceValue };
         } else {
-            // 🔁 Cập nhật sản phẩm đã có
-            const product = exists[0];
-            const productId = product.id;
+            product = exists[0];
+            productId = product.id;
+        }
 
-            const [history] = await pool.query(
-                "SELECT DATE(updated_at) as date FROM price_history WHERE product_id = ? ORDER BY updated_at DESC",
-                [productId]
-            );
-            const existingDates = new Set(history.map(h => formatDate(h.date)));
+        // 🕒 Lấy lịch sử giá để tránh trùng lặp bản ghi hoàn toàn (cùng ngày và cùng giá)
+        const [history] = await pool.query(
+            "SELECT price, DATE(updated_at) as date FROM price_history WHERE product_id = ?",
+            [productId]
+        );
+        const historyMap = new Set(history.map(h => `${formatDate(h.date)}|${h.price}`));
 
-            let newDatesAdded = 0;
-            for (const item of sortedRows) {
-                const dateStr = formatDate(item.date);
-                if (!existingDates.has(dateStr)) {
-                    await pool.query(
-                        "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
-                        [productId, item.priceValue, item.date]
-                    );
-                    newDatesAdded++;
-                }
-            }
-
-            const [latestHistory] = await pool.query(
-                `SELECT price FROM price_history WHERE product_id = ? ORDER BY updated_at DESC LIMIT 2`,
-                [productId]
-            );
-            const currentPrice = latestHistory[0]?.price || product.currentPrice;
-            const previousPrice = latestHistory[1]?.price || currentPrice;
-            const trend = calcTrend(previousPrice, currentPrice);
-
-            if (
-                currentPrice !== product.currentPrice ||
-                previousPrice !== product.previousPrice ||
-                newDatesAdded > 0
-            ) {
+        let newRecordsAdded = 0;
+        for (const item of sortedRows) {
+            const dateStr = formatDate(item.date);
+            const key = `${dateStr}|${item.priceValue}`;
+            
+            if (!historyMap.has(key)) {
                 await pool.query(
-                    `UPDATE products 
-           SET previousPrice=?, currentPrice=?, trend=?, lastUpdate=NOW() 
-           WHERE id=?`,
-                    [previousPrice, currentPrice, trend, productId]
+                    "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
+                    [productId, item.priceValue, item.date]
                 );
-
-                console.log(`🔄 ${name}: ${previousPrice} → ${currentPrice} (${trend}) | +${newDatesAdded} mốc mới`);
-
-                if (io) {
-                    const [updatedRows] = await pool.query("SELECT * FROM products WHERE id = ?", [productId]);
-                    const updated = updatedRows[0];
-
-                    // 🔢 Ép kiểu về số và format lại object gọn gàng
-                    const updatedProduct = {
-                        ...updated,
-                        category: updated.category_name,
-                        currentPrice: Number(updated.currentPrice),
-                        previousPrice: Number(updated.previousPrice),
-                    };
-
-                    // 📢 Emit realtime
-                    io.emit("productUpdated", updatedProduct);
-                    io.emit("priceUpdate", {
-                        id: updatedProduct.id,
-                        newPrice: updatedProduct.currentPrice,
-                        previousPrice: updatedProduct.previousPrice,
-                    });
-                    if (newDatesAdded > 0) {
-                        const [allPrices] = await pool.query(
-                            "SELECT price, updated_at FROM price_history WHERE product_id = ? ORDER BY updated_at ASC",
-                            [productId]
-                        );
-                        io.emit("priceHistoryUpdated", {
-                            id: updatedProduct.id,
-                            history: allPrices.map(p => ({
-                                ...p,
-                                price: Number(p.price), // cũng nên ép giá lịch sử về số
-                            })),
-                        });
-                    }
-                }
-            } else {
-                console.log(`✅ ${name} không thay đổi (${product.currentPrice})`);
+                newRecordsAdded++;
             }
+        }
+
+        // 📈 Cập nhật giá hiện tại và xu hướng
+        const [latestHistory] = await pool.query(
+            `SELECT price FROM price_history WHERE product_id = ? ORDER BY updated_at DESC LIMIT 2`,
+            [productId]
+        );
+        
+        const currentPrice = latestHistory[0]?.price || product.currentPrice;
+        const previousPrice = latestHistory[1]?.price || currentPrice;
+        const trend = calcTrend(previousPrice, currentPrice);
+
+        // Cập nhật nếu có giá mới hoặc có bản ghi lịch sử mới
+        if (
+            Number(currentPrice) !== Number(product.currentPrice) ||
+            Number(previousPrice) !== Number(product.previousPrice) ||
+            newRecordsAdded > 0
+        ) {
+            await pool.query(
+                `UPDATE products 
+                 SET previousPrice=?, currentPrice=?, trend=?, lastUpdate=NOW() 
+                 WHERE id=?`,
+                [previousPrice, currentPrice, trend, productId]
+            );
+
+            console.log(`🔄 ${name}: ${previousPrice} → ${currentPrice} (${trend}) | +${newRecordsAdded} bản ghi mới`);
+
+            if (io) {
+                const [updatedRows] = await pool.query("SELECT * FROM products WHERE id = ?", [productId]);
+                const updated = updatedRows[0];
+                const updatedProduct = {
+                    ...updated,
+                    currentPrice: Number(updated.currentPrice),
+                    previousPrice: Number(updated.previousPrice),
+                };
+
+                io.emit("productUpdated", updatedProduct);
+                io.emit("priceUpdate", {
+                    id: updatedProduct.id,
+                    newPrice: updatedProduct.currentPrice,
+                    previousPrice: updatedProduct.previousPrice,
+                });
+
+                if (newRecordsAdded > 0) {
+                    const [allPrices] = await pool.query(
+                        "SELECT price, updated_at FROM price_history WHERE product_id = ? ORDER BY updated_at ASC",
+                        [productId]
+                    );
+                    io.emit("priceHistoryUpdated", {
+                        id: updatedProduct.id,
+                        history: allPrices.map(p => ({ ...p, price: Number(p.price) })),
+                    });
+                }
+            }
+        } else {
+            console.log(`✅ ${name} đã cập nhật (${product.currentPrice})`);
         }
     }
 
