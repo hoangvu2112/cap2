@@ -1,12 +1,7 @@
 import express from "express";
 import pool from "../db.js";
-import OpenAI from "openai";
-
 
 const router = express.Router();
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /* ===============================
    CONSTANTS & KEYWORDS
@@ -321,50 +316,18 @@ function parseMessage(message) {
 }
 
 async function parseMessageWithAI(message) {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,
-    messages: [
-      {
-        role: "system",
-        content: `
+  try {
+    if (!process.env.GROQ_API_KEY) {
+      console.warn("⚠️ Thiếu GROQ_API_KEY để chạy Chatbot NLP");
+      return { intent: "OUT_OF_DOMAIN" };
+    }
+
+    const prompt = `
 Bạn là một MODULE NLP PARSER cho chatbot GIÁ NÔNG SẢN VIỆT NAM.
+NHIỆM VỤ DUY NHẤT: Trích xuất intent và tham số từ câu hỏi người dùng.
 
-NHIỆM VỤ DUY NHẤT:
-- Trích xuất intent và tham số từ câu hỏi người dùng.
-
-BẠN CHỈ ĐƯỢC:
-- xác định intent
-- xác định product
-- xác định region
-- xác định threshold
-- xác định condition
-
-TUYỆT ĐỐI KHÔNG ĐƯỢC:
-- dự đoán giá
-- phân tích hay suy luận xu hướng
-- giả định có dữ liệu lịch sử
-- kết luận tăng / giảm
-- đưa ra nhận xét, lời khuyên
-- thêm bất kỳ text nào ngoài JSON
-
-NẾU KHÔNG CHẮC → intent = "OUT_OF_DOMAIN"
-
-INTENT HỢP LỆ:
-- GET_PRICE
-- GET_HISTORY
-- COMPARE_PRICES
-- SET_ALERT
-- GET_ALERT
-- HELP
-- OUT_OF_DOMAIN
-
-PRODUCT HỢP LỆ:
-- cà phê
-- tiêu
-- lúa
-- cao su
-- ca cao
+INTENT HỢP LỆ: GET_PRICE, GET_HISTORY, COMPARE_PRICES, SET_ALERT, GET_ALERT, HELP, OUT_OF_DOMAIN
+PRODUCT HỢP LỆ: cà phê, tiêu, sầu riêng, lúa, cao su, ca cao, thanh long, tôm thẻ, cá tra
 
 FORMAT JSON BẮT BUỘC:
 {
@@ -374,28 +337,33 @@ FORMAT JSON BẮT BUỘC:
   "threshold": number | null,
   "condition": "above" | "below" | null
 }
+`;
 
-VÍ DỤ HỢP LỆ:
-User: "Đặt cảnh báo cà phê trên 50k ở Đắk Lắk"
-{
-  "intent": "SET_ALERT",
-  "product": "cà phê",
-  "region": "đắk lắk",
-  "threshold": 50000,
-  "condition": "above"
-}
-
-CHỈ TRẢ VỀ JSON. KHÔNG MARKDOWN. KHÔNG GIẢI THÍCH.
-`
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
       },
-      {
-        role: "user",
-        content: message
-      }
-    ]
-  });
+      body: JSON.stringify({
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+          { "role": "system", "content": prompt },
+          { "role": "user", "content": `User message: "${message}"` }
+        ],
+        "response_format": { "type": "json_object" }
+      })
+    });
 
-  return JSON.parse(completion.choices[0].message.content);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const content = data.choices[0].message.content;
+    return JSON.parse(content);
+  } catch (error) {
+    console.error("⚠️ Groq Chatbot Parser lỗi:", error.message);
+    return { intent: "OUT_OF_DOMAIN" };
+  }
 }
 
 // async function naturalizeAnswer(rawText) {

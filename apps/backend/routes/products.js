@@ -1,6 +1,6 @@
 import express from "express"
-import pool from "../db.js" //
-import { authenticateToken, isAdmin } from "../middleware/auth.js" //
+import pool from "../db.js"
+import { authenticateToken, isAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 export const ioRef = { io: null }
@@ -15,83 +15,125 @@ export const ioRef = { io: null }
  */
 function generateAnalysis(product, stats, history, news) {
   const analysisPoints = [];
-  let sentimentScore = 0; // Điểm tâm lý
-
+  let sentimentScore = 0; 
   const currentPrice = Number(product.currentPrice);
   const avg_30d = Number(stats.avg_30d);
-  const high_30d = Number(stats.high_30d);
-  const low_30d = Number(stats.low_30d);
+  const diff = currentPrice - avg_30d;
 
-  // 1. Phân tích Giá hiện tại
+  // Nhận diện loại hàng để phân tích có tâm hơn
+  const isSầuRiêng = product.name.toLowerCase().includes("sầu riêng");
+
   if (product.trend === 'up') {
-    analysisPoints.push("Giá đang có xu hướng <b>tăng</b>.");
+    analysisPoints.push(`Xu hướng ${product.name} tại ${product.region} đang ghi nhận đà tăng trưởng tích cực.`);
     sentimentScore++;
   } else if (product.trend === 'down') {
-    analysisPoints.push("Giá đang có xu hướng <b>giảm</b>.");
+    analysisPoints.push(`Thị trường ${product.name} đang đối mặt với áp lực giảm giá ngắn hạn.`);
     sentimentScore--;
   }
 
-  // 2. Phân tích so với Thống kê (chỉ chạy nếu có dữ liệu)
   if (avg_30d > 0) {
-    if (currentPrice > avg_30d * 1.05) { // Cao hơn 5% so với trung bình
-      analysisPoints.push("Hiện đang giao dịch ở mức <b>cao hơn</b> đáng kể so với trung bình 30 ngày.");
-      sentimentScore++;
-    } else if (currentPrice < avg_30d * 0.95) { // Thấp hơn 5%
-      analysisPoints.push("Hiện đang giao dịch ở mức <b>thấp hơn</b> đáng kể so với trung bình 30 ngày.");
-      sentimentScore--;
-    } else {
-      analysisPoints.push("Giá đang đi <b>sát</b> mức trung bình 30 ngày.");
-    }
-
-    // So với đỉnh/đáy
-    if (currentPrice >= high_30d * 0.98) { // Gần đỉnh
-      analysisPoints.push("Giá đang <b>áp sát mức cao nhất</b> trong 30 ngày qua.");
-      sentimentScore++;
-    }
-    if (currentPrice <= low_30d * 1.02) { // Gần đáy
-      analysisPoints.push("Giá đang <b>tiệm cận mức thấp nhất</b> trong 30 ngày qua.");
-      sentimentScore--;
+    if (currentPrice > avg_30d * 1.05) {
+      analysisPoints.push("Mức giá hiện tại đang neo ở vùng cao so với trung bình 30 ngày qua.");
+    } else if (currentPrice < avg_30d * 0.95) {
+      analysisPoints.push("Giá đang điều chỉnh về vùng hỗ trợ thấp, tạo cơ hội tích lũy cho nhà đầu tư.");
     }
   }
 
-  // 3. Phân tích Dự báo (SMA)
-  if (history && history.length >= 2) {
-    const lastSMA = history[history.length - 1]?.forecast;
-    const prevSMA = history[history.length - 2]?.forecast;
-
-    if (lastSMA && prevSMA) {
-      if (lastSMA > prevSMA) {
-        analysisPoints.push("Phân tích kỹ thuật (SMA) cho thấy xu hướng ngắn hạn <b>đang tăng</b>.");
-        sentimentScore++;
-      } else if (lastSMA < prevSMA) {
-        analysisPoints.push("Phân tích kỹ thuật (SMA) cho thấy xu hướng ngắn hạn <b>đang giảm</b>.");
-        sentimentScore--;
-      }
-    }
+  if (isSầuRiêng) {
+    analysisPoints.push("Nhu cầu tiêu thụ nội địa và xuất khẩu đang ảnh hưởng mạnh đến biến động giá sầu riêng.");
   }
 
-  // 4. Phân tích Tin tức
-  if (news && news.length > 0) {
-    analysisPoints.push("Thị trường đang được <b>hỗ trợ bởi tin tức</b> liên quan.");
-    sentimentScore++; // Giả định tin tức là tích cực (có thể nâng cấp sau)
-  }
-
-  // 5. Tính Tâm lý
-  let sentimentText = "Trung tính";
-  if (sentimentScore >= 3) sentimentText = "Rất Tích cực";
-  else if (sentimentScore >= 1) sentimentText = "Tích cực";
-  else if (sentimentScore <= -3) sentimentText = "Rất Tiêu cực";
-  else if (sentimentScore <= -1) sentimentText = "Tiêu cực";
+  const direction = sentimentScore >= 1 ? "up" : sentimentScore <= -1 ? "down" : "side";
+  const change_amount = Math.abs(Math.round(diff * 0.08 / 100) * 100) || 1500;
 
   return {
-    summary: analysisPoints.join(" "), // Nối các câu phân tích lại
-    sentiment: sentimentText
+    summary: analysisPoints.join(" ") || "Thị trường đang trong trạng thái cân bằng, các nhà giao dịch đang chờ đợi những tín hiệu mới từ nhu cầu xuất khẩu.",
+    sentiment: sentimentScore >= 1 ? "Tích cực" : sentimentScore <= -1 ? "Tiêu cực" : "Trung tính",
+    predictedPrice: direction === "up" ? currentPrice + change_amount : currentPrice - change_amount,
+    confidence: 75,
+    volatility: "Trung bình",
+    signal: direction === "up" ? "Duy trì vị thế mua" : direction === "down" ? "Thận trọng quan sát" : "Ưu tiên tích lũy",
+    direction: direction,
+    change_amount: change_amount,
+    recommendation: sentimentScore >= 1 ? "Mua" : sentimentScore <= -1 ? "Bán" : "Giữ"
   };
 }
-// --- KẾT THÚC BỘ NÃO AI ---
+// --- KẾT THÚC BỘ NÃO AI (RULE-BASED FALLBACK) ---
 
 
-// --- CÁC HÀM HELPER CŨ ---
+// ===========================================
+// --- 🚀 BỘ NÃO PHÂN TÍCH GỘP (BATCH ANALYSIS - TIẾT KIỆM CREDIT) ---
+// ===========================================
+async function generateBatchAnalysisWithGroq(productsData) {
+  try {
+    if (!process.env.GROQ_API_KEY) throw new Error("Chưa có GROQ_API_KEY");
+
+    // Tạo danh sách sản phẩm cho prompt
+    const productListText = productsData.map((p, i) => `
+    SẢN PHẨM #${i + 1} (ID: ${p.id}):
+    - Tên: ${p.name} | Vùng: ${p.region}
+    - Giá hiện tại: ${p.currentPrice} đ/${p.unit}
+    - Thống kê 30 ngày: Cao nhất ${p.stats.high_30d}, Thấp nhất ${p.stats.low_30d}, TB ${Math.round(p.stats.avg_30d)}
+    `).join("\n");
+
+    const prompt = `Bạn là chuyên gia phân tích thị trường nông sản chuyên nghiệp. 
+Hãy phân tích danh sách ${productsData.length} sản phẩm sau đây và trả về kết quả dưới dạng MẢNG JSON.
+
+DANH SÁCH:
+${productListText}
+
+YÊU CẦU CHO MỖI SẢN PHẨM:
+1. Summary: Phân tích 3-4 câu sắc bén về xu hướng.
+2. predictedPrice: Giá dự báo phiên tới.
+3. signal: Nhận định kỹ thuật (10 từ).
+
+ĐỊNH DẠNG TRẢ VỀ (CHỈ TRẢ VỀ JSON):
+[
+  {
+    "id": <ID sản phẩm>,
+    "summary": "...",
+    "sentiment": "Tích cực" | "Tiêu cực" | "Trung tính",
+    "predictedPrice": <số>,
+    "confidence": <50-98>,
+    "volatility": "Thấp" | "Trung bình" | "Cao",
+    "signal": "...",
+    "direction": "up" | "down" | "side",
+    "change_amount": <số>,
+    "recommendation": "Mua" | "Bán" | "Giữ"
+  },
+  ...
+]`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{ "role": "user", "content": prompt }],
+        "response_format": { "type": "json_object" }
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const content = data.choices[0].message.content;
+    const results = JSON.parse(content);
+    
+    // Nếu AI không trả về mảng trực tiếp, hãy tìm mảng trong object
+    return Array.isArray(results) ? results : results.results || results.analyses || [];
+  } catch (err) {
+    console.error("❌ Lỗi Phân tích Gộp Groq:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Hàm điều phối cập nhật hàng loạt cho một nhóm ID sản phẩm
+ */
 const calculateSMA = (data, window, key = "price") => {
   return data.map((item, index, arr) => {
     if (index < window - 1) {
@@ -103,6 +145,66 @@ const calculateSMA = (data, window, key = "price") => {
     return { ...item, forecast: sma };
   });
 };
+
+async function performBatchUpdate(productIds) {
+    try {
+        console.log(`📦 [Batch Update] Đang chuẩn bị dữ liệu cho nhóm ${productIds.length} sản phẩm: ${productIds.join(", ")}`);
+        
+        const productsData = [];
+        for (const id of productIds) {
+            const [pRows] = await pool.query("SELECT * FROM products WHERE id = ?", [id]);
+            if (pRows.length === 0) continue;
+            const product = pRows[0];
+
+            const [sRows] = await pool.query(
+                "SELECT MAX(price) AS high_30d, MIN(price) AS low_30d, AVG(price) AS avg_30d FROM price_history WHERE product_id = ? AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
+                [id]
+            );
+            const stats = sRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
+            
+            productsData.push({ ...product, stats });
+        }
+
+        if (productsData.length === 0) return;
+
+        // 1. Gọi AI Phân tích Gộp
+        let batchResults = await generateBatchAnalysisWithGroq(productsData);
+
+        // 2. Nếu AI lỗi, fallback về từng cái (Rule-based)
+        for (const product of productsData) {
+            let analysis = batchResults ? batchResults.find(r => r.id == product.id) : null;
+            
+            if (!analysis) {
+                console.log(`💡 [Fallback] Sử dụng Rule-based cho sản phẩm #${product.id}`);
+                analysis = generateAnalysis(product, product.stats, [], []);
+            }
+
+            // 3. Cơ chế "Di cư dữ liệu": Cất bản cũ vào Lịch sử trước khi lưu bản mới
+            const [oldAnalysis] = await pool.query("SELECT analysis_json FROM analysis_data WHERE product_id = ?", [product.id]);
+            if (oldAnalysis.length > 0) {
+                // Ép kiểu JSON thành string để tránh lỗi "Column count doesn't match"
+                const oldDataStr = typeof oldAnalysis[0].analysis_json === 'string' 
+                    ? oldAnalysis[0].analysis_json 
+                    : JSON.stringify(oldAnalysis[0].analysis_json);
+                await pool.query("INSERT INTO analysis_history (product_id, analysis_json) VALUES (?, ?)", [product.id, oldDataStr]);
+            }
+
+            // 4. Lưu bản mới vào analysis_data (Upsert)
+            const analysisJson = JSON.stringify(analysis);
+            await pool.query(
+                "INSERT INTO analysis_data (product_id, analysis_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE analysis_json = ?", 
+                [product.id, analysisJson, analysisJson]
+            );
+            
+            // Cập nhật timestamp ở bảng products
+            await pool.query("UPDATE products SET analysis_at = NOW() WHERE id = ?", [product.id]);
+        }
+        
+        console.log(`✅ [Batch Update] Hoàn thành cập nhật cho nhóm ${productIds.length} sản phẩm.`);
+    } catch (err) {
+        console.error("❌ Lỗi performBatchUpdate:", err.message);
+    }
+}
 
 function getNewsKeywords(productName) {
   const lower = productName.toLowerCase();
@@ -396,9 +498,11 @@ router.get("/:id", async (req, res) => {
       `
       SELECT 
         p.*, 
-        c.name AS category_name
+        c.name AS category_name,
+        ad.analysis_json AS analysis_data
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN analysis_data ad ON p.id = ad.product_id
       WHERE p.id = ?
       `,
       [productId]
@@ -466,6 +570,8 @@ router.get("/:id", async (req, res) => {
       category: products[0].category_name,
       currentPrice: Number(products[0].currentPrice),
       previousPrice: Number(products[0].previousPrice),
+      analysis_data: products[0].analysis_data ? (typeof products[0].analysis_data === 'string' ? JSON.parse(products[0].analysis_data) : products[0].analysis_data) : null,
+      analysis_at: products[0].analysis_at
     }
 
     // 5. Lấy Tin tức
@@ -484,12 +590,12 @@ router.get("/:id", async (req, res) => {
     //   newsRows = fetchedNews;
     // }
     let newsRows = []; // ✅ Thêm dòng này
-    // 6. 🚀 TẠO PHÂN TÍCH AI (MỚI)
-    // Đảm bảo statsRows[0] không bị undefined nếu không có lịch sử
     const stats = statsRows[0] || { high_30d: 0, low_30d: 0, avg_30d: 0 };
-    const analysis = generateAnalysis(product, stats, historyWithForecast, newsRows);
+    const percentChange = product.previousPrice > 0
+      ? ((product.currentPrice - product.previousPrice) / product.previousPrice * 100).toFixed(2)
+      : 0;
 
-    // 7. Gộp kết quả
+    // 7. Gộp kết quả (KHÔNG CÒN GỌI AI TRỰC TIẾP)
     res.json({
       ...product,
       history: historyWithForecast,
@@ -499,13 +605,99 @@ router.get("/:id", async (req, res) => {
         avg_30d: Number(stats.avg_30d) || 0,
       },
       relevantNews: newsRows,
-      analysis: analysis // <-- Gửi phân tích về Frontend
+      percentChange: Number(percentChange) 
     })
   } catch (error) {
     console.error("❌ Lỗi khi lấy chi tiết sản phẩm:", error)
     res.status(500).json({ error: "Lỗi máy chủ" })
   }
 })
+
+// ===========================================
+// --- 🚀 API HIỂN THỊ: CHẾ ĐỘ DB-CENTRIC (Tốc độ tối đa) ---
+// ===========================================
+router.get("/:id/analysis", async (req, res) => {
+  try {
+    const productId = req.params.id;
+
+    // Chỉ thực hiện truy vấn bảng phân tích chuyên biệt
+    const [rows] = await pool.query(
+      `SELECT ad.analysis_json AS analysis_data, p.analysis_at 
+       FROM analysis_data ad
+       JOIN products p ON ad.product_id = p.id
+       WHERE ad.product_id = ?`,
+      [productId]
+    );
+
+    if (rows.length === 0 || !rows[0].analysis_data) {
+      return res.status(200).json({ 
+        summary: "Đang phân tích dữ liệu thị trường...", 
+        status: "pending" 
+      });
+    }
+
+    // Trả về dữ liệu từ DB (Nhanh, ổn định)
+    res.json(rows[0].analysis_data);
+
+  } catch (error) {
+    console.error("❌ Lỗi truy vấn phân tích từ DB:", error);
+    res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu" });
+  }
+});
+
+/**
+ * 🔄 HỆ THỐNG TỰ ĐỘNG HÓA AI (AGENTIC AUTOMATION)
+ */
+
+// 1. Hàm làm mới sản phẩm theo chế độ "NHỎ GIỌT" (Chạy mỗi 1 phút - Cực kỳ tiết kiệm và ổn định)
+async function refreshAllProductsAnalysis() {
+    console.log("🕒 [Automation] Đang kiểm tra sản phẩm cũ nhất để cập nhật (Drip Mode)...");
+    try {
+        // Tìm 1 sản phẩm có thời gian phân tích cũ nhất (hoặc chưa bao giờ phân tích)
+        const [products] = await pool.query(
+            "SELECT id, name FROM products ORDER BY analysis_at ASC LIMIT 1"
+        );
+        
+        if (products.length === 0) return;
+
+        const product = products[0];
+        console.log(`📡 [Drip Update] Đang ưu tiên cập nhật cho: ${product.name} (#${product.id})`);
+        
+        // Thực hiện cập nhật phân tích (sử dụng BatchUpdate cho 1 cái để tận dụng logic Groq đã viết)
+        await performBatchUpdate([product.id]);
+        
+    } catch (err) {
+        console.error("❌ [Automation] Lỗi khi chạy cập nhật nhỏ giọt:", err.message);
+    }
+}
+
+// 2. Hàm dọn dẹp dữ liệu cũ (Xóa sau 1 tuần)
+async function cleanupOldAnalysisHistory() {
+    console.log("🧹 [Automation] Đang quét dọn lịch sử phân tích cũ (> 1 tuần)...");
+    try {
+        const [result] = await pool.query(
+            "DELETE FROM analysis_history WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)"
+        );
+        console.log(`🗑️ [Automation] Đã xóa ${result.affectedRows} bản ghi cũ.`);
+    } catch (err) {
+        console.error("❌ [Automation] Lỗi dọn dẹp lịch sử:", err.message);
+    }
+}
+
+// 🚀 THIẾT LẬP BỘ HẸN GIỜ (CRON-LIKE)
+const ONE_MINUTE = 60 * 1000;
+const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+// Khởi chạy ngay khi server start (đợi 5s cho DB kết nối ổn định)
+setTimeout(() => {
+    refreshAllProductsAnalysis(); // Chạy ngay lần đầu
+    cleanupOldAnalysisHistory();
+    
+    // Đặt lịch định kỳ: Cập nhật nhỏ giọt mỗi phút
+    setInterval(refreshAllProductsAnalysis, ONE_MINUTE);
+    setInterval(cleanupOldAnalysisHistory, TWENTY_FOUR_HOURS);
+}, 5000);
+;
 
 // Tạo sản phẩm mới (Admin)
 router.post("/", authenticateToken, isAdmin, async (req, res) => {

@@ -89,7 +89,10 @@ const initDB = async () => {
     VALUES
     ('Lúa gạo'),
     ('Trái cây'),
-    ('Cà phê')
+    ('Cà phê'),
+    ('Hồ tiêu'),
+    ('Thủy hải sản'),
+    ('Gia vị & Rau củ')
   `);
       console.log("🍀 Đã chèn dữ liệu mẫu vào bảng 'categories'.");
     }
@@ -106,11 +109,36 @@ const initDB = async () => {
     region VARCHAR(100),
     lastUpdate DATETIME,
     trend ENUM('up','down','stable'),
+    analysis_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
   )
 `);
     console.log("✅ Bảng 'products' đã sẵn sàng (đã liên kết category_id).");
+
+    // Bảng analysis_data (Lưu bản mới nhất)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS analysis_data (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL UNIQUE,
+        analysis_json JSON NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `);
+    console.log("✅ Bảng 'analysis_data' đã sẵn sàng.");
+
+    // Bảng analysis_history (Lưu lịch sử)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS analysis_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        analysis_json JSON NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `);
+    console.log("✅ Bảng 'analysis_history' đã sẵn sàng.");
 
 
     const [productCount] = await pool.query("SELECT COUNT(*) AS c FROM products")
@@ -124,8 +152,13 @@ const initDB = async () => {
     VALUES
     ('Lúa Gạo ST25', ?, 8500, 8200, 'kg', 'Đồng bằng sông Cửu Long', '2025-09-10T13:42:00Z', 'up'),
     ('Xoài Cát Hòa Lộc', ?, 45000, 47000, 'kg', 'Tiền Giang', '2025-09-09T10:30:00Z', 'down'),
-    ('Cà Phê Buôn Ma Thuột', ?, 120000, 120000, 'kg', 'Đắk Lắk', '2025-09-11T08:20:00Z', 'stable')
-  `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"]])
+    ('Cà Phê Robusta', ?, 120000, 118000, 'kg', 'Đắk Lắk', '2025-09-11T08:20:00Z', 'up'),
+    ('Sầu Riêng Ri6', ?, 150000, 145000, 'kg', 'Cần Thơ', '2025-09-11T09:00:00Z', 'up'),
+    ('Hồ Tiêu Chư Sê', ?, 155000, 158000, 'kg', 'Gia Lai', '2025-09-11T07:30:00Z', 'down'),
+    ('Thanh Long Bình Thuận', ?, 15000, 14000, 'kg', 'Bình Thuận', '2025-09-10T15:20:00Z', 'up'),
+    ('Tôm Thẻ Chân Trắng', ?, 135000, 135000, 'kg', 'Sóc Trăng', '2025-09-11T10:00:00Z', 'stable'),
+    ('Cá Tra Phi Lê', ?, 32000, 31500, 'kg', 'An Giang', '2025-09-11T06:45:00Z', 'up')
+  `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"], cat["Trái cây"], cat["Hồ tiêu"], cat["Trái cây"], cat["Thủy hải sản"], cat["Thủy hải sản"]])
       console.log("🍀 Đã chèn sản phẩm mẫu vào bảng 'products'.")
     }
 
@@ -263,6 +296,40 @@ const initDB = async () => {
     console.log("✅ Bảng 'community_likes' đã sẵn sàng.")
 
     // Bảng lưu session chat
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS direct_message_conversations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_one_id INT NOT NULL,
+    user_two_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_pair (user_one_id, user_two_id),
+    FOREIGN KEY (user_one_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_two_id) REFERENCES users(id) ON DELETE CASCADE,
+    CHECK (user_one_id < user_two_id)
+  )
+`);
+    console.log("âœ… Báº£ng 'direct_message_conversations' Ä‘Ã£ sáºµn sÃ ng.");
+
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS direct_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    conversation_id INT NOT NULL,
+    sender_id INT NOT NULL,
+    recipient_id INT NOT NULL,
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at DATETIME DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES direct_message_conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_conversation_created (conversation_id, created_at),
+    INDEX idx_recipient_read (recipient_id, is_read)
+  )
+`);
+    console.log("âœ… Báº£ng 'direct_messages' Ä‘Ã£ sáºµn sÃ ng.");
+
     await pool.query(`
   CREATE TABLE IF NOT EXISTS conversation_sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,

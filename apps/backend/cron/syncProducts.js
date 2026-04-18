@@ -62,51 +62,9 @@ export async function syncProducts(io) {
         const [exists] = await pool.query("SELECT * FROM products WHERE name = ?", [name]);
 
         if (exists.length === 0) {
-            // 🆕 Thêm sản phẩm mới
-            const latest = sortedRows[0];
-            const prev = sortedRows[1] || latest;
-            const currentPrice = latest.priceValue;
-            const previousPrice = prev.priceValue;
-
-            const [insertResult] = await pool.query(
-                `INSERT INTO products (name, region, category_id, unit, currentPrice, previousPrice, trend, lastUpdate)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-                [
-                    name,
-                    regionName,
-                    categoryId,
-                    "kg",
-                    currentPrice,
-                    previousPrice,
-                    calcTrend(previousPrice, currentPrice),
-                ]
-            );
-
-            const newId = insertResult.insertId;
-            console.log(`🆕 Thêm sản phẩm mới: ${name}`);
-
-            for (const item of sortedRows) {
-                const now = new Date(); // giờ hiện tại
-                const itemDate = new Date(item.date);
-                // Gộp ngày của item + giờ hiện tại
-                itemDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), 0);
-
-                await pool.query(
-                    "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
-                    [newId, item.priceValue, itemDate]
-                );
-            }
-
-            if (io) {
-                const [productRows] = await pool.query("SELECT * FROM products WHERE id = ?", [newId]);
-                io.emit("productAdded", productRows[0]);
-                const [priceRows] = await pool.query(
-                    "SELECT price, updated_at FROM price_history WHERE product_id = ? ORDER BY updated_at ASC",
-                    [newId]
-                );
-                io.emit("priceHistoryUpdated", { id: newId, history: priceRows });
-            }
-
+            // ⏩ [Skip] Bỏ qua vì không có trong Database (Chế độ kiểm soát chặt chẽ)
+            // console.log(`⏩ [Sync] Bỏ qua sản phẩm mới: ${name} (Region: ${regionName})`);
+            continue;
         } else {
             // 🔁 Cập nhật sản phẩm đã có
             const product = exists[0];

@@ -9,6 +9,7 @@ import fs from "fs";
 import { spawn } from "child_process";
 import * as cron from "node-cron";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
 import costRoutes from "./routes/costs.js";
 import pool from "./db.js";
 import chatbotRoutes from "./routes/chatbot.js";
@@ -18,7 +19,7 @@ import productRoutes, { ioRef } from "./routes/products.js";
 import userRoutes from "./routes/users.js";
 import alertRoutes from "./routes/alerts.js";
 import newsRoutes from "./routes/news.js";
-import communityRoutes from "./routes/community.js";
+import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js";
 import favoritesRouter from "./routes/favorites.js";
 import chatRouter from "./routes/chat.js";
 import testRoutes from "./routes/test.js";
@@ -38,6 +39,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.set("io", io);
+communityIoRef.io = io;
+
+io.use((socket, next) => {
+  try {
+    const rawToken = socket.handshake.auth?.token;
+    if (!rawToken) return next();
+
+    const token = rawToken.startsWith("Bearer ") ? rawToken.slice(7) : rawToken;
+    socket.user = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your-secret-key-change-in-production"
+    );
+    return next();
+  } catch {
+    return next(new Error("INVALID_SOCKET_TOKEN"));
+  }
+});
 ioRef.io = io; // Cho phép emit từ router
 
 // Routes
@@ -71,6 +89,9 @@ app.post("/api/admin/scrape-trigger", authenticateToken, isAdmin, async (req, re
 });
 
 io.on("connection", async (socket) => {
+  if (socket.user?.id) {
+    socket.join(`user:${socket.user.id}`);
+  }
   console.log("✅ Client connected:", socket.id);
   socket.onAny((event, data) => {
     console.log("📥 nhận event bất kỳ hihihi:", event, data);
@@ -215,9 +236,7 @@ async function checkAndScrapeIfNeeded() {
       );
 
       if (!oldRegion) {
-        console.log(`🆕 Thêm sản phẩm mới: ${region.name} (${region.region})`);
-        region.data = removeDuplicateRows(region.data);
-        oldData.regions.push(region);
+        // console.log(`⏩ [Scraper] Bỏ qua vùng mới phát hiện: ${region.name} (${region.region})`);
         continue;
       }
 
