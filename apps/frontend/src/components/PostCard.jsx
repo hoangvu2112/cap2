@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ThumbsUp, MessageCircle } from "lucide-react"
+import { ThumbsUp, MessageCircle, Send } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { vi } from "date-fns/locale"
 import api from "@/lib/api";
@@ -14,7 +14,7 @@ import { motion } from "framer-motion";
 import EditPostModal from "@/components/EditPostModal";
 
 
-export default function PostCard({ post, onDelete, onUpdate }) {
+export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
     const { user } = useAuth();
     const [showComments, setShowComments] = useState(false);
     const [likes, setLikes] = useState(post.likes || 0);
@@ -90,7 +90,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                         </div>
 
                         {/* ⭐ ICON 3 CHẤM - chỉ hiện nếu là bài của user */}
-                        {(post.user_id === user.id || user.role === "admin") && (
+                        {(post.user_id === user?.id || user?.role === "admin") && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button className="p-2 rounded-full hover:bg-accent">
@@ -140,6 +140,17 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                             <MessageCircle className="h-4 w-4 mr-2" />
                             {post.comments_count}
                         </Button>
+
+                        {post.user_id !== user?.id && onMessageUser && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onMessageUser(post)}
+                            >
+                                <Send className="h-4 w-4 mr-2" />
+                                Nhắn tin
+                            </Button>
+                        )}
                     </div>
                 </CardContent>
             </Card>

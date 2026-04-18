@@ -1,12 +1,6 @@
 import express from "express";
 import pool from "../db.js";
-import OpenAI from "openai";
-
 const router = express.Router();
-
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
 
 // 1️⃣ Tạo session mới
 router.post("/session", async (req, res) => {
@@ -157,21 +151,56 @@ ${predictionResult}
             }))
         ];
 
-        // 6️⃣ Gọi OpenAI (có xử lý lỗi graceful)
-        if (!process.env.OPENAI_API_KEY) {
+        // 6. Gọi Groq (thay thế OpenAI/Gemini)
+        if (!process.env.GROQ_API_KEY) {
             return res.json({
                 success: true,
-                reply: "⚠️ Trợ lý AI hiện chưa được cấu hình (thiếu API Key). Vui lòng liên hệ quản trị viên."
+                reply: "⚠️ Trợ lý AI hiện chưa được cấu hình (thiếu GROQ API Key). Vui lòng liên hệ quản trị viên."
             });
         }
 
         let aiReply;
         try {
-            const completion = await client.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages
+            const systemInstruction = `
+Bạn là trợ lý phân tích nông sản Việt Nam thông minh.
+Nhiệm vụ của bạn:
+- Trả lời dựa trên dữ liệu TRONG DATABASE bên dưới.
+- Nếu người dùng hỏi ngày → ngày hiện tại là: ${now}.
+- Không được bịa đặt dữ liệu.
+- Nếu không có dữ liệu liên quan → nói thành thật là không đủ dữ liệu.
+- Sử dụng phần "DỰ BÁO GIÁ" (nếu có) để phân tích triển vọng.
+
+================================================
+DỮ LIỆU TỪ DATABASE:
+${dbContext || "Không có dữ liệu phù hợp câu hỏi."}
+================================================
+${predictionResult}
+
+Lưu ý: Luôn trả lời bằng tiếng Việt, lịch sự và chuyên nghiệp.
+`;
+
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        { "role": "system", "content": systemInstruction },
+                        ...history.map(m => ({
+                            role: m.role === 'user' ? 'user' : 'assistant',
+                            content: m.message
+                        })),
+                        { "role": "user", "content": message }
+                    ]
+                })
             });
-            aiReply = completion.choices[0].message.content;
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            aiReply = data.choices[0].message.content;
 
             // 7️⃣ Lưu reply AI
             await pool.query(`
@@ -180,10 +209,10 @@ ${predictionResult}
             `, [
                 session_id,
                 aiReply,
-                completion.usage?.total_tokens || 0
+                data.usage?.total_tokens || 0
             ]);
         } catch (aiError) {
-            console.error("Lỗi gọi OpenAI:", aiError);
+            console.error("Lỗi gọi Groq:", aiError);
             aiReply = "⚠️ Trợ lý AI tạm thời không khả dụng. Vui lòng thử lại sau.";
         }
 
