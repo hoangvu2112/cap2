@@ -141,26 +141,26 @@ const initDB = async () => {
     console.log("✅ Bảng 'analysis_history' đã sẵn sàng.");
 
 
-    const [productCount] = await pool.query("SELECT COUNT(*) AS c FROM products")
-    if (productCount[0].c === 0) {
-      // Lấy id của từng category
-      const [cats] = await pool.query("SELECT id, name FROM categories")
-      const cat = Object.fromEntries(cats.map(c => [c.name, c.id]))
+  //   const [productCount] = await pool.query("SELECT COUNT(*) AS c FROM products")
+  //   if (productCount[0].c === 0) {
+  //     // Lấy id của từng category
+  //     const [cats] = await pool.query("SELECT id, name FROM categories")
+  //     const cat = Object.fromEntries(cats.map(c => [c.name, c.id]))
 
-      await pool.query(`
-    INSERT INTO products (name, category_id, currentPrice, previousPrice, unit, region, lastUpdate, trend)
-    VALUES
-    ('Lúa Gạo ST25', ?, 8500, 8200, 'kg', 'Đồng bằng sông Cửu Long', '2025-09-10T13:42:00Z', 'up'),
-    ('Xoài Cát Hòa Lộc', ?, 45000, 47000, 'kg', 'Tiền Giang', '2025-09-09T10:30:00Z', 'down'),
-    ('Cà Phê Robusta', ?, 120000, 118000, 'kg', 'Đắk Lắk', '2025-09-11T08:20:00Z', 'up'),
-    ('Sầu Riêng Ri6', ?, 150000, 145000, 'kg', 'Cần Thơ', '2025-09-11T09:00:00Z', 'up'),
-    ('Hồ Tiêu Chư Sê', ?, 155000, 158000, 'kg', 'Gia Lai', '2025-09-11T07:30:00Z', 'down'),
-    ('Thanh Long Bình Thuận', ?, 15000, 14000, 'kg', 'Bình Thuận', '2025-09-10T15:20:00Z', 'up'),
-    ('Tôm Thẻ Chân Trắng', ?, 135000, 135000, 'kg', 'Sóc Trăng', '2025-09-11T10:00:00Z', 'stable'),
-    ('Cá Tra Phi Lê', ?, 32000, 31500, 'kg', 'An Giang', '2025-09-11T06:45:00Z', 'up')
-  `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"], cat["Trái cây"], cat["Hồ tiêu"], cat["Trái cây"], cat["Thủy hải sản"], cat["Thủy hải sản"]])
-      console.log("🍀 Đã chèn sản phẩm mẫu vào bảng 'products'.")
-    }
+  //     await pool.query(`
+  //   INSERT INTO products (name, category_id, currentPrice, previousPrice, unit, region, lastUpdate, trend)
+  //   VALUES
+  //   ('Lúa Gạo ST25', ?, 8500, 8200, 'kg', 'Đồng bằng sông Cửu Long', '2025-09-10 13:42:00', 'up'),
+  //   ('Xoài Cát Hòa Lộc', ?, 45000, 47000, 'kg', 'Tiền Giang', '2025-09-09 10:30:00', 'down'),
+  //   ('Cà Phê Robusta', ?, 120000, 118000, 'kg', 'Đắk Lắk', '2025-09-11 08:20:00', 'up'),
+  //   ('Sầu Riêng Ri6', ?, 150000, 145000, 'kg', 'Cần Thơ', '2025-09-11 09:00:00', 'up'),
+  //   ('Hồ Tiêu Chư Sê', ?, 155000, 158000, 'kg', 'Gia Lai', '2025-09-11 07:30:00', 'down'),
+  //   ('Thanh Long Bình Thuận', ?, 15000, 14000, 'kg', 'Bình Thuận', '2025-09-10 15:20:00', 'up'),
+  //   ('Tôm Thẻ Chân Trắng', ?, 135000, 135000, 'kg', 'Sóc Trăng', '2025-09-11 10:00:00', 'stable'),
+  //   ('Cá Tra Phi Lê', ?, 32000, 31500, 'kg', 'An Giang', '2025-09-11 06:45:00', 'up')
+  // `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"], cat["Trái cây"], cat["Hồ tiêu"], cat["Trái cây"], cat["Thủy hải sản"], cat["Thủy hải sản"]])
+  //     console.log("🍀 Đã chèn sản phẩm mẫu vào bảng 'products'.")
+  //   }
 
     // Bảng price_history ở đây
     await pool.query(`
@@ -412,4 +412,4 @@ const initDB = async () => {
 // Gọi hàm khởi tạo
 const pool = await initDB()
 
-export default pool
+export default pool;
