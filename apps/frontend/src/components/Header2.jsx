@@ -57,60 +57,62 @@ export default function Header2() {
         {/* Right: Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Notifications */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:bg-white/15 transition-colors relative"
-              title="Thông báo cảnh báo giá"
-              onClick={() => setOpenNotifications((prev) => !prev)}
-            >
-              <Bell className="w-[18px] h-[18px]" />
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-yellow-400 text-black rounded-full border border-white/40 flex items-center justify-center">
-                  {notifications.length > 9 ? "9+" : notifications.length}
-                </span>
+          {user?.role !== "dealer" && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:bg-white/15 transition-colors relative"
+                title="Thông báo cảnh báo giá"
+                onClick={() => setOpenNotifications((prev) => !prev)}
+              >
+                <Bell className="w-[18px] h-[18px]" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-yellow-400 text-black rounded-full border border-white/40 flex items-center justify-center">
+                    {notifications.length > 9 ? "9+" : notifications.length}
+                  </span>
+                )}
+              </button>
+
+              {openNotifications && (
+                <div className="absolute right-0 mt-2 w-96 max-w-[90vw] rounded-xl border border-border bg-background shadow-xl z-50">
+                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">Cảnh báo đã kích hoạt</h3>
+                    <span className="text-xs text-muted-foreground">{notifications.length} mục</span>
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="px-4 py-6 text-sm text-muted-foreground">
+                        Chưa có cảnh báo nào được kích hoạt.
+                      </p>
+                    ) : (
+                      notifications.map((item) => (
+                        <div key={item.id} className="px-4 py-3 border-b border-border/70 last:border-b-0">
+                          <p className="text-sm font-medium text-foreground">{item.product_name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Điều kiện: {item.alert_condition === "above" ? "Tăng vượt" : "Giảm dưới"}{" "}
+                            {Number(item.target_price || 0).toLocaleString("vi-VN")} đ/kg
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Giá hiện tại: {Number(item.currentPrice || 0).toLocaleString("vi-VN")} đ/kg
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="px-4 py-3 border-t border-border">
+                    <Link
+                      to="/alerts"
+                      onClick={() => setOpenNotifications(false)}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Xem toàn bộ cảnh báo
+                    </Link>
+                  </div>
+                </div>
               )}
-            </button>
-
-            {openNotifications && (
-              <div className="absolute right-0 mt-2 w-96 max-w-[90vw] rounded-xl border border-border bg-background shadow-xl z-50">
-                <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                  <h3 className="font-semibold text-foreground">Cảnh báo đã kích hoạt</h3>
-                  <span className="text-xs text-muted-foreground">{notifications.length} mục</span>
-                </div>
-
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <p className="px-4 py-6 text-sm text-muted-foreground">
-                      Chưa có cảnh báo nào được kích hoạt.
-                    </p>
-                  ) : (
-                    notifications.map((item) => (
-                      <div key={item.id} className="px-4 py-3 border-b border-border/70 last:border-b-0">
-                        <p className="text-sm font-medium text-foreground">{item.product_name}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Điều kiện: {item.alert_condition === "above" ? "Tăng vượt" : "Giảm dưới"}{" "}
-                          {Number(item.target_price || 0).toLocaleString("vi-VN")} đ/kg
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Giá hiện tại: {Number(item.currentPrice || 0).toLocaleString("vi-VN")} đ/kg
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="px-4 py-3 border-t border-border">
-                  <Link
-                    to="/alerts"
-                    onClick={() => setOpenNotifications(false)}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Xem toàn bộ cảnh báo
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* User info */}
           {user && (
@@ -131,7 +133,11 @@ export default function Header2() {
                   {user.name || user.email}
                 </p>
                 <p className="text-[10px] text-white/60 leading-tight capitalize">
-                  {user.role === "admin" ? "Quản trị viên" : user.role || "Người dùng"}
+                  {user.role === "admin"
+                    ? "Quản trị viên"
+                    : user.role === "dealer"
+                    ? "Đại lý"
+                    : "Nông dân"}
                 </p>
               </div>
             </div>

@@ -151,9 +151,13 @@ export default function AdminUsers() {
                           <Badge className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200 gap-1 pl-2 pr-3 py-1 font-normal">
                             <Shield className="w-3 h-3" /> Quản trị viên
                           </Badge>
+                        ) : user.role === 'dealer' ? (
+                          <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 gap-1 pl-2 pr-3 py-1 font-normal">
+                            <User className="w-3 h-3" /> Đại lý
+                          </Badge>
                         ) : (
                           <Badge variant="outline" className="text-muted-foreground border-border bg-muted/50 gap-1 pl-2 pr-3 py-1 font-normal">
-                            <User className="w-3 h-3 text-muted-foreground" /> Thành viên
+                            <User className="w-3 h-3 text-muted-foreground" /> Nông dân
                           </Badge>
                         )}
                       </TableCell>
@@ -203,7 +207,8 @@ export default function AdminUsers() {
                 <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}
                   className="border rounded px-3 py-2 w-full"
                 >
-                  <option value="user">Thành viên</option>
+                  <option value="user">Nông dân</option>
+                  <option value="dealer">Đại lý</option>
                   <option value="admin">Quản trị</option>
                 </select>
 

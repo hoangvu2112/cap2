@@ -50,13 +50,18 @@ const initDB = async () => {
         email VARCHAR(191) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         avatar_url VARCHAR(255) NOT NULL,
-        role ENUM('admin','user') DEFAULT 'user',
+        role ENUM('admin','user','dealer') DEFAULT 'user',
         status VARCHAR(50) DEFAULT 'active',
         joinDate DATE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `)
     console.log("✅ Bảng 'users' đã sẵn sàng.")
+
+    // Đồng bộ enum role cho DB cũ
+    await pool.query(
+      "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','dealer') DEFAULT 'user'"
+    )
 
     const [userCount] = await pool.query("SELECT COUNT(*) AS c FROM users")
     if (userCount[0].c === 0) {
@@ -107,14 +112,55 @@ const initDB = async () => {
     previousPrice DECIMAL(10,2),
     unit VARCHAR(50),
     region VARCHAR(100),
+    quantity_available DECIMAL(12,2) DEFAULT 0,
+    harvest_start DATE NULL,
+    harvest_end DATE NULL,
+    farmer_user_id INT NULL,
     lastUpdate DATETIME,
     trend ENUM('up','down','stable'),
     analysis_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    FOREIGN KEY (farmer_user_id) REFERENCES users(id) ON DELETE SET NULL
   )
 `);
     console.log("✅ Bảng 'products' đã sẵn sàng (đã liên kết category_id).");
+
+    // Đồng bộ cột cho DB cũ (tương thích cả MySQL cũ không hỗ trợ IF NOT EXISTS)
+    const ensureProductColumn = async (columnName, definitionSql) => {
+      const [colRows] = await pool.query(
+        `
+          SELECT 1
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = ?
+            AND TABLE_NAME = 'products'
+            AND COLUMN_NAME = ?
+          LIMIT 1
+        `,
+        [DB_NAME, columnName]
+      )
+
+      if (colRows.length === 0) {
+        try {
+          await pool.query(`ALTER TABLE products ADD COLUMN ${definitionSql}`)
+        } catch (error) {
+          if (error.code !== "ER_DUP_FIELDNAME") {
+            throw error
+          }
+        }
+      }
+    }
+
+    await ensureProductColumn("quantity_available", "quantity_available DECIMAL(12,2) DEFAULT 0")
+    await ensureProductColumn("harvest_start", "harvest_start DATE NULL")
+    await ensureProductColumn("harvest_end", "harvest_end DATE NULL")
+    await ensureProductColumn("farmer_user_id", "farmer_user_id INT NULL")
+
+    try {
+      await pool.query("ALTER TABLE products ADD CONSTRAINT fk_products_farmer_user FOREIGN KEY (farmer_user_id) REFERENCES users(id) ON DELETE SET NULL")
+    } catch {
+      // Bỏ qua nếu constraint đã tồn tại
+    }
 
     // Bảng analysis_data (Lưu bản mới nhất)
     await pool.query(`
@@ -334,12 +380,65 @@ const initDB = async () => {
   CREATE TABLE IF NOT EXISTS conversation_sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
+    bot_mode VARCHAR(20) NOT NULL DEFAULT 'user',
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+    is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
     title VARCHAR(255) DEFAULT 'Cuộc trò chuyện',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `);
     console.log("✅ Bảng 'conversation_sessions' đã sẵn sàng.");
+
+    const [sessionModeColumns] = await pool.query(
+      `
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = 'conversation_sessions'
+          AND COLUMN_NAME = 'bot_mode'
+        LIMIT 1
+      `,
+      [DB_NAME]
+    )
+    if (sessionModeColumns.length === 0) {
+      try {
+        await pool.query("ALTER TABLE conversation_sessions ADD COLUMN bot_mode VARCHAR(20) NOT NULL DEFAULT 'user'")
+      } catch (error) {
+        if (error.code !== "ER_DUP_FIELDNAME") {
+          throw error
+        }
+      }
+    }
+
+    const ensureSessionFlagColumn = async (columnName, definitionSql) => {
+      const [flagRows] = await pool.query(
+        `
+          SELECT 1
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = ?
+            AND TABLE_NAME = 'conversation_sessions'
+            AND COLUMN_NAME = ?
+          LIMIT 1
+        `,
+        [DB_NAME, columnName]
+      )
+
+      if (flagRows.length === 0) {
+        try {
+          await pool.query(`ALTER TABLE conversation_sessions ADD COLUMN ${definitionSql}`)
+        } catch (error) {
+          if (error.code !== "ER_DUP_FIELDNAME") {
+            throw error
+          }
+        }
+      }
+    }
+
+    await ensureSessionFlagColumn("is_archived", "is_archived BOOLEAN NOT NULL DEFAULT FALSE")
+    await ensureSessionFlagColumn("is_pinned", "is_pinned BOOLEAN NOT NULL DEFAULT FALSE")
+    await ensureSessionFlagColumn("updated_at", "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 
     // Bảng lưu tin nhắn của AI + User
     await pool.query(`
@@ -356,6 +455,66 @@ const initDB = async () => {
   )
 `);
     console.log("✅ Bảng 'conversation_messages' đã sẵn sàng.");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dealer_plans (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        price_vnd INT NOT NULL DEFAULT 0,
+        duration_days INT NOT NULL DEFAULT 30,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `)
+    console.log("✅ Bảng 'dealer_plans' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dealer_upgrade_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        plan_id INT NOT NULL,
+        status ENUM('pending_payment','pending_review','approved','rejected','cancelled') NOT NULL DEFAULT 'pending_payment',
+        payment_status ENUM('unpaid','paid','refunded') NOT NULL DEFAULT 'unpaid',
+        payment_ref VARCHAR(120) DEFAULT NULL,
+        note TEXT,
+        admin_note TEXT,
+        reviewed_by INT DEFAULT NULL,
+        reviewed_at DATETIME DEFAULT NULL,
+        approved_at DATETIME DEFAULT NULL,
+        expires_at DATETIME DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_dealer_request_user (user_id, status),
+        INDEX idx_dealer_request_status (status, payment_status),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (plan_id) REFERENCES dealer_plans(id) ON DELETE RESTRICT,
+        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `)
+    console.log("✅ Bảng 'dealer_upgrade_requests' đã sẵn sàng.")
+
+    const [membershipPlanRows] = await pool.query("SELECT id FROM dealer_plans WHERE code = 'dealer_membership' LIMIT 1")
+    if (membershipPlanRows.length === 0) {
+      await pool.query(
+        `
+          INSERT INTO dealer_plans (code, name, price_vnd, duration_days, is_active)
+          VALUES ('dealer_membership', 'Nâng cấp lên Đại lý', 100000, 3650, TRUE)
+        `
+      )
+      console.log("🍀 Đã chèn gói nâng cấp đại lý 100k vào bảng 'dealer_plans'.")
+    } else {
+      await pool.query(
+        `
+          UPDATE dealer_plans
+          SET name = 'Nâng cấp lên Đại lý', price_vnd = 100000, duration_days = 3650, is_active = TRUE
+          WHERE code = 'dealer_membership'
+        `
+      )
+    }
+
+    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code <> 'dealer_membership'")
 
     await pool.query(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -400,6 +559,172 @@ const initDB = async () => {
       `);
       console.log("🍀 Đã chèn dữ liệu mẫu vào bảng 'news'.");
     }
+
+    // Bảng yêu cầu mua giữa đại lý và nông dân
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS purchase_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        buyer_id INT NOT NULL,
+        farmer_id INT NOT NULL,
+        product_id INT NOT NULL,
+        quantity DECIMAL(12,2) NOT NULL,
+        proposed_price DECIMAL(12,2) NOT NULL,
+        note TEXT,
+        status ENUM('pending','responded','closed') DEFAULT 'pending',
+        dealer_fee_status ENUM('unpaid','recorded') NOT NULL DEFAULT 'unpaid',
+        dealer_fee_amount INT NOT NULL DEFAULT 30000,
+        dealer_action_at DATETIME DEFAULT NULL,
+        dealer_report_status ENUM('none','reported') NOT NULL DEFAULT 'none',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+        INDEX idx_purchase_buyer (buyer_id, status),
+        INDEX idx_purchase_farmer (farmer_id, status)
+      )
+    `)
+    console.log("✅ Bảng 'purchase_requests' đã sẵn sàng.")
+
+    const ensurePurchaseRequestColumn = async (columnName, definitionSql) => {
+      const [columnRows] = await pool.query(
+        `
+          SELECT 1
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = ?
+            AND TABLE_NAME = 'purchase_requests'
+            AND COLUMN_NAME = ?
+          LIMIT 1
+        `,
+        [DB_NAME, columnName]
+      )
+
+      if (columnRows.length === 0) {
+        try {
+          await pool.query(`ALTER TABLE purchase_requests ADD COLUMN ${definitionSql}`)
+        } catch (error) {
+          if (error.code !== "ER_DUP_FIELDNAME") {
+            throw error
+          }
+        }
+      }
+    }
+
+    await ensurePurchaseRequestColumn("dealer_fee_status", "dealer_fee_status ENUM('unpaid','recorded') NOT NULL DEFAULT 'unpaid'")
+    await ensurePurchaseRequestColumn("dealer_fee_amount", "dealer_fee_amount INT NOT NULL DEFAULT 30000")
+    await ensurePurchaseRequestColumn("dealer_action_at", "dealer_action_at DATETIME DEFAULT NULL")
+    await ensurePurchaseRequestColumn("dealer_report_status", "dealer_report_status ENUM('none','reported') NOT NULL DEFAULT 'none'")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS purchase_request_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL,
+        sender_id INT NOT NULL,
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_request_messages (request_id, created_at)
+      )
+    `)
+    console.log("✅ Bảng 'purchase_request_messages' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dealer_fee_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL UNIQUE,
+        dealer_id INT NOT NULL,
+        amount INT NOT NULL DEFAULT 30000,
+        status ENUM('recorded','refunded') NOT NULL DEFAULT 'recorded',
+        note VARCHAR(255) DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (dealer_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_dealer_fee_dealer (dealer_id, status)
+      )
+    `)
+    console.log("✅ Bảng 'dealer_fee_transactions' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dealer_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL,
+        reporter_id INT NOT NULL,
+        reported_user_id INT NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        note TEXT,
+        status ENUM('pending','resolved','rejected') NOT NULL DEFAULT 'pending',
+        admin_note TEXT,
+        reviewed_by INT DEFAULT NULL,
+        reviewed_at DATETIME DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (reported_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+        INDEX idx_dealer_report_status (status, created_at)
+      )
+    `)
+    console.log("✅ Bảng 'dealer_reports' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbot_sources (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        source_key VARCHAR(120) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        source_type ENUM('website','database','file','api') NOT NULL DEFAULT 'database',
+        source_url VARCHAR(1000) DEFAULT NULL,
+        role_scope ENUM('shared','user','dealer') NOT NULL DEFAULT 'shared',
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        crawl_config JSON NULL,
+        last_crawled_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `)
+    console.log("✅ Bảng 'chatbot_sources' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbot_documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        source_id INT NOT NULL,
+        external_id VARCHAR(255) NOT NULL,
+        title VARCHAR(1000) NOT NULL,
+        source_url VARCHAR(1000) DEFAULT NULL,
+        role_scope ENUM('shared','user','dealer') NOT NULL DEFAULT 'shared',
+        content_hash CHAR(64) NOT NULL,
+        content LONGTEXT NOT NULL,
+        metadata_json LONGTEXT NULL,
+        published_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_chatbot_document (source_id, external_id),
+        INDEX idx_chatbot_document_role (role_scope),
+        INDEX idx_chatbot_document_source (source_id),
+        FOREIGN KEY (source_id) REFERENCES chatbot_sources(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'chatbot_documents' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbot_chunks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        document_id INT NOT NULL,
+        chunk_index INT NOT NULL,
+        role_scope ENUM('shared','user','dealer') NOT NULL DEFAULT 'shared',
+        content LONGTEXT NOT NULL,
+        embedding_json LONGTEXT NULL,
+        token_count INT NOT NULL DEFAULT 0,
+        metadata_json LONGTEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_chatbot_chunk (document_id, chunk_index),
+        INDEX idx_chatbot_chunk_role (role_scope),
+        INDEX idx_chatbot_chunk_document (document_id),
+        FOREIGN KEY (document_id) REFERENCES chatbot_documents(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'chatbot_chunks' đã sẵn sàng.")
 
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool

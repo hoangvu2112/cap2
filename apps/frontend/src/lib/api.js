@@ -24,15 +24,22 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const message = error.response?.data?.error || "";
+    const messageLower = String(message).toLowerCase();
 
     console.error("❌ API response error:", status, message);
 
-    // Kiểm tra token hết hạn / không hợp lệ
-    const isTokenError =
-      status === 401 ||
-      status === 403 ||
-      message.toLowerCase().includes("token") ||
-      message.toLowerCase().includes("jwt");
+    // Chỉ logout nếu xác định là lỗi xác thực/token, không phải lỗi phân quyền nghiệp vụ.
+    const is401 = status === 401;
+    const isAuth403 =
+      status === 403 &&
+      (messageLower.includes("token") ||
+        messageLower.includes("jwt") ||
+        messageLower.includes("unauthorized") ||
+        messageLower.includes("authentication") ||
+        messageLower.includes("không hợp lệ") ||
+        messageLower.includes("chưa đăng nhập"));
+
+    const isTokenError = is401 || isAuth403;
 
     if (isTokenError) {
       console.warn("⚠️ Token hết hạn hoặc không hợp lệ — tiến hành đăng xuất...");

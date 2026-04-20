@@ -23,8 +23,11 @@ import costRoutes from "./routes/costs.js";
 import chatbotRoutes from "./routes/chatbot.js";
 import statsRoutes from "./routes/stats.js";
 import chatRouter from "./routes/chat.js";
+import purchaseRequestRoutes from "./routes/purchaseRequests.js";
+import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
 import pool from "./db.js";
 import { syncProducts } from "./cron/syncProducts.js";
+import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -55,6 +58,8 @@ app.use("/api/costs", costRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/stats", statsRoutes); 
 app.use("/api/chat", chatRouter);
+app.use("/api/purchase-requests", purchaseRequestRoutes);
+app.use("/api/dealer-upgrade", dealerUpgradeRoutes);
 
 io.use((socket, next) => {
   try {
@@ -271,6 +276,9 @@ async function checkAndScrapeIfNeeded() {
     console.log("✅ Đồng bộ DB...");
     await syncProducts(io);
 
+    console.log("🧠 Đồng bộ tri thức chatbot...");
+    await syncChatbotKnowledge({ reason: "post-scrape", io });
+
   } catch (err) {
     console.error("❌ Lỗi checkAndScrapeIfNeeded:", err);
   } finally {
@@ -298,6 +306,11 @@ setTimeout(() => {
     await checkAndScrapeIfNeeded();
   });
   console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 5 phút).");
+
+  cron.schedule("17 */6 * * *", async () => {
+    await syncChatbotKnowledge({ reason: "scheduled", io });
+  });
+  console.log("⏱️ Cron đồng bộ chatbot đã bật (chạy mỗi 6 giờ).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;

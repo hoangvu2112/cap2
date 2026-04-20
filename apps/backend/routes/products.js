@@ -22,7 +22,19 @@ const calculateSMA = (data, window, key = "price") => {
 
 router.get("/", async (req, res) => {
   try {
-    const { search, category, region, ids, page = 1, limit = 12 } = req.query
+    const {
+      search,
+      category,
+      region,
+      harvestMonth,
+      harvestFrom,
+      harvestTo,
+      minPrice,
+      maxPrice,
+      ids,
+      page = 1,
+      limit = 12,
+    } = req.query
     let baseQuery = `
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
@@ -46,6 +58,26 @@ router.get("/", async (req, res) => {
       baseQuery += " AND p.region = ?"
       params.push(region)
     }
+    if (harvestMonth) {
+      baseQuery += " AND MONTH(p.harvest_start) <= ? AND MONTH(p.harvest_end) >= ?"
+      params.push(Number(harvestMonth), Number(harvestMonth))
+    }
+    if (harvestFrom) {
+      baseQuery += " AND p.harvest_end >= ?"
+      params.push(harvestFrom)
+    }
+    if (harvestTo) {
+      baseQuery += " AND p.harvest_start <= ?"
+      params.push(harvestTo)
+    }
+    if (minPrice) {
+      baseQuery += " AND p.currentPrice >= ?"
+      params.push(Number(minPrice))
+    }
+    if (maxPrice) {
+      baseQuery += " AND p.currentPrice <= ?"
+      params.push(Number(maxPrice))
+    }
     const [countRows] = await pool.query(
       `SELECT COUNT(*) AS count ${baseQuery}`,
       params
@@ -67,6 +99,7 @@ router.get("/", async (req, res) => {
       category: p.category_name,
       currentPrice: Number(p.currentPrice),
       previousPrice: Number(p.previousPrice),
+      quantity_available: Number(p.quantity_available || 0),
     }))
     res.json({ page: Number(page), totalPages, data: products })
   } catch (error) {
@@ -84,9 +117,13 @@ router.get("/all", async (req, res) => {
     const [rows] = await pool.query(`
       SELECT 
         p.*, 
-        c.name AS category_name
+        c.name AS category_name,
+        u.id AS farmer_id,
+        u.name AS farmer_name,
+        u.avatar_url AS farmer_avatar
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN users u ON u.id = p.farmer_user_id
       ORDER BY p.id DESC
     `)
     const products = rows.map(p => ({
@@ -94,6 +131,7 @@ router.get("/all", async (req, res) => {
       category: p.category_name,
       currentPrice: Number(p.currentPrice),
       previousPrice: Number(p.previousPrice),
+      quantity_available: Number(p.quantity_available || 0),
     }))
     res.json(products)
   } catch (error) {
@@ -299,9 +337,13 @@ router.get("/:id", async (req, res) => {
       SELECT 
         p.*, 
         c.name AS category_name,
+        u.id AS farmer_id,
+        u.name AS farmer_name,
+        u.avatar_url AS farmer_avatar,
         ad.analysis_json AS analysis_data
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN users u ON u.id = p.farmer_user_id
       LEFT JOIN analysis_data ad ON p.id = ad.product_id
       WHERE p.id = ?
       `,
@@ -370,6 +412,7 @@ router.get("/:id", async (req, res) => {
       category: products[0].category_name,
       currentPrice: Number(products[0].currentPrice),
       previousPrice: Number(products[0].previousPrice),
+      quantity_available: Number(products[0].quantity_available || 0),
       analysis_data: products[0].analysis_data ? (typeof products[0].analysis_data === 'string' ? JSON.parse(products[0].analysis_data) : products[0].analysis_data) : null,
       analysis_at: products[0].analysis_at
     }
@@ -439,7 +482,17 @@ router.get("/:id/analysis", async (req, res) => {
 
 router.post("/", authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { name, category, currentPrice, unit, region } = req.body
+    const {
+      name,
+      category,
+      currentPrice,
+      unit,
+      region,
+      quantity_available,
+      harvest_start,
+      harvest_end,
+      farmer_user_id,
+    } = req.body
     if (!name || !category || !currentPrice || !unit || !region) {
       return res.status(400).json({ error: "Thiếu thông tin sản phẩm" })
     }
@@ -449,9 +502,23 @@ router.post("/", authenticateToken, isAdmin, async (req, res) => {
     }
     const category_id = catRows[0].id
     const [result] = await pool.query(
-      `INSERT INTO products (name, category_id, currentPrice, previousPrice, unit, region, lastUpdate, trend)
-       VALUES (?, ?, ?, ?, ?, ?, NOW(), 'stable')`,
-      [name, category_id, currentPrice, currentPrice, unit, region]
+      `INSERT INTO products (
+        name, category_id, currentPrice, previousPrice, unit, region,
+        quantity_available, harvest_start, harvest_end, farmer_user_id, lastUpdate, trend
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'stable')`,
+      [
+        name,
+        category_id,
+        currentPrice,
+        currentPrice,
+        unit,
+        region,
+        Number(quantity_available || 0),
+        harvest_start || null,
+        harvest_end || null,
+        farmer_user_id || null,
+      ]
     )
     const [newProduct] = await pool.query(
       `
@@ -482,7 +549,17 @@ router.post("/", authenticateToken, isAdmin, async (req, res) => {
 
 router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { name, category, currentPrice, unit, region } = req.body
+    const {
+      name,
+      category,
+      currentPrice,
+      unit,
+      region,
+      quantity_available,
+      harvest_start,
+      harvest_end,
+      farmer_user_id,
+    } = req.body
     if (!name || !category || !currentPrice || !unit || !region) {
       return res.status(400).json({ error: "Thiếu thông tin sản phẩm" })
     }
@@ -499,9 +576,22 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
     const category_id = catRows[0].id
     await pool.query(
       `UPDATE products
-       SET name=?, category_id=?, currentPrice=?, previousPrice=?, unit=?, region=?, trend=?, lastUpdate=NOW()
+       SET name=?, category_id=?, currentPrice=?, previousPrice=?, unit=?, region=?, quantity_available=?, harvest_start=?, harvest_end=?, farmer_user_id=?, trend=?, lastUpdate=NOW()
        WHERE id=?`,
-      [name, category_id, currentPrice, old.currentPrice, unit, region, trend, req.params.id]
+      [
+        name,
+        category_id,
+        currentPrice,
+        old.currentPrice,
+        unit,
+        region,
+        Number(quantity_available || 0),
+        harvest_start || null,
+        harvest_end || null,
+        farmer_user_id || null,
+        trend,
+        req.params.id,
+      ]
     )
     await pool.query("INSERT INTO price_history (product_id, price) VALUES (?, ?)", [
       req.params.id,
