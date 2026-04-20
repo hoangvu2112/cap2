@@ -160,6 +160,226 @@ function CostManager() {
   )
 }
 
+function DealerUpgradeCard({ user, onRoleUpdated }) {
+  const [plans, setPlans] = useState([])
+  const [requests, setRequests] = useState([])
+  const [selectedPlanId, setSelectedPlanId] = useState("")
+  const [note, setNote] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [payingRequestId, setPayingRequestId] = useState(null)
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError("")
+
+      const [plansRes, requestsRes] = await Promise.all([
+        api.get("/dealer-upgrade/plans"),
+        api.get("/dealer-upgrade/me"),
+      ])
+
+      const loadedPlans = plansRes.data?.plans || []
+      const loadedRequests = requestsRes.data?.requests || []
+
+      setPlans(loadedPlans)
+      setRequests(loadedRequests)
+      if (!selectedPlanId && loadedPlans.length > 0) {
+        setSelectedPlanId(String(loadedPlans[0].id))
+      }
+    } catch (err) {
+      console.error("Không thể tải dữ liệu nâng cấp đại lý", err)
+      setError(err.response?.data?.error || "Không thể tải dữ liệu nâng cấp đại lý")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user?.role === "user") {
+      loadData()
+    }
+  }, [user?.role])
+
+  const openRequest = requests.find((r) => ["pending_payment", "pending_review"].includes(r.status))
+
+  const submitUpgradeRequest = async (e) => {
+    e.preventDefault()
+    try {
+      setSubmitting(true)
+      setMessage("")
+      setError("")
+
+      const res = await api.post("/dealer-upgrade/apply", {
+        plan_id: Number(selectedPlanId),
+        note,
+      })
+
+      setMessage("Đã tạo yêu cầu nâng cấp đại lý")
+      setRequests((prev) => [res.data.request, ...prev])
+      setNote("")
+    } catch (err) {
+      setError(err.response?.data?.error || "Không thể tạo yêu cầu nâng cấp")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const markPaid = async (requestId) => {
+    try {
+      setPayingRequestId(requestId)
+      setMessage("")
+      setError("")
+
+      const res = await api.post(`/dealer-upgrade/${requestId}/mark-paid`)
+      const updated = res.data.request
+
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? updated : r)))
+      setMessage("Đã xác nhận thanh toán, vui lòng chờ admin duyệt")
+    } catch (err) {
+      setError(err.response?.data?.error || "Không thể xác nhận thanh toán")
+    } finally {
+      setPayingRequestId(null)
+    }
+  }
+
+  const refreshMyProfile = async () => {
+    try {
+      const meRes = await api.get("/auth/me")
+      const me = meRes.data
+      onRoleUpdated(me)
+      if (me.role === "dealer") {
+        setMessage("Tài khoản đã được nâng cấp lên Đại lý")
+      }
+    } catch (err) {
+      console.error("Không thể tải lại hồ sơ", err)
+    }
+  }
+
+  if (user?.role === "dealer") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Nâng cấp đại lý</CardTitle>
+          <CardDescription>Bạn đã là đại lý. Không cần gửi thêm yêu cầu nâng cấp.</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  if (user?.role === "admin") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Nâng cấp đại lý</CardTitle>
+          <CardDescription>Tài khoản quản trị không áp dụng nâng cấp đại lý.</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Nâng cấp lên Đại lý</CardTitle>
+        <CardDescription>
+          Mặc định tài khoản mới là Nông dân. Bạn có thể chọn gói, gửi yêu cầu, thanh toán và chờ admin duyệt.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {loading ? <p className="text-sm text-muted-foreground">Đang tải dữ liệu nâng cấp...</p> : null}
+
+        {message ? <p className="text-sm text-green-600">{message}</p> : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {!openRequest ? (
+          <form onSubmit={submitUpgradeRequest} className="space-y-3 rounded-lg border border-border p-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Chọn gói đại lý</label>
+              <select
+                value={selectedPlanId}
+                onChange={(e) => setSelectedPlanId(e.target.value)}
+                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
+                required
+              >
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} - {Number(plan.price_vnd || 0).toLocaleString()} đ / {plan.duration_days} ngày
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Ghi chú (tuỳ chọn)</label>
+              <Input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Ví dụ: Cần nâng cấp để đăng sản phẩm thường xuyên"
+              />
+            </div>
+
+            <Button type="submit" disabled={submitting || !selectedPlanId}>
+              {submitting ? "Đang gửi..." : "Gửi yêu cầu nâng cấp"}
+            </Button>
+          </form>
+        ) : (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-semibold">Bạn đang có yêu cầu đang xử lý</p>
+            <p className="mt-1">
+              Trạng thái: <span className="font-medium">{openRequest.status}</span> | Thanh toán: <span className="font-medium">{openRequest.payment_status}</span>
+            </p>
+            <p className="mt-1">
+              Gói: {openRequest.plan_name} ({Number(openRequest.price_vnd || 0).toLocaleString()} đ)
+            </p>
+
+            {openRequest.status === "pending_payment" ? (
+              <Button
+                className="mt-3"
+                onClick={() => markPaid(openRequest.id)}
+                disabled={payingRequestId === openRequest.id}
+              >
+                {payingRequestId === openRequest.id ? "Đang xác nhận..." : "Tôi đã thanh toán"}
+              </Button>
+            ) : null}
+          </div>
+        )}
+
+        {requests.length > 0 ? (
+          <div className="rounded-lg border border-border p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="font-semibold">Lịch sử yêu cầu</h4>
+              <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+                Làm mới
+              </Button>
+            </div>
+            <div className="space-y-2 text-sm">
+              {requests.slice(0, 5).map((r) => (
+                <div key={r.id} className="rounded-md bg-muted p-2">
+                  <p>
+                    <span className="font-medium">#{r.id}</span> - {r.plan_name}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {r.status} | {r.payment_status} | {new Date(r.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <Button variant="ghost" size="sm" onClick={refreshMyProfile}>
+          Kiểm tra trạng thái tài khoản
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function Profile() {
   const { user, setUser } = useAuth()
   const [name, setName] = useState(user?.name || "")
@@ -219,7 +439,11 @@ export default function Profile() {
                 {user?.email}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {user?.role === "admin" ? "Quản trị viên" : "Người dùng"}
+                {user?.role === "admin"
+                  ? "Quản trị viên"
+                  : user?.role === "dealer"
+                  ? "Đại lý"
+                  : "Nông dân"}
               </p>
             </div>
           </div>
@@ -253,6 +477,16 @@ export default function Profile() {
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Đang lưu..." : "Lưu thay đổi"}
           </Button>
+        </div>
+
+        <div className="mt-8">
+          <DealerUpgradeCard
+            user={user}
+            onRoleUpdated={(me) => {
+              setUser(me)
+              localStorage.setItem("user", JSON.stringify(me))
+            }}
+          />
         </div>
 
         <div className="mt-8">

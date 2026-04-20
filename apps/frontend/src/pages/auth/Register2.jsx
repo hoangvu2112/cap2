@@ -88,6 +88,10 @@ export default function Register2() {
           />
         </div>
 
+        <div className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-xs text-[hsl(148,60%,85%)]">
+          Tài khoản mới sẽ bắt đầu ở vai trò <span className="font-semibold">Nông dân</span>. Bạn có thể nâng cấp lên <span className="font-semibold">Đại lý</span> sau khi đăng nhập.
+        </div>
+
         {/* Nút đăng ký — màu vàng mật ong */}
         <button
           type="submit"

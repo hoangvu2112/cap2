@@ -147,7 +147,6 @@ export default function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const isDealer = user?.role === "dealer"
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -212,7 +211,6 @@ export default function ProductDetail() {
   }, [id, range])
 
   useEffect(() => {
-    if (!isDealer) return
     const fetchFarmers = async () => {
       if (!product?.id) return
       try {
@@ -228,7 +226,7 @@ export default function ProductDetail() {
       }
     }
     fetchFarmers()
-  }, [product?.id, isDealer])
+  }, [product?.id])
 
 
   const handleSaveAlert = async () => {
@@ -513,7 +511,6 @@ export default function ProductDetail() {
                     </div>
                   </div>
 
-                  {isDealer && (
                   <div className="rounded-2xl border border-gray-100 p-4 bg-white space-y-3">
                     <h3 className="font-bold text-gray-900">Nông dân cung ứng</h3>
                     <p className="text-xs text-muted-foreground">Thông tin liên hệ được giữ trong hệ thống, hãy nhắn trực tiếp để trao đổi.</p>
@@ -542,7 +539,6 @@ export default function ProductDetail() {
                       </>
                     )}
                   </div>
-                  )}
 
                   {/* AI INSIGHT SECTION (Bây giờ có loading state) */}
                   <AnalysisCard 
@@ -551,7 +547,6 @@ export default function ProductDetail() {
                     product={product} 
                   />
 
-                  {isDealer && (
                   <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
                     <div>
                       <span className="text-sm font-bold text-gray-900">Gửi yêu cầu mua</span>
@@ -588,7 +583,6 @@ export default function ProductDetail() {
                       {requestSaving ? "Đang gửi..." : "Gửi yêu cầu mua"}
                     </Button>
                   </div>
-                  )}
 
                   {/* Footer Info */}
                   <div className="flex items-center justify-between pt-6 border-t border-gray-100 mt-2">

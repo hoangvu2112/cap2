@@ -143,6 +143,9 @@ export default function AdminDashboard() {
              <Button onClick={() => navigate('/admin/products')} className="bg-green-600 hover:bg-green-700">
                 <PlusCircle className="w-4 h-4 mr-2" /> Thêm sản phẩm
              </Button>
+             <Button onClick={() => navigate('/admin/settings')} variant="outline">
+               Duyệt đại lý
+             </Button>
           </div>
         </div>
 

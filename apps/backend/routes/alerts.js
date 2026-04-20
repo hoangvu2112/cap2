@@ -1,11 +1,11 @@
 import express from "express"
 import pool from "../db.js"
-import { authenticateToken } from "../middleware/auth.js"
+import { authenticateToken, requireRole } from "../middleware/auth.js"
 
 const router = express.Router()
 
 // Tạo cảnh báo mới
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const { product_id, threshold_price, condition } = req.body
     const [user] = await pool.query("SELECT email FROM users WHERE id = ?", [req.user.id])
@@ -25,7 +25,7 @@ router.post("/", authenticateToken, async (req, res) => {
 })
 
 // Lấy danh sách cảnh báo của người dùng
-router.get("/", authenticateToken, async (req, res) => {
+router.get("/", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -52,7 +52,7 @@ p.trend
 });
 
 // Trạng thái cấu hình SMTP (để frontend hiển thị cảnh báo phù hợp)
-router.get("/config-status", authenticateToken, async (_req, res) => {
+router.get("/config-status", authenticateToken, requireRole("user"), async (_req, res) => {
   try {
     const smtpConfigured = Boolean(process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD)
     res.json({
@@ -69,7 +69,7 @@ router.get("/config-status", authenticateToken, async (_req, res) => {
 
 
 // Xoá cảnh báo
-router.delete("/:id", authenticateToken, async (req, res) => {
+router.delete("/:id", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const [result] = await pool.query(
       "DELETE FROM price_alerts WHERE id = ? AND user_id = ?",

@@ -129,6 +129,13 @@ DB_NAME=agrirend
 PORT=5000
 JWT_SECRET=mysecretkey
 GOOGLE_CLIENT_ID=
+
+# Optional: thêm nguồn website cho chatbot RAG (JSON array, 1 dòng)
+# sourceUrl: URL gốc (backward-compatible)
+# sourceUrls: danh sách URL seed để crawl
+# maxPages: số trang tối đa mỗi nguồn
+# includePathRegex/excludePathRegex: lọc đường dẫn
+CHATBOT_WEBSITE_SOURCES=[{"sourceKey":"agri-news","name":"Tin nong nghiep","sourceUrl":"https://example.com","sourceUrls":["https://example.com/blog","https://example.com/news"],"roleScope":"shared","maxPages":8,"followLinks":true,"includePathRegex":"^/(blog|news)","excludePathRegex":"/(tag|author)/"}]
 ```
 
 - 📁 Frontend

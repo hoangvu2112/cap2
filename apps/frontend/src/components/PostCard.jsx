@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ThumbsUp, MessageCircle, Send } from "lucide-react"
+import { ThumbsUp, MessageCircle } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { vi } from "date-fns/locale"
 import api from "@/lib/api";
@@ -14,7 +14,7 @@ import { motion } from "framer-motion";
 import EditPostModal from "@/components/EditPostModal";
 
 
-export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
+export default function PostCard({ post, onDelete, onUpdate }) {
     const { user } = useAuth();
     const [showComments, setShowComments] = useState(false);
     const [likes, setLikes] = useState(post.likes || 0);
@@ -148,16 +148,6 @@ export default function PostCard({ post, onDelete, onUpdate, onMessageUser }) {
                             {commentsCount}
                         </Button>
 
-                        {post.user_id !== user?.id && onMessageUser && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => onMessageUser(post)}
-                            >
-                                <Send className="h-4 w-4 mr-2" />
-                                Nhắn tin
-                            </Button>
-                        )}
                     </div>
                 </CardContent>
             </Card>
