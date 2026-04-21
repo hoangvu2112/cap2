@@ -37,6 +37,22 @@ const COLORS = [
 export default function Compare() {
   const [allProducts, setAllProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
+
+  const categories = useMemo(() => {
+    const cats = new Set(allProducts.map(p => p.category));
+    return Array.from(cats).filter(Boolean);
+  }, [allProducts]);
+
+  const availableProducts = useMemo(() => {
+    if (!selectedCategory) return [];
+    return allProducts.filter(p => p.category === selectedCategory);
+  }, [allProducts, selectedCategory]);
+
+  const handleCategoryChange = (val) => {
+    setSelectedCategory(val);
+    setSelectedProducts([]); // Reset khi đổi danh mục
+  };
 
   // Dữ liệu biểu đồ
   const [growthData, setGrowthData] = useState([]); // Dữ liệu %
@@ -120,8 +136,8 @@ export default function Compare() {
 
   const handleSelectProduct = (productId) => {
     if (!productId || selectedProducts.length >= 5) return;
-    if (selectedProducts.find(p => p.id === productId)) return;
-    const productToAdd = allProducts.find(p => p.id === productId);
+    if (selectedProducts.find(p => String(p.id) === String(productId))) return;
+    const productToAdd = allProducts.find(p => String(p.id) === String(productId));
     if (productToAdd) setSelectedProducts([...selectedProducts, productToAdd]);
   };
 
@@ -191,38 +207,63 @@ export default function Compare() {
         <Card className="mb-8 border-none shadow-sm bg-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row gap-6">
-              <div className="flex-1">
-                <label className="text-sm font-semibold text-foreground mb-2 block">
-                  Thêm sản phẩm so sánh (Tối đa 5)
-                </label>
-                <Select
-                  onValueChange={handleSelectProduct}
-                  disabled={loadingList || selectedProducts.length >= 5}
-                >
-                  <SelectTrigger className="bg-card border-border h-11 focus:ring-primary">
-                    <SelectValue placeholder={loadingList ? "Đang tải..." : "Chọn nông sản..."} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px] overflow-y-auto">
-                    {allProducts.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        <div className="flex items-center justify-between w-full min-w-[200px]">
-                          <span>{p.name}</span>
-                          <Badge
-                            variant="outline"
-                            className="ml-2 text-xs font-normal text-muted-foreground"
-                          >
-                            {p.region}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex-1 space-y-4">
+                <div>
+                  <label className="text-sm font-semibold text-foreground mb-2 block">
+                    1. Chọn loại sản phẩm
+                  </label>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={handleCategoryChange}
+                    disabled={loadingList}
+                  >
+                    <SelectTrigger className="bg-card border-border h-11 focus:ring-primary">
+                      <SelectValue placeholder={loadingList ? "Đang tải..." : "Chọn danh mục..."} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px] overflow-y-auto">
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-foreground mb-2 block">
+                    2. Thêm mặt hàng so sánh (Tối đa 5)
+                  </label>
+                  <Select
+                    value=""
+                    onValueChange={handleSelectProduct}
+                    disabled={!selectedCategory || loadingList || selectedProducts.length >= 5}
+                  >
+                    <SelectTrigger className="bg-card border-border h-11 focus:ring-primary">
+                      <SelectValue placeholder={!selectedCategory ? "Vui lòng chọn loại trước" : "Chọn nông sản..."} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px] overflow-y-auto">
+                      {availableProducts.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          <div className="flex items-center justify-between w-full min-w-[200px]">
+                            <span>{p.name}</span>
+                            <Badge
+                              variant="outline"
+                              className="ml-2 text-xs font-normal text-muted-foreground"
+                            >
+                              {p.region}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="flex-[2]">
                 <label className="text-sm font-semibold text-foreground mb-2 block">
-                  Đang chọn:
+                  Đang chọn ({selectedCategory || "Chưa chọn loại"}):
                 </label>
                 <div className="flex flex-wrap gap-3 min-h-[44px] items-center p-2 bg-muted/50 rounded-lg border border-dashed border-border">
                   {selectedProducts.length === 0 ? (

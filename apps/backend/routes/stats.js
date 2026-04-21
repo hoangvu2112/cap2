@@ -7,11 +7,34 @@ const router = express.Router()
 
 router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { range = "7d" } = req.query
-    let interval = 7
-    if (range === "30d") interval = 30
-    if (range === "90d") interval = 90
-    if (range === "1y") interval = 365
+    const rangeType = req.query.range || "7d"
+    let startDate = new Date()
+    startDate.setHours(0,0,0,0)
+    let endDate = new Date()
+    endDate.setHours(23,59,59,999)
+
+    if (rangeType === "7d") {
+      startDate.setDate(startDate.getDate() - 6)
+    } else if (rangeType === "month" || rangeType === "30d") {
+      startDate.setDate(1)
+    } else if (rangeType === "quarter" || rangeType === "90d") {
+      const currentMonth = startDate.getMonth()
+      const quarterStartMonth = Math.floor(currentMonth / 3) * 3
+      startDate.setMonth(quarterStartMonth, 1)
+    } else if (rangeType === "year" || rangeType === "1y") {
+      startDate.setMonth(0, 1)
+    } else if (rangeType === "last_month") {
+      startDate.setMonth(startDate.getMonth() - 1, 1)
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0, 23, 59, 59, 999)
+    } else if (rangeType === "last_quarter") {
+      const currentMonth = startDate.getMonth()
+      const quarterStartMonth = Math.floor(currentMonth / 3) * 3
+      startDate.setMonth(quarterStartMonth - 3, 1)
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 3, 0, 23, 59, 59, 999)
+    } else if (rangeType === "last_year") {
+      startDate.setFullYear(startDate.getFullYear() - 1, 0, 1)
+      endDate = new Date(startDate.getFullYear(), 11, 31, 23, 59, 59, 999)
+    }
 
     
     const [topGainers] = await pool.query(`
@@ -54,9 +77,23 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
     `)
 
    // 5. Biến động giá (Price Volatility Data)
-    const [keyProducts] = await pool.query(`
-        SELECT id, name FROM products ORDER BY lastUpdate DESC LIMIT 3
-    `)
+    const categoryFilter = req.query.category || "";
+    let keyProductsQuery = "";
+    let keyProductsParams = [];
+    
+    if (categoryFilter && categoryFilter !== "all") {
+        keyProductsQuery = `
+          SELECT p.id, p.name 
+          FROM products p
+          JOIN categories c ON p.category_id = c.id
+          WHERE c.name = ?
+        `;
+        keyProductsParams.push(categoryFilter);
+    } else {
+        keyProductsQuery = `SELECT id, name FROM products ORDER BY lastUpdate DESC LIMIT 3`;
+    }
+
+    const [keyProducts] = await pool.query(keyProductsQuery, keyProductsParams);
     
     let chartData = []
     if (keyProducts.length > 0) {
@@ -65,22 +102,54 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
         const [history] = await pool.query(`
             SELECT 
                 p.name, 
-                DATE_FORMAT(ph.updated_at, '%d/%m') as dateStr,
+                DATE(ph.updated_at) as raw_date,
                 MAX(ph.price) as price
             FROM price_history ph
             JOIN products p ON ph.product_id = p.id
             WHERE ph.product_id IN (?) 
-            AND ph.updated_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-            GROUP BY p.name, DATE(ph.updated_at), dateStr
+            AND ph.updated_at >= ? AND ph.updated_at <= ?
+            GROUP BY p.name, DATE(ph.updated_at)
             ORDER BY DATE(ph.updated_at) ASC  
-        `, [ids, interval])
+        `, [ids, startDate, endDate])
 
         const dataMap = {}
         history.forEach(row => {
-            if (!dataMap[row.dateStr]) dataMap[row.dateStr] = { date: row.dateStr }
-            dataMap[row.dateStr][row.name] = Number(row.price)
+          const date = new Date(row.raw_date)
+          let bucketLabel = ""
+          let sortKey = 0
+
+          if (rangeType === "7d") {
+            const d = String(date.getDate()).padStart(2, '0')
+            const m = String(date.getMonth() + 1).padStart(2, '0')
+            bucketLabel = `${d}/${m}`
+            sortKey = date.getTime()
+          } else if (rangeType === "month" || rangeType === "30d" || rangeType === "last_month") {
+            const d = date.getDate()
+            let group = Math.min(Math.ceil(d / 5), 6)
+            let start = (group - 1) * 5 + 1
+            let end = group === 6 ? new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate() : group * 5
+            bucketLabel = `${start}-${end}/${date.getMonth()+1}`
+            sortKey = group
+          } else if (rangeType === "quarter" || rangeType === "90d" || rangeType === "last_quarter") {
+            const weekIdx = Math.min(Math.floor((date.getDate() - 1) / 7) + 1, 4)
+            bucketLabel = `Tuần ${weekIdx} T${date.getMonth() + 1}`
+            sortKey = date.getMonth() * 10 + weekIdx
+          } else if (rangeType === "year" || rangeType === "1y" || rangeType === "last_year") {
+            const m = String(date.getMonth() + 1).padStart(2, '0')
+            bucketLabel = `Tháng ${m}`
+            sortKey = date.getMonth()
+          }
+
+          if (!dataMap[bucketLabel]) {
+            dataMap[bucketLabel] = { date: bucketLabel, sortKey }
+          }
+          if (!dataMap[bucketLabel][row.name] || Number(row.price) > dataMap[bucketLabel][row.name]) {
+            dataMap[bucketLabel][row.name] = Number(row.price)
+          }
         })
-        chartData = Object.values(dataMap)
+        chartData = Object.values(dataMap).sort((a,b) => a.sortKey - b.sortKey)
+        // clean up sortKey
+        chartData.forEach(item => delete item.sortKey)
     }
 
     res.json({

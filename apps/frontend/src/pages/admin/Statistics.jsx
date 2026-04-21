@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowDownRight, TrendingUp, MapPin, PieChart as PieIcon } from "lucide-react"
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -20,6 +20,7 @@ const chartConfig = {
 
 export default function AdminStatistics() {
   const [timeRange, setTimeRange] = useState("7d")
+  const [selectedCategory, setSelectedCategory] = useState("all")
   const [loading, setLoading] = useState(true)
   
   const [data, setData] = useState({
@@ -34,7 +35,7 @@ export default function AdminStatistics() {
     const fetchStats = async () => {
       setLoading(true)
       try {
-        const res = await api.get(`/stats/advanced?range=${timeRange}`)
+        const res = await api.get(`/stats/advanced?range=${timeRange}&category=${selectedCategory}`)
         setData({
           priceVolatilityData: res.data.priceVolatilityData || [],
           regionData: res.data.regionData || [],
@@ -49,7 +50,7 @@ export default function AdminStatistics() {
       }
     }
     fetchStats()
-  }, [timeRange])
+  }, [timeRange, selectedCategory])
 
   const productKeys = data.priceVolatilityData.length > 0 
     ? Object.keys(data.priceVolatilityData[0]).filter(k => k !== 'date' && k !== 'dateStr') 
@@ -68,16 +69,35 @@ export default function AdminStatistics() {
             <p className="text-gray-500 mt-1">Số liệu chi tiết về thị trường và hệ thống.</p>
           </div>
           
-          <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
+          <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm flex-wrap md:flex-nowrap">
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-[180px] border-none shadow-none focus:ring-0">
+                    <SelectValue placeholder="Chọn danh mục" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Tất cả danh mục (Mặc định)</SelectItem>
+                    {data.categoryDistribution.map(cat => (
+                        <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            <div className="w-[1px] h-6 bg-gray-200 hidden md:block"></div>
+
             <Select value={timeRange} onValueChange={setTimeRange}>
                 <SelectTrigger className="w-[180px] border-none shadow-none focus:ring-0">
                     <SelectValue placeholder="Chọn khoảng thời gian" />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="7d">7 ngày qua</SelectItem>
-                    <SelectItem value="30d">30 ngày qua</SelectItem>
-                    <SelectItem value="90d">Quý này</SelectItem>
-                    <SelectItem value="1y">Năm nay</SelectItem>
+                    <SelectItem value="month">Tháng này</SelectItem>
+                    <SelectItem value="quarter">Quý này</SelectItem>
+                    <SelectItem value="year">Năm nay</SelectItem>
+                    <div className="-mx-1 my-1 h-px bg-muted" />
+                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">--- Quá khứ ---</div>
+                    <SelectItem value="last_month">Tháng trước</SelectItem>
+                    <SelectItem value="last_quarter">Quý trước</SelectItem>
+                    <SelectItem value="last_year">Năm ngoái</SelectItem>
                 </SelectContent>
             </Select>
           </div>
@@ -105,37 +125,51 @@ export default function AdminStatistics() {
                         ) : data.priceVolatilityData.length > 0 ? (
                             /* Thêm aspect-auto để ghi đè class mặc định, giúp chart ăn theo chiều cao 350px */
                             <ChartContainer config={chartConfig} className="aspect-auto h-full w-full">
-                                <AreaChart data={data.priceVolatilityData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        {productKeys.map((key, index) => (
-                                            <linearGradient key={key} id={`color-${index}`} x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor={COLORS[index % COLORS.length]} stopOpacity={0.8}/>
-                                                <stop offset="95%" stopColor={COLORS[index % COLORS.length]} stopOpacity={0}/>
-                                            </linearGradient>
-                                        ))}
-                                    </defs>
+                                <LineChart data={data.priceVolatilityData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                     <XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} tickMargin={10} />
-                                    <YAxis axisLine={false} tickLine={false} fontSize={12} width={40} />
+                                    <YAxis axisLine={false} tickLine={false} fontSize={12} width={55} domain={['auto', 'auto']} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <ChartTooltip content={<ChartTooltipContent />} />
                                     {productKeys.map((key, index) => (
-                                        <Area 
+                                        <Line 
                                             key={key}
                                             type="monotone" 
                                             dataKey={key} 
                                             stroke={COLORS[index % COLORS.length]} 
-                                            fillOpacity={1} 
-                                            fill={`url(#color-${index})`} 
+                                            strokeWidth={2}
+                                            dot={false}
+                                            activeDot={{ r: 6 }}
                                             name={key}
                                         />
                                     ))}
                                     <Legend />
-                                </AreaChart>
+                                </LineChart>
                             </ChartContainer>
                         ) : (
                             <div className="h-full flex items-center justify-center text-gray-400">Chưa có dữ liệu biến động giá</div>
                         )}
                     </div>
+
+                    {selectedCategory !== "all" && data.priceVolatilityData.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex flex-col justify-center items-center text-center">
+                                <span className="text-xs md:text-sm font-bold text-emerald-800 uppercase tracking-wide">Nhóm xem</span>
+                                <span className="text-lg md:text-xl font-black text-emerald-600 mt-1 line-clamp-1">{selectedCategory}</span>
+                            </div>
+                            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex flex-col justify-center items-center text-center">
+                               <span className="text-xs md:text-sm font-bold text-blue-800 uppercase tracking-wide">Sản phẩm so sánh</span>
+                               <span className="text-lg md:text-xl font-black text-blue-600 mt-1">{productKeys.length}</span>
+                            </div>
+                            <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex flex-col justify-center items-center md:col-span-2 text-center">
+                               <span className="text-xs md:text-sm font-bold text-purple-800 uppercase tracking-wide">Mặt bằng Chung (Mốc gần nhất)</span>
+                               <span className="text-xl md:text-2xl font-black text-purple-600 mt-1">
+                                    {Math.round(
+                                        productKeys.reduce((acc, k) => acc + (data.priceVolatilityData[data.priceVolatilityData.length - 1][k] || 0), 0) / (productKeys.length || 1)
+                                    ).toLocaleString("vi-VN")} đ
+                               </span>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

@@ -99,7 +99,7 @@ export default function CommentModal({ post, onClose, onCommentCountChange }) {
         const res = await api.get(`/community/posts/${post.id}/like-status`);
         setIsLiked(res.data.liked);
         setLikesCount(res.data.likes); // FIX
-      } catch {}
+      } catch { }
     };
     fetchLikeStatus();
     console.log("📡 Subscribing to comment_added for post:", post.id);
@@ -337,9 +337,8 @@ export default function CommentModal({ post, onClose, onCommentCountChange }) {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleToggleLike}
-                  className={`flex items-center gap-2 px-3 py-1 rounded hover:bg-white/5 ${
-                    isLiked ? "text-blue-400" : ""
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-1 rounded hover:bg-white/5 ${isLiked ? "text-blue-400" : ""
+                    }`}
                 >
                   <ThumbsUp className="h-4 w-4" />
                   {isLiked ? "Đã thích" : "Thích"}
@@ -446,27 +445,27 @@ export default function CommentModal({ post, onClose, onCommentCountChange }) {
 
                           {(c.user_id === user?.id ||
                             user?.role === "admin") && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className="mt-1 rounded-full p-1.5 text-gray-400 hover:bg-white/10 hover:text-white">
-                                  <MoreVertical className="h-4 w-4" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-36">
-                                <DropdownMenuItem
-                                  onClick={() => handleStartEdit(c)}
-                                >
-                                  Chỉnh sửa
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => handleDeleteComment(c.id)}
-                                >
-                                  Xoá
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="mt-1 rounded-full p-1.5 text-gray-400 hover:bg-white/10 hover:text-white">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-36">
+                                  <DropdownMenuItem
+                                    onClick={() => handleStartEdit(c)}
+                                  >
+                                    Chỉnh sửa
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => handleDeleteComment(c.id)}
+                                  >
+                                    Xoá
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                         </div>
 
                         <div className="mt-1 flex items-center gap-4 px-3 text-xs font-semibold text-gray-400">

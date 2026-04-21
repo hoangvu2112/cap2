@@ -25,6 +25,7 @@ import {
   TrendingDown,
   Minus,
   Shield,
+  ShieldCheck,
 } from "lucide-react"
 
 const USER_NAV = [
@@ -51,6 +52,7 @@ const ADMIN_NAV = [
   { path: "/admin/users", icon: Users, label: "Người dùng" },
   { path: "/admin/news", icon: Newspaper, label: "Tin tức" },
   { path: "/admin/statistics", icon: BarChart3, label: "Thống kê" },
+  { path: "/admin/dealers", icon: ShieldCheck, label: "Đại lý" },
   { path: "/admin/settings", icon: Settings, label: "Cài đặt" },
 ]
 

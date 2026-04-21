@@ -275,7 +275,7 @@ router.patch("/admin/requests/:id/review", authenticateToken, isAdmin, async (re
             updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [adminNote || null, req.user.id, Number(requestRow.duration_days || 30), requestId]
+        [adminNote || null, req.user.id, Number(requestRow.duration_days || 60), requestId]
       )
 
       await pool.query("UPDATE users SET role = 'dealer' WHERE id = ?", [requestRow.user_id])

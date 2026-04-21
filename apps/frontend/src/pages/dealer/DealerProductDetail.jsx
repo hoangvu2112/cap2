@@ -62,18 +62,18 @@ function AnalysisCard({ analysis, loading, product }) {
     return (
       <div className="space-y-3 animate-pulse">
         <div className="rounded-xl border border-gray-100 bg-gray-50 h-32 flex flex-col p-4">
-           <div className="flex gap-2 mb-3">
-              <div className="w-8 h-8 rounded-full bg-gray-200" />
-              <div className="h-4 w-24 bg-gray-200 rounded mt-2" />
-           </div>
-           <div className="space-y-2">
-              <div className="h-3 w-full bg-gray-200 rounded" />
-              <div className="h-3 w-2/3 bg-gray-200 rounded" />
-           </div>
+          <div className="flex gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-gray-200" />
+            <div className="h-4 w-24 bg-gray-200 rounded mt-2" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-full bg-gray-200 rounded" />
+            <div className="h-3 w-2/3 bg-gray-200 rounded" />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-           <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
-           <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
+          <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
+          <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
         </div>
       </div>
     )
@@ -183,6 +183,7 @@ export default function ProductDetail() {
           date: new Date(item.date).toLocaleDateString("vi-VN", {
             day: "2-digit",
             month: "2-digit",
+            year: "numeric"
           }),
           price: parseFloat(item.price),
           forecast: item.forecast ? parseFloat(item.forecast) : null,
@@ -325,16 +326,16 @@ export default function ProductDetail() {
     <ResponsiveContainer width="100%" height={400}>
       <ComposedChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-        <XAxis dataKey="date" tick={{fontSize: 12}} />
+        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
         <YAxis
           domain={["auto", "auto"]}
           tickFormatter={(value) => value.toLocaleString("vi-VN")}
-          tick={{fontSize: 12}}
+          tick={{ fontSize: 12 }}
         />
         <Tooltip
           formatter={(value, name) => [
             `${Number(value).toLocaleString("vi-VN")} đ`,
-            name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
+            name === "Giá" || name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
           ]}
           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
         />
@@ -344,8 +345,8 @@ export default function ProductDetail() {
           dataKey="price"
           name="Giá"
           stroke="#059669"
-          strokeWidth={3}
-          dot={{ r: 4, fill: '#059669' }}
+          strokeWidth={2}
+          dot={false}
           activeDot={{ r: 6 }}
         />
         <Line
@@ -446,7 +447,7 @@ export default function ProductDetail() {
           <div className="lg:col-span-1">
             <Card className="overflow-hidden shadow-xl border-none ring-1 ring-gray-200 rounded-3xl">
               <CardContent className="p-6 space-y-6">
-                
+
                 {/* Section Giá & Xu hướng */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-start">
@@ -487,8 +488,8 @@ export default function ProductDetail() {
 
                     <div className={cn(
                       "flex items-center gap-2 mt-4 text-sm font-bold p-2.5 rounded-xl border-l-[4px]",
-                      percentChange > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-500" : 
-                      percentChange < 0 ? "text-red-700 bg-red-50 border-red-500" : "text-gray-600 bg-gray-50 border-gray-400"
+                      percentChange > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-500" :
+                        percentChange < 0 ? "text-red-700 bg-red-50 border-red-500" : "text-gray-600 bg-gray-50 border-gray-400"
                     )}>
                       {percentChange > 0 ? <TrendingUp className="w-4 h-4" /> : percentChange < 0 ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                       <span>{percentChange > 0 ? "+" : ""}{percentChange}% so với phiên trước</span>
@@ -541,10 +542,10 @@ export default function ProductDetail() {
                   </div>
 
                   {/* AI INSIGHT SECTION (Bây giờ có loading state) */}
-                  <AnalysisCard 
-                    analysis={analysis} 
-                    loading={analysisLoading} 
-                    product={product} 
+                  <AnalysisCard
+                    analysis={analysis}
+                    loading={analysisLoading}
+                    product={product}
                   />
 
                   <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
@@ -603,7 +604,7 @@ export default function ProductDetail() {
             </Card>
 
             <div className="mt-6 space-y-4">
-               <Button
+              <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg h-14 text-base font-black rounded-2xl gap-2 active:scale-95 transition-all"
                 onClick={handleAlertButtonClick}
               >

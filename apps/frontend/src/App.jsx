@@ -36,6 +36,8 @@ import AdminUsers from "./pages/admin/Users"
 import AdminNews from "./pages/admin/News"
 import AdminStatistics from "./pages/admin/Statistics"
 import AdminSettings from "./pages/admin/Settings"
+import AdminDealers from "./pages/admin/Dealers"
+
 
 import ChatBotWidget from "./components/ChatBotWidget"
 
@@ -73,15 +75,15 @@ function AppContent() {
         {/* Protected routes — bọc trong MainLayout2 */}
         <Route path="/" element={<ProtectedRoute><MainLayout2>{isDealer ? <DealerDashboard /> : <Dashboard />}</MainLayout2></ProtectedRoute>} />
         <Route path="/product/:id" element={<ProtectedRoute><MainLayout2>{isDealer ? <DealerProductDetail /> : <ProductDetail />}</MainLayout2></ProtectedRoute>} />
-        <Route path="/favorites" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><Favorites /></MainLayout2></RoleRoute>} />
-        <Route path="/alerts" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><Alerts /></MainLayout2></RoleRoute>} />
-        <Route path="/compare" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><Compare /></MainLayout2></RoleRoute>} />
-        <Route path="/news" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><News /></MainLayout2></RoleRoute>} />
+        <Route path="/favorites" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><Favorites /></MainLayout2></RoleRoute>} />
+        <Route path="/alerts" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><Alerts /></MainLayout2></RoleRoute>} />
+        <Route path="/compare" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><Compare /></MainLayout2></RoleRoute>} />
+        <Route path="/news" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><News /></MainLayout2></RoleRoute>} />
         <Route path="/purchase-requests" element={<RoleRoute allowedRoles={["dealer"]}><MainLayout2><DealerPurchaseRequests /></MainLayout2></RoleRoute>} />
-        <Route path="/negotiation" element={<RoleRoute allowedRoles={["user", "dealer"]}><MainLayout2><Negotiation /></MainLayout2></RoleRoute>} />
+        <Route path="/negotiation" element={<RoleRoute allowedRoles={["user", "dealer", "admin"]}><MainLayout2><Negotiation /></MainLayout2></RoleRoute>} />
         <Route path="/community" element={<ProtectedRoute><MainLayout2>{isDealer ? <DealerCommunity /> : <Community />}</MainLayout2></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><MainLayout2><Profile /></MainLayout2></ProtectedRoute>} />
-        <Route path="/map" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><PriceMap /></MainLayout2></RoleRoute>} />
+        <Route path="/map" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><PriceMap /></MainLayout2></RoleRoute>} />
 
         {/* Admin routes — cũng dùng MainLayout2 */}
         <Route path="/admin" element={<AdminRoute><MainLayout2><AdminDashboard /></MainLayout2></AdminRoute>} />
@@ -89,6 +91,7 @@ function AppContent() {
         <Route path="/admin/users" element={<AdminRoute><MainLayout2><AdminUsers /></MainLayout2></AdminRoute>} />
         <Route path="/admin/news" element={<AdminRoute><MainLayout2><AdminNews /></MainLayout2></AdminRoute>} />
         <Route path="/admin/statistics" element={<AdminRoute><MainLayout2><AdminStatistics /></MainLayout2></AdminRoute>} />
+        <Route path="/admin/dealers" element={<AdminRoute><MainLayout2><AdminDealers /></MainLayout2></AdminRoute>} />
         <Route path="/admin/settings" element={<AdminRoute><MainLayout2><AdminSettings /></MainLayout2></AdminRoute>} />
 
         {/* Fallback */}

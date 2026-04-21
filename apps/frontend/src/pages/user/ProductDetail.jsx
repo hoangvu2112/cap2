@@ -62,18 +62,18 @@ function AnalysisCard({ analysis, loading, product }) {
     return (
       <div className="space-y-3 animate-pulse">
         <div className="rounded-xl border border-gray-100 bg-gray-50 h-32 flex flex-col p-4">
-           <div className="flex gap-2 mb-3">
-              <div className="w-8 h-8 rounded-full bg-gray-200" />
-              <div className="h-4 w-24 bg-gray-200 rounded mt-2" />
-           </div>
-           <div className="space-y-2">
-              <div className="h-3 w-full bg-gray-200 rounded" />
-              <div className="h-3 w-2/3 bg-gray-200 rounded" />
-           </div>
+          <div className="flex gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-gray-200" />
+            <div className="h-4 w-24 bg-gray-200 rounded mt-2" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-full bg-gray-200 rounded" />
+            <div className="h-3 w-2/3 bg-gray-200 rounded" />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-           <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
-           <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
+          <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
+          <div className="h-20 bg-gray-50 rounded-2xl border border-gray-100" />
         </div>
       </div>
     )
@@ -184,6 +184,7 @@ export default function ProductDetail() {
           date: new Date(item.date).toLocaleDateString("vi-VN", {
             day: "2-digit",
             month: "2-digit",
+            year: "numeric"
           }),
           price: parseFloat(item.price),
           forecast: item.forecast ? parseFloat(item.forecast) : null,
@@ -327,16 +328,16 @@ export default function ProductDetail() {
     <ResponsiveContainer width="100%" height={400}>
       <ComposedChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-        <XAxis dataKey="date" tick={{fontSize: 12}} />
+        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
         <YAxis
           domain={["auto", "auto"]}
           tickFormatter={(value) => value.toLocaleString("vi-VN")}
-          tick={{fontSize: 12}}
+          tick={{ fontSize: 12 }}
         />
         <Tooltip
           formatter={(value, name) => [
             `${Number(value).toLocaleString("vi-VN")} đ`,
-            name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
+            name === "Giá" || name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
           ]}
           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
         />
@@ -346,8 +347,8 @@ export default function ProductDetail() {
           dataKey="price"
           name="Giá"
           stroke="#059669"
-          strokeWidth={3}
-          dot={{ r: 4, fill: '#059669' }}
+          strokeWidth={2}
+          dot={false}
           activeDot={{ r: 6 }}
         />
         <Line
@@ -448,7 +449,7 @@ export default function ProductDetail() {
           <div className="lg:col-span-1">
             <Card className="overflow-hidden shadow-xl border-none ring-1 ring-gray-200 rounded-3xl">
               <CardContent className="p-6 space-y-6">
-                
+
                 {/* Section Giá & Xu hướng */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-start">
@@ -489,8 +490,8 @@ export default function ProductDetail() {
 
                     <div className={cn(
                       "flex items-center gap-2 mt-4 text-sm font-bold p-2.5 rounded-xl border-l-[4px]",
-                      percentChange > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-500" : 
-                      percentChange < 0 ? "text-red-700 bg-red-50 border-red-500" : "text-gray-600 bg-gray-50 border-gray-400"
+                      percentChange > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-500" :
+                        percentChange < 0 ? "text-red-700 bg-red-50 border-red-500" : "text-gray-600 bg-gray-50 border-gray-400"
                     )}>
                       {percentChange > 0 ? <TrendingUp className="w-4 h-4" /> : percentChange < 0 ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                       <span>{percentChange > 0 ? "+" : ""}{percentChange}% so với phiên trước</span>
@@ -514,80 +515,80 @@ export default function ProductDetail() {
                   </div>
 
                   {isDealer && (
-                  <div className="rounded-2xl border border-gray-100 p-4 bg-white space-y-3">
-                    <h3 className="font-bold text-gray-900">Nông dân cung ứng</h3>
-                    <p className="text-xs text-muted-foreground">Thông tin liên hệ được giữ trong hệ thống, hãy nhắn trực tiếp để trao đổi.</p>
-                    {farmers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Chưa có danh sách nông dân phù hợp.</p>
-                    ) : (
-                      <>
-                        <select
-                          value={selectedFarmer}
-                          onChange={(e) => setSelectedFarmer(e.target.value)}
-                          className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
-                        >
-                          {farmers.map((farmer) => (
-                            <option key={farmer.id} value={farmer.id}>
-                              {farmer.name} ({farmer.role === "dealer" ? "Đại lý" : "Nông dân"})
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => navigate(`/community?targetUser=${selectedFarmer}`)}
-                        >
-                          <MessageSquare className="w-4 h-4 mr-2" /> Nhắn tin thương lượng
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                    <div className="rounded-2xl border border-gray-100 p-4 bg-white space-y-3">
+                      <h3 className="font-bold text-gray-900">Nông dân cung ứng</h3>
+                      <p className="text-xs text-muted-foreground">Thông tin liên hệ được giữ trong hệ thống, hãy nhắn trực tiếp để trao đổi.</p>
+                      {farmers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Chưa có danh sách nông dân phù hợp.</p>
+                      ) : (
+                        <>
+                          <select
+                            value={selectedFarmer}
+                            onChange={(e) => setSelectedFarmer(e.target.value)}
+                            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                          >
+                            {farmers.map((farmer) => (
+                              <option key={farmer.id} value={farmer.id}>
+                                {farmer.name} ({farmer.role === "dealer" ? "Đại lý" : "Nông dân"})
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => navigate(`/community?targetUser=${selectedFarmer}`)}
+                          >
+                            <MessageSquare className="w-4 h-4 mr-2" /> Nhắn tin thương lượng
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   )}
 
                   {/* AI INSIGHT SECTION (Bây giờ có loading state) */}
-                  <AnalysisCard 
-                    analysis={analysis} 
-                    loading={analysisLoading} 
-                    product={product} 
+                  <AnalysisCard
+                    analysis={analysis}
+                    loading={analysisLoading}
+                    product={product}
                   />
 
                   {isDealer && (
-                  <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
-                    <div>
-                      <span className="text-sm font-bold text-gray-900">Gửi yêu cầu mua</span>
-                      <p className="text-xs text-muted-foreground mt-1">Ví dụ: Tôi muốn mua 2 tấn, giá 10k/kg.</p>
-                    </div>
+                    <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
+                      <div>
+                        <span className="text-sm font-bold text-gray-900">Gửi yêu cầu mua</span>
+                        <p className="text-xs text-muted-foreground mt-1">Ví dụ: Tôi muốn mua 2 tấn, giá 10k/kg.</p>
+                      </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="number"
-                        value={requestQty}
-                        onChange={(e) => setRequestQty(e.target.value)}
-                        placeholder={`Số lượng (${product.unit || "kg"})`}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          type="number"
+                          value={requestQty}
+                          onChange={(e) => setRequestQty(e.target.value)}
+                          placeholder={`Số lượng (${product.unit || "kg"})`}
+                        />
+                        <Input
+                          type="number"
+                          value={requestPrice}
+                          onChange={(e) => setRequestPrice(e.target.value)}
+                          placeholder={`Giá đề xuất (đ/${product.unit || "kg"})`}
+                        />
+                      </div>
+
+                      <Textarea
+                        value={requestNote}
+                        onChange={(e) => setRequestNote(e.target.value)}
+                        placeholder="Ghi chú giao dịch..."
+                        className="min-h-[80px]"
                       />
-                      <Input
-                        type="number"
-                        value={requestPrice}
-                        onChange={(e) => setRequestPrice(e.target.value)}
-                        placeholder={`Giá đề xuất (đ/${product.unit || "kg"})`}
-                      />
+
+                      <Button
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                        disabled={requestSaving}
+                        onClick={handleSendPurchaseRequest}
+                      >
+                        {requestSaving ? "Đang gửi..." : "Gửi yêu cầu mua"}
+                      </Button>
                     </div>
-
-                    <Textarea
-                      value={requestNote}
-                      onChange={(e) => setRequestNote(e.target.value)}
-                      placeholder="Ghi chú giao dịch..."
-                      className="min-h-[80px]"
-                    />
-
-                    <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700"
-                      disabled={requestSaving}
-                      onClick={handleSendPurchaseRequest}
-                    >
-                      {requestSaving ? "Đang gửi..." : "Gửi yêu cầu mua"}
-                    </Button>
-                  </div>
                   )}
 
                   {/* Footer Info */}
@@ -609,7 +610,7 @@ export default function ProductDetail() {
             </Card>
 
             <div className="mt-6 space-y-4">
-               <Button
+              <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg h-14 text-base font-black rounded-2xl gap-2 active:scale-95 transition-all"
                 onClick={handleAlertButtonClick}
               >

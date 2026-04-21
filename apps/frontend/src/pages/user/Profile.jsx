@@ -198,10 +198,12 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   }
 
   useEffect(() => {
-    if (user?.role === "user") {
+    if (user?.role !== "admin") {
       loadData()
     }
   }, [user?.role])
+
+  const approvedRequest = requests.find((r) => r.status === "approved" && r.expires_at)
 
   const openRequest = requests.find((r) => ["pending_payment", "pending_review"].includes(r.status))
 
@@ -259,12 +261,47 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   }
 
   if (user?.role === "dealer") {
+    let daysLeftText = ""
+    let isExpiringSoon = false
+
+    if (approvedRequest) {
+      const expiresAt = new Date(approvedRequest.expires_at)
+      const now = new Date()
+      const diffMs = expiresAt - now
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      if (diffDays > 0) {
+        daysLeftText = `Còn ${diffDays} ngày`
+        if (diffDays <= 3) isExpiringSoon = true
+      } else {
+        daysLeftText = `Đã hết hạn vào ${expiresAt.toLocaleDateString('vi-VN')}`
+      }
+    }
+
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Nâng cấp đại lý</CardTitle>
-          <CardDescription>Bạn đã là đại lý. Không cần gửi thêm yêu cầu nâng cấp.</CardDescription>
+          <CardTitle>Gói Đại Lý Của Bạn</CardTitle>
+          <CardDescription>Trạng thái và thời hạn sử dụng đặc quyền đại lý.</CardDescription>
         </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border p-4 bg-muted/30">
+            <div className="font-semibold text-lg text-emerald-600 mb-1">Tài khoản Đại Lý Đang Hoạt Động</div>
+            {loading ? (
+               <p className="text-sm text-muted-foreground mt-2">Đang tải dữ liệu nâng cấp...</p>
+            ) : approvedRequest ? (
+              <div className="space-y-1 text-sm text-gray-700 mt-2">
+                <p>Gói đã đăng ký: <span className="font-medium">{approvedRequest.plan_name}</span></p>
+                <p>Ngày bắt đầu tính: <span className="font-medium">{new Date(approvedRequest.approved_at).toLocaleString('vi-VN')}</span></p>
+                <p>Ngày kết thúc: <span className="font-medium">{new Date(approvedRequest.expires_at).toLocaleString('vi-VN')}</span></p>
+                <div className={`mt-3 p-3 rounded-md font-medium max-w-lg ${isExpiringSoon ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                  {isExpiringSoon ? `⏳ Sắp hết hạn! (${daysLeftText}). Hãy sẵn sàng gia hạn sau khi gói kết thúc.` : `✅ Đang trong thời gian hiệu lực (${daysLeftText}).`}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mt-2">Không tìm thấy thông tin gói chi tiết. (Có thể bạn được nâng cấp đặc cách bởi Admin)</p>
+            )}
+          </div>
+        </CardContent>
       </Card>
     )
   }

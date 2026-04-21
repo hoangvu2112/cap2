@@ -28,6 +28,7 @@ import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
 import pool from "./db.js";
 import { syncProducts } from "./cron/syncProducts.js";
 import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
+import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -298,6 +299,7 @@ function removeDuplicateRows(arr) {
 
 (async () => {
   await checkAndScrapeIfNeeded();
+  await checkDealerExpiration();
 })();
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
@@ -311,6 +313,11 @@ setTimeout(() => {
     await syncChatbotKnowledge({ reason: "scheduled", io });
   });
   console.log("⏱️ Cron đồng bộ chatbot đã bật (chạy mỗi 6 giờ).")
+
+  cron.schedule("0 * * * *", async () => {
+    await checkDealerExpiration();
+  });
+  console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;
