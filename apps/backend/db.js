@@ -526,26 +526,8 @@ const initDB = async () => {
     await ensureUpgradeColumn("phone_contact", "phone_contact VARCHAR(20) DEFAULT NULL");
     await ensureUpgradeColumn("business_items", "business_items TEXT DEFAULT NULL"); // Các mặt hàng kinh doanh
 
-    const [membershipPlanRows] = await pool.query("SELECT id FROM dealer_plans WHERE code = 'dealer_membership' LIMIT 1")
-    if (membershipPlanRows.length === 0) {
-      await pool.query(
-        `
-          INSERT INTO dealer_plans (code, name, price_vnd, duration_days, is_active)
-          VALUES ('dealer_membership', 'Nâng cấp lên Đại lý', 100000, 60, TRUE)
-        `
-      )
-      console.log("🍀 Đã chèn gói nâng cấp đại lý 100k vào bảng 'dealer_plans'.")
-    } else {
-      await pool.query(
-        `
-          UPDATE dealer_plans
-          SET name = 'Nâng cấp lên Đại lý', price_vnd = 100000, duration_days = 60, is_active = TRUE
-          WHERE code = 'dealer_membership'
-        `
-      )
-    }
-
-    // await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code <> 'dealer_membership'")
+    // Vô hiệu hóa gói membership cũ nếu tồn tại
+    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code = 'dealer_membership'");
 
     // Cập nhật/Thêm các gói cước đại lý mới
     const ensureDealerPlan = async (code, name, price, days) => {
