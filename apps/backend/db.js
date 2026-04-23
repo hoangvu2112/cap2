@@ -50,6 +50,7 @@ const initDB = async () => {
         email VARCHAR(191) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         avatar_url VARCHAR(255) NOT NULL,
+        region VARCHAR(100) DEFAULT NULL,
         role ENUM('admin','user','dealer') DEFAULT 'user',
         status VARCHAR(50) DEFAULT 'active',
         joinDate DATE,
@@ -62,6 +63,16 @@ const initDB = async () => {
     await pool.query(
       "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','dealer') DEFAULT 'user'"
     )
+
+    // Đảm bảo cột region tồn tại
+    const [userColumns] = await pool.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'region'
+    `, [DB_NAME]);
+    if (userColumns.length === 0) {
+      await pool.query("ALTER TABLE users ADD COLUMN region VARCHAR(100) DEFAULT NULL");
+      console.log("✅ Đã thêm cột 'region' vào bảng 'users'.");
+    }
 
     const [userCount] = await pool.query("SELECT COUNT(*) AS c FROM users")
     if (userCount[0].c === 0) {
@@ -480,6 +491,7 @@ const initDB = async () => {
         payment_ref VARCHAR(120) DEFAULT NULL,
         note TEXT,
         admin_note TEXT,
+        warning_sent BOOLEAN DEFAULT FALSE,
         reviewed_by INT DEFAULT NULL,
         reviewed_at DATETIME DEFAULT NULL,
         approved_at DATETIME DEFAULT NULL,
@@ -494,6 +506,25 @@ const initDB = async () => {
       )
     `)
     console.log("✅ Bảng 'dealer_upgrade_requests' đã sẵn sàng.")
+
+    // Thêm các cột thông tin pháp lý cho đại lý
+    const ensureUpgradeColumn = async (columnName, definitionSql) => {
+      const [colRows] = await pool.query(`
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'dealer_upgrade_requests' AND COLUMN_NAME = ?
+      `, [DB_NAME, columnName]);
+      if (colRows.length === 0) {
+        await pool.query(`ALTER TABLE dealer_upgrade_requests ADD COLUMN ${definitionSql}`);
+        console.log(`✅ Đã thêm cột '${columnName}' vào bảng 'dealer_upgrade_requests'.`);
+      }
+    };
+
+    await ensureUpgradeColumn("business_name", "business_name VARCHAR(255) DEFAULT NULL");
+    await ensureUpgradeColumn("tax_code", "tax_code VARCHAR(50) DEFAULT NULL");
+    await ensureUpgradeColumn("business_address", "business_address TEXT DEFAULT NULL");
+    await ensureUpgradeColumn("representative_name", "representative_name VARCHAR(100) DEFAULT NULL");
+    await ensureUpgradeColumn("phone_contact", "phone_contact VARCHAR(20) DEFAULT NULL");
+    await ensureUpgradeColumn("business_items", "business_items TEXT DEFAULT NULL"); // Các mặt hàng kinh doanh
 
     const [membershipPlanRows] = await pool.query("SELECT id FROM dealer_plans WHERE code = 'dealer_membership' LIMIT 1")
     if (membershipPlanRows.length === 0) {
@@ -514,7 +545,27 @@ const initDB = async () => {
       )
     }
 
-    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code <> 'dealer_membership'")
+    // await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code <> 'dealer_membership'")
+
+    // Cập nhật/Thêm các gói cước đại lý mới
+    const ensureDealerPlan = async (code, name, price, days) => {
+      const [rows] = await pool.query("SELECT id FROM dealer_plans WHERE code = ? LIMIT 1", [code]);
+      if (rows.length === 0) {
+        await pool.query(
+          "INSERT INTO dealer_plans (code, name, price_vnd, duration_days, is_active) VALUES (?, ?, ?, ?, TRUE)",
+          [code, name, price, days]
+        );
+      } else {
+        await pool.query(
+          "UPDATE dealer_plans SET name = ?, price_vnd = ?, duration_days = ?, is_active = TRUE WHERE code = ?",
+          [name, price, days, code]
+        );
+      }
+    };
+
+    await ensureDealerPlan("dealer_30", "Gói Đại lý 30 ngày", 100000, 30);
+    await ensureDealerPlan("dealer_90", "Gói Đại lý 90 ngày", 250000, 90);
+    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm", 800000, 365);
 
     await pool.query(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -614,6 +665,36 @@ const initDB = async () => {
     await ensurePurchaseRequestColumn("dealer_fee_amount", "dealer_fee_amount INT NOT NULL DEFAULT 30000")
     await ensurePurchaseRequestColumn("dealer_action_at", "dealer_action_at DATETIME DEFAULT NULL")
     await ensurePurchaseRequestColumn("dealer_report_status", "dealer_report_status ENUM('none','reported') NOT NULL DEFAULT 'none'")
+
+    // Tự động nâng cấp kiểu dữ liệu cho số lượng và giá đề xuất (DECIMAL 20,2)
+    const ensureColumnType = async (tableName, columnName, desiredType) => {
+      const [typeRows] = await pool.query(
+        `
+          SELECT COLUMN_TYPE
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = ?
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+          LIMIT 1
+        `,
+        [DB_NAME, tableName, columnName]
+      )
+
+      if (typeRows.length > 0) {
+        const currentType = typeRows[0].COLUMN_TYPE.toLowerCase()
+        if (!currentType.includes(desiredType.toLowerCase())) {
+          try {
+            await pool.query(`ALTER TABLE ${tableName} MODIFY COLUMN ${columnName} ${desiredType} NOT NULL`)
+            console.log(`✅ Đã nâng cấp cột '${columnName}' trong bảng '${tableName}' lên ${desiredType}.`)
+          } catch (error) {
+            console.error(`❌ Lỗi khi nâng cấp cột ${columnName}:`, error.message)
+          }
+        }
+      }
+    }
+
+    await ensureColumnType("purchase_requests", "quantity", "DECIMAL(20,2)")
+    await ensureColumnType("purchase_requests", "proposed_price", "DECIMAL(20,2)")
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS purchase_request_messages (

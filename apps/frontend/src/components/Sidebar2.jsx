@@ -26,12 +26,14 @@ import {
   Minus,
   Shield,
   ShieldCheck,
+  Handshake,
+  MessageSquare,
 } from "lucide-react"
 
 const USER_NAV = [
   { path: "/", icon: Home, label: "Bảng giá" },
-  { path: "/negotiation", icon: Users, label: "Thương lượng" },
-  { path: "/community", icon: Users, label: "Cộng đồng" },
+  { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
+  { path: "/community", icon: MessageSquare, label: "Cộng đồng" },
   { path: "/news", icon: Newspaper, label: "Tin tức" },
   { path: "/favorites", icon: Heart, label: "Yêu thích" },
   { path: "/alerts", icon: Bell, label: "Cảnh báo" },

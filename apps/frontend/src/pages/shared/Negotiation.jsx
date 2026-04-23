@@ -40,11 +40,17 @@ export default function Negotiation() {
   const fetchRequests = async () => {
     setLoading(true)
     try {
-      const endpoint = user?.role === "dealer" ? "/purchase-requests/sent" : "/purchase-requests/incoming"
-      const res = await api.get(endpoint)
+      // Gọi API /all để lấy toàn bộ đơn liên quan đến mình
+      const res = await api.get("/purchase-requests/all")
       const list = res.data || []
+      
       setRequests(list)
-      if (list.length > 0 && !selectedId) {
+      
+      // Nếu có requestId từ URL, ưu tiên chọn nó
+      const rid = Number(searchParams.get("requestId"))
+      if (rid && list.some(i => i.id === rid)) {
+        setSelectedId(rid)
+      } else if (list.length > 0 && !selectedId) {
         setSelectedId(list[0].id)
       }
     } catch (error) {
@@ -181,7 +187,9 @@ export default function Negotiation() {
                     >
                       <p className="font-semibold text-sm">{item.product_name}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {user?.role === "dealer" ? `Nông dân: ${item.farmer_name}` : `Đại lý: ${item.buyer_name}`}
+                        {item.buyer_id === user?.id 
+                          ? `Đối tác (Người bán): ${item.farmer_name}` 
+                          : `Đối tác (Người mua): ${item.buyer_name}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Đề xuất: {Number(item.proposed_price).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}

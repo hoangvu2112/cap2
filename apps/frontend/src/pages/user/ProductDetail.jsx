@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { memo, useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import Navbar from "@/components/Navbar"
 import Footer from "@/components/Footer"
@@ -141,6 +141,51 @@ function AnalysisCard({ analysis, loading, product }) {
 }
 
 // ===========================================
+// --- COMPONENT BIỂU ĐỒ (Tách riêng để tối ưu) ---
+// ===========================================
+const PriceChart = memo(function PriceChart({ data }) {
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <ComposedChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+        <YAxis
+          domain={["auto", "auto"]}
+          tickFormatter={(value) => value.toLocaleString("vi-VN")}
+          tick={{ fontSize: 12 }}
+        />
+        <Tooltip
+          formatter={(value, name) => [
+            `${Number(value).toLocaleString("vi-VN")} đ`,
+            name === "Giá" || name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
+          ]}
+          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+        />
+        <Legend />
+        <Line
+          type="monotone"
+          dataKey="price"
+          name="Giá"
+          stroke="#059669"
+          strokeWidth={2}
+          dot={false}
+          activeDot={{ r: 6 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="forecast"
+          name="Dự báo (SMA)"
+          stroke="#f59e0b"
+          strokeWidth={2}
+          strokeDasharray="5 5"
+          dot={false}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+})
+
+// ===========================================
 // --- COMPONENT CHÍNH ---
 // ===========================================
 export default function ProductDetail() {
@@ -169,6 +214,25 @@ export default function ProductDetail() {
   const [requestPrice, setRequestPrice] = useState("")
   const [requestNote, setRequestNote] = useState("")
   const [requestSaving, setRequestSaving] = useState(false)
+
+  // Hàm AI gợi ý giá dựa trên xu hướng thị trường
+  const handleAISuggestPrice = () => {
+    if (!product?.currentPrice) {
+      alert("Chưa có dữ liệu giá thị trường để AI gợi ý.");
+      return;
+    }
+    
+    let basePrice = Number(product.currentPrice);
+    let adjustment = 1;
+
+    // Logic AI: Điều chỉnh theo xu hướng + Một chút biến động ngẫu nhiên (+/- 2%)
+    if (product.trend === 'up') adjustment = 1.03; // Kỳ vọng cao hơn khi giá lên
+    if (product.trend === 'down') adjustment = 0.97; // Cạnh tranh hơn khi giá xuống
+    
+    const randomFactor = 0.98 + (Math.random() * 0.04); // Biến động ngẫu nhiên từ -2% đến +2%
+    const suggestedPrice = Math.round(basePrice * adjustment * randomFactor);
+    setRequestPrice(suggestedPrice.toString());
+  };
 
   // 1. Fetch thông tin sản phẩm chính (Giá, Biểu đồ) - Cần nhanh
   useEffect(() => {
@@ -213,11 +277,10 @@ export default function ProductDetail() {
   }, [id, range])
 
   useEffect(() => {
-    if (!isDealer) return
-    const fetchFarmers = async () => {
-      if (!product?.id) return
+    const fetchPartners = async () => {
+      if (!product?.id || !user) return
       try {
-        const res = await api.get("/purchase-requests/farmers", {
+        const res = await api.get("/purchase-requests/partners", {
           params: { productId: product.id },
         })
         setFarmers(res.data || [])
@@ -225,11 +288,11 @@ export default function ProductDetail() {
           setSelectedFarmer(String(res.data[0].id))
         }
       } catch (error) {
-        console.error("Lỗi tải danh sách nông dân:", error)
+        console.error("Lỗi tải danh sách đối tác:", error)
       }
     }
-    fetchFarmers()
-  }, [product?.id, isDealer])
+    fetchPartners()
+  }, [product?.id, user])
 
 
   const handleSaveAlert = async () => {
@@ -276,15 +339,25 @@ export default function ProductDetail() {
     }
 
     if (!selectedFarmer || !requestQty || !requestPrice) {
-      alert("Vui lòng nhập đủ nông dân, số lượng và giá đề xuất")
+      alert("Vui lòng nhập đủ đối tác, số lượng và giá đề xuất")
+      return
+    }
+
+    if (Number(requestQty) <= 0) {
+      alert("Số lượng phải lớn hơn 0")
+      return
+    }
+
+    if (Number(requestPrice) <= 0) {
+      alert("Giá đề xuất phải lớn hơn 0")
       return
     }
 
     setRequestSaving(true)
     try {
-      await api.post("/purchase-requests", {
+      const res = await api.post("/purchase-requests", {
         product_id: product.id,
-        farmer_id: Number(selectedFarmer),
+        partner_id: Number(selectedFarmer),
         quantity: Number(requestQty),
         proposed_price: Number(requestPrice),
         note: requestNote,
@@ -293,7 +366,9 @@ export default function ProductDetail() {
       setRequestQty("")
       setRequestPrice("")
       setRequestNote("")
-      alert("Đã gửi yêu cầu mua thành công")
+
+      // Chuyển sang trang thương lượng với đúng ID yêu cầu vừa tạo
+      navigate(`/negotiation?requestId=${res.data.id}`)
     } catch (error) {
       alert(error.response?.data?.error || "Không thể gửi yêu cầu mua")
     } finally {
@@ -324,45 +399,6 @@ export default function ProductDetail() {
   const currentPrice = Number(product.currentPrice).toLocaleString("vi-VN")
   const percentChange = product.percentChange || 0
 
-  const PriceChart = ({ data }) => (
-    <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis
-          domain={["auto", "auto"]}
-          tickFormatter={(value) => value.toLocaleString("vi-VN")}
-          tick={{ fontSize: 12 }}
-        />
-        <Tooltip
-          formatter={(value, name) => [
-            `${Number(value).toLocaleString("vi-VN")} đ`,
-            name === "Giá" || name === "price" ? "Giá thực tế" : "Dự báo (SMA)",
-          ]}
-          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-        />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="price"
-          name="Giá"
-          stroke="#059669"
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 6 }}
-        />
-        <Line
-          type="monotone"
-          dataKey="forecast"
-          name="Dự báo (SMA)"
-          stroke="#f59e0b"
-          strokeWidth={2}
-          strokeDasharray="5 5"
-          dot={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
-  )
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -443,6 +479,123 @@ export default function ProductDetail() {
                 </div>
               </div>
             )}
+
+            {/* ĐỐI TÁC GẦN BẠN (ĐÃ CHUYỂN QUA CỘT CHÍNH) */}
+            {user && (
+              <div className="mt-6 rounded-3xl border border-emerald-100 p-6 bg-white shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-emerald-600" />
+                    {isDealer ? "Nông dân cung ứng" : "Đại lý thu mua gần bạn"}
+                  </h3>
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded-full border border-emerald-100">
+                    Khu vực của bạn: {user?.region || "Chưa cập nhật"}
+                  </span>
+                </div>
+                
+                <p className="text-sm text-muted-foreground">
+                  Hệ thống tìm thấy <strong>{farmers.length} đối tác</strong> — ưu tiên cùng tỉnh, cùng miền, rồi miền khác.
+                </p>
+
+                {farmers.length === 0 ? (
+                  <div className="py-8 text-center bg-gray-50 rounded-2xl border border-dashed">
+                    <p className="text-sm text-muted-foreground font-medium">Hiện chưa có đối tác nào trong hệ thống.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-4">
+                      {/* Hàng 1: Chọn đối tác (Full width để không bị che) */}
+                      <div className="relative w-full">
+                        <select
+                          value={selectedFarmer}
+                          onChange={(e) => setSelectedFarmer(e.target.value)}
+                          className="w-full h-12 rounded-2xl border border-gray-100 bg-gray-50 px-5 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
+                        >
+                          {farmers.map((partner) => (
+                            <option key={partner.id} value={partner.id}>
+                              {partner.priority_level === 1 ? "📍 [CÙNG TỈNH] " : 
+                               partner.priority_level === 2 ? "🗺️ [CÙNG MIỀN] " : 
+                               "🌍 [MIỀN KHÁC] "}
+                              {partner.name} - {partner.role === "dealer" ? "Đại lý" : "Nông dân"} 
+                              {partner.user_region ? ` (${partner.user_region})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <ArrowDown className="w-4 h-4 text-gray-400" />
+                        </div>
+                      </div>
+
+                      {/* Hàng 2: Nhập Số lượng & Giá (Chia đôi) */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center h-5 ml-3">
+                            <label className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">Số lượng</label>
+                          </div>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={requestQty}
+                            onChange={(e) => setRequestQty(e.target.value)}
+                            placeholder={`Số lượng (${product.unit || "kg"})`}
+                            className="h-12 rounded-2xl bg-gray-50 border-gray-100 font-bold placeholder:font-medium text-lg"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center h-5 ml-3">
+                            <label className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">Giá đề xuất</label>
+                            <button 
+                              onClick={handleAISuggestPrice}
+                              className="text-[10px] font-black text-purple-600 uppercase tracking-wider flex items-center gap-1 hover:text-purple-700 transition-colors"
+                            >
+                              <Sparkles className="w-3 h-3" /> AI Gợi ý
+                            </button>
+                          </div>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={requestPrice}
+                            onChange={(e) => setRequestPrice(e.target.value)}
+                            placeholder={`Giá (đ/${product.unit || "kg"})`}
+                            className="h-12 rounded-2xl bg-gray-50 border-gray-100 font-bold placeholder:font-medium text-lg"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {requestQty && requestPrice && (
+                      <div className="py-2.5 px-5 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center animate-in fade-in slide-in-from-top-1 overflow-hidden">
+                        <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider whitespace-nowrap mr-2">Tổng thu nhập dự kiến</span>
+                        <span className={cn(
+                          "font-black text-emerald-800 whitespace-nowrap",
+                          (Number(requestQty) * Number(requestPrice)).toString().length > 12 ? "text-sm" : "text-xl"
+                        )}>
+                          {(Number(requestQty) * Number(requestPrice)).toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Input
+                        value={requestNote}
+                        onChange={(e) => setRequestNote(e.target.value)}
+                        placeholder="Ghi chú thêm (ví dụ: Hàng đẹp, cần bán gấp...)"
+                        className="h-12 rounded-2xl bg-gray-50 border-gray-100 flex-[3]"
+                      />
+                      <Button
+                        variant="default"
+                        disabled={requestSaving}
+                        className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all flex items-center gap-2 flex-1"
+                        onClick={handleSendPurchaseRequest}
+                      >
+                        <MessageSquare className="w-5 h-5" /> 
+                        {requestSaving ? "Đang gửi..." : "Gửi báo giá"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Cột phụ (Thông tin & AI) */}
@@ -498,54 +651,7 @@ export default function ProductDetail() {
                     </div>
                   </div>
 
-                  <div className="h-[2px] w-full bg-blue-500/80 rounded-full my-6 opacity-60" />
-
-                  <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                    <h3 className="font-bold text-gray-900">Thông tin nguồn hàng</h3>
-                    <div className="text-sm text-gray-700 space-y-1">
-                      <p>Số lượng sẵn có: <strong>{Number(product.quantity_available || 0).toLocaleString("vi-VN")} {product.unit || "kg"}</strong></p>
-                      <p>
-                        Thời gian thu hoạch: <strong>
-                          {product.harvest_start ? new Date(product.harvest_start).toLocaleDateString("vi-VN") : "Chưa cập nhật"}
-                          {" "}-{" "}
-                          {product.harvest_end ? new Date(product.harvest_end).toLocaleDateString("vi-VN") : "Chưa cập nhật"}
-                        </strong>
-                      </p>
-                    </div>
-                  </div>
-
-                  {isDealer && (
-                    <div className="rounded-2xl border border-gray-100 p-4 bg-white space-y-3">
-                      <h3 className="font-bold text-gray-900">Nông dân cung ứng</h3>
-                      <p className="text-xs text-muted-foreground">Thông tin liên hệ được giữ trong hệ thống, hãy nhắn trực tiếp để trao đổi.</p>
-                      {farmers.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Chưa có danh sách nông dân phù hợp.</p>
-                      ) : (
-                        <>
-                          <select
-                            value={selectedFarmer}
-                            onChange={(e) => setSelectedFarmer(e.target.value)}
-                            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
-                          >
-                            {farmers.map((farmer) => (
-                              <option key={farmer.id} value={farmer.id}>
-                                {farmer.name} ({farmer.role === "dealer" ? "Đại lý" : "Nông dân"})
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => navigate(`/community?targetUser=${selectedFarmer}`)}
-                          >
-                            <MessageSquare className="w-4 h-4 mr-2" /> Nhắn tin thương lượng
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* AI INSIGHT SECTION (Bây giờ có loading state) */}
+                  {/* AI INSIGHT SECTION */}
                   <AnalysisCard
                     analysis={analysis}
                     loading={analysisLoading}
@@ -590,6 +696,9 @@ export default function ProductDetail() {
                       </Button>
                     </div>
                   )}
+
+
+                  {/* ĐỐI TÁC GẦN BẠN (ĐÃ CHUYỂN QUA CỘT CHÍNH) */}
 
                   {/* Footer Info */}
                   <div className="flex items-center justify-between pt-6 border-t border-gray-100 mt-2">

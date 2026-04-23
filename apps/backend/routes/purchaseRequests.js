@@ -4,70 +4,104 @@ import { authenticateToken, requireRole, isAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 
-router.get("/farmers", authenticateToken, requireRole("dealer"), async (req, res) => {
+// Bản đồ phân vùng 34 tỉnh thành theo miền
+const REGION_GROUPS = {
+  "Bắc Bộ": [
+    "Hà Nội", "Hải Phòng", "Ninh Bình", "Hưng Yên", "Bắc Ninh",
+    "Quảng Ninh", "Thái Nguyên", "Phú Thọ", "Lào Cai", "Tuyên Quang",
+    "Lạng Sơn", "Điện Biên", "Lai Châu", "Sơn La", "Cao Bằng",
+  ],
+  "Trung Bộ": [
+    "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Quảng Trị", "Huế",
+    "Đà Nẵng", "Quảng Ngãi", "Bình Định", "Gia Lai", "Khánh Hòa",
+    "Lâm Đồng",
+  ],
+  "Nam Bộ": [
+    "Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Đồng Tháp",
+    "An Giang", "Vĩnh Long", "Cà Mau",
+  ],
+}
+
+function getRegionGroup(province) {
+  for (const [group, provinces] of Object.entries(REGION_GROUPS)) {
+    if (provinces.includes(province)) return group
+  }
+  return null
+}
+
+router.get("/partners", authenticateToken, async (req, res) => {
   try {
     const productId = Number(req.query.productId)
     if (!productId) {
       return res.status(400).json({ error: "Thiếu productId" })
     }
 
-    const [[product]] = await pool.query(
-      "SELECT id, region, farmer_user_id FROM products WHERE id = ?",
-      [productId]
+    // 1. Lấy thông tin khu vực của CHÍNH NGƯỜI DÙNG HIỆN TẠI
+    const [[currentUser]] = await pool.query(
+      "SELECT region FROM users WHERE id = ?",
+      [req.user.id]
     )
 
-    if (!product) {
-      return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
-    }
+    const userRegion = currentUser?.region || ""
+    const userGroup = getRegionGroup(userRegion)
 
-    const params = [req.user.id]
+    // 2. Lấy danh sách tỉnh cùng miền để dùng trong SQL
+    const sameGroupProvinces = userGroup ? REGION_GROUPS[userGroup] : []
+
+    // 3. Xác định vai trò cần tìm
+    const isDealer = req.user.role === 'dealer'
+    const targetRoles = isDealer ? "('user', 'dealer')" : "('dealer')"
+
+    // 4. Truy vấn với 3 cấp ưu tiên:
+    //    priority 1 = cùng tỉnh, priority 2 = cùng miền, priority 3 = miền khác
     let sql = `
-      SELECT
-        u.id,
-        u.name,
-        u.avatar_url,
+      SELECT 
+        u.id, 
+        u.name, 
+        u.avatar_url, 
         u.role,
-        CASE WHEN p.region = ? THEN 1 ELSE 0 END AS same_region
+        u.region AS user_region,
+        CASE 
+          WHEN u.region = ? AND u.region IS NOT NULL AND u.region != '' THEN 1
+          WHEN u.region IN (${sameGroupProvinces.map(() => '?').join(',') || "''"}) THEN 2
+          ELSE 3
+        END AS priority_level
       FROM users u
-      LEFT JOIN products p ON p.farmer_user_id = u.id AND p.id = ?
       WHERE u.id != ?
         AND u.status = 'active'
-        AND u.role IN ('user','dealer')
+        AND u.role IN ${targetRoles}
+      ORDER BY priority_level ASC, u.created_at ASC 
+      LIMIT 20
     `
 
-    params.unshift(product.region || "")
-    params.splice(1, 0, productId)
-
-    if (product.farmer_user_id) {
-      sql += " AND u.id = ?"
-      params.push(product.farmer_user_id)
-    }
-
-    sql += " ORDER BY same_region DESC, u.created_at ASC LIMIT 20"
-
+    const params = [userRegion, ...sameGroupProvinces, req.user.id]
     const [rows] = await pool.query(sql, params)
-    res.json(rows)
+
+    // 5. Thêm thông tin region_group cho mỗi đối tác
+    const result = rows.map(row => ({
+      ...row,
+      region_group: getRegionGroup(row.user_region) || "Khác",
+      user_group: userGroup || "Chưa xác định",
+    }))
+
+    res.json(result)
   } catch (error) {
-    console.error("GET /purchase-requests/farmers error:", error)
+    console.error("GET /purchase-requests/partners error:", error)
     res.status(500).json({ error: "Lỗi máy chủ" })
   }
 })
 
-router.post("/", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
   try {
-    const buyerId = req.user.id
-    const { product_id, farmer_id, quantity, proposed_price, note } = req.body
+    const initiatorId = req.user.id
+    const { product_id, partner_id, quantity, proposed_price, note } = req.body
 
-    if (!product_id || !farmer_id || !quantity || !proposed_price) {
-      return res.status(400).json({ error: "Thiếu thông tin yêu cầu mua" })
-    }
-
-    if (Number(quantity) <= 0 || Number(proposed_price) <= 0) {
-      return res.status(400).json({ error: "Số lượng và giá đề xuất phải lớn hơn 0" })
+    if (!product_id || !partner_id || !quantity || !proposed_price) {
+      return res.status(400).json({ error: "Thiếu thông tin yêu cầu" })
     }
 
     const [[product]] = await pool.query(
-      "SELECT id, quantity_available FROM products WHERE id = ?",
+      "SELECT id, farmer_user_id FROM products WHERE id = ?",
       [product_id]
     )
 
@@ -75,13 +109,23 @@ router.post("/", authenticateToken, requireRole("dealer"), async (req, res) => {
       return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
     }
 
-    const [[farmer]] = await pool.query(
-      "SELECT id FROM users WHERE id = ? AND status = 'active' AND role IN ('user','dealer')",
-      [farmer_id]
+    const [[partner]] = await pool.query(
+      "SELECT id, role FROM users WHERE id = ? AND status = 'active'",
+      [partner_id]
     )
 
-    if (!farmer) {
-      return res.status(404).json({ error: "Không tìm thấy nông dân/nhà cung cấp" })
+    if (!partner) {
+      return res.status(404).json({ error: "Không tìm thấy đối tác" })
+    }
+
+    // Xác định ai là người mua, ai là nông dân dựa trên vai trò của người khởi tạo
+    let buyer_id, farmer_id;
+    if (req.user.role === 'dealer') {
+      buyer_id = initiatorId;
+      farmer_id = partner_id;
+    } else {
+      buyer_id = partner_id; // Dealer là người mua
+      farmer_id = initiatorId; // User là nông dân
     }
 
     const [result] = await pool.query(
@@ -89,7 +133,7 @@ router.post("/", authenticateToken, requireRole("dealer"), async (req, res) => {
         INSERT INTO purchase_requests (buyer_id, farmer_id, product_id, quantity, proposed_price, note, status)
         VALUES (?, ?, ?, ?, ?, ?, 'pending')
       `,
-      [buyerId, farmer_id, product_id, Number(quantity), Number(proposed_price), note?.trim() || null]
+      [buyer_id, farmer_id, product_id, Number(quantity), Number(proposed_price), note?.trim() || null]
     )
 
     const [[created]] = await pool.query(
@@ -116,7 +160,46 @@ router.post("/", authenticateToken, requireRole("dealer"), async (req, res) => {
   }
 })
 
-router.get("/sent", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.get("/all", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `
+        SELECT
+          pr.id,
+          pr.product_id,
+          pr.buyer_id,
+          pr.farmer_id,
+          pr.quantity,
+          pr.proposed_price,
+          pr.note,
+          pr.status,
+          pr.created_at,
+          pr.updated_at,
+          p.name AS product_name,
+          p.unit AS product_unit,
+          p.region AS product_region,
+          buyer.name AS buyer_name,
+          buyer.avatar_url AS buyer_avatar,
+          farmer.name AS farmer_name,
+          farmer.avatar_url AS farmer_avatar
+        FROM purchase_requests pr
+        LEFT JOIN products p ON p.id = pr.product_id
+        LEFT JOIN users buyer ON buyer.id = pr.buyer_id
+        LEFT JOIN users farmer ON farmer.id = pr.farmer_id
+        WHERE pr.buyer_id = ? OR pr.farmer_id = ?
+        ORDER BY pr.created_at DESC, pr.id DESC
+      `,
+      [req.user.id, req.user.id]
+    )
+
+    res.json(rows)
+  } catch (error) {
+    console.error("GET /purchase-requests/all error:", error)
+    res.status(500).json({ error: "Lỗi hệ thống khi tải danh sách thương lượng" })
+  }
+})
+
+router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `
@@ -421,7 +504,7 @@ router.patch("/admin/reports/:id/resolve", authenticateToken, isAdmin, async (re
   }
 })
 
-router.get("/incoming", authenticateToken, requireRole("user"), async (req, res) => {
+router.get("/incoming", authenticateToken, requireRole("user", "dealer"), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `

@@ -7,14 +7,16 @@ const router = express.Router()
 // Tạo cảnh báo mới
 router.post("/", authenticateToken, requireRole("user"), async (req, res) => {
   try {
-    const { product_id, threshold_price, condition } = req.body
-    const [user] = await pool.query("SELECT email FROM users WHERE id = ?", [req.user.id])
-    const email = user[0].email
+    const { product_id, target_price, alert_condition } = req.body
+    
+    if (!product_id || !target_price || !alert_condition) {
+      return res.status(400).json({ error: "Thiếu thông tin cảnh báo." })
+    }
 
     await pool.query(
       `INSERT INTO price_alerts (user_id, product_id, target_price, alert_condition, email)
    VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, product_id, threshold_price, condition, req.user.email]
+      [req.user.id, product_id, target_price, alert_condition, req.user.email]
     )
 
     res.json({ message: "✅ Đã tạo cảnh báo giá thành công!" })

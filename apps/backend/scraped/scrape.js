@@ -15,7 +15,7 @@ const COFFEE_REGIONS = [
     { name: "Đắk Nông", url: "https://giacaphe.com/gia-ca-phe-dak-nong/" },
 ];
 const PEPPER_URL = "https://giacaphe.com/gia-tieu-hom-nay/";
-// const DURIAN_URL = "https://giasaurieng.net/";
+const DURIAN_URL = "https://giasaurieng.net/";
 
 const OUT_DIR = path.join(process.cwd(), "scraped");
 const DATA_FILE = path.join(OUT_DIR, "all_regions.json");
