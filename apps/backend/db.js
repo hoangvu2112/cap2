@@ -309,19 +309,30 @@ const initDB = async () => {
 
     // Bảng community_posts
     await pool.query(`
-  CREATE TABLE IF NOT EXISTS community_posts (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    content TEXT NOT NULL,
-    tags LONGTEXT,
-    likes INT DEFAULT 0,
-    comments_count INT DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  )
-`)
-    console.log("✅ Bảng 'community_posts' đã sẵn sàng.")
-
+      CREATE TABLE IF NOT EXISTS community_posts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        content TEXT NOT NULL,
+        tags LONGTEXT,
+        image_url TEXT,
+        likes INT DEFAULT 0,
+        comments_count INT DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    
+    // Đảm bảo cột image_url tồn tại cho các DB cũ
+    const [commColumns] = await pool.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'community_posts' AND COLUMN_NAME = 'image_url'
+    `, [DB_NAME]);
+    
+    if (commColumns.length === 0) {
+      await pool.query("ALTER TABLE community_posts ADD COLUMN image_url TEXT AFTER tags");
+      console.log("✅ Đã thêm cột 'image_url' vào bảng 'community_posts'.");
+    }
+    
     console.log("✅ Bảng 'community_posts' đã sẵn sàng.")
 
     // Bảng community_comments
@@ -331,12 +342,24 @@ const initDB = async () => {
     post_id INT NOT NULL,
     user_id INT NOT NULL,
     content TEXT NOT NULL,
+    deleted_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `)
     console.log("✅ Bảng 'community_comments' đã sẵn sàng.")
+
+    // Đảm bảo cột deleted_at tồn tại cho bảng bình luận (Soft Delete)
+    const [commentCols] = await pool.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'community_comments' AND COLUMN_NAME = 'deleted_at'
+    `, [DB_NAME]);
+    
+    if (commentCols.length === 0) {
+      await pool.query("ALTER TABLE community_comments ADD COLUMN deleted_at DATETIME DEFAULT NULL AFTER content");
+      console.log("✅ Đã thêm cột 'deleted_at' vào bảng 'community_comments'.");
+    }
 
     // Bảng community_likes
     await pool.query(`

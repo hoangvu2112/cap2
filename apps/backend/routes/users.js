@@ -21,6 +21,19 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 })
 
+// 🧑‍💻 Lấy danh sách đại lý (Public)
+router.get("/dealers", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, name, avatar_url, region FROM users WHERE role = 'dealer' AND status = 'active' LIMIT 5"
+    )
+    res.json(rows)
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy danh sách đại lý:", error)
+    res.status(500).json({ error: "Lỗi server" })
+  }
+})
+
 // 🧑‍💻 Người dùng tự cập nhật thông tin cá nhân
 // ⚠️ Đặt TRƯỚC các route có "/:id"
 router.put("/me", authenticateToken, async (req, res) => {

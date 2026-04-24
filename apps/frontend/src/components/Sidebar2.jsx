@@ -31,21 +31,22 @@ import {
 } from "lucide-react"
 
 const USER_NAV = [
-  { path: "/", icon: Home, label: "Bảng giá" },
+  { path: "/", icon: Home, label: "Trang chủ" },
   { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
-  { path: "/community", icon: MessageSquare, label: "Cộng đồng" },
+  { path: "/community", icon: Users, label: "Cộng đồng" },
+  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
   { path: "/news", icon: Newspaper, label: "Tin tức" },
   { path: "/favorites", icon: Heart, label: "Yêu thích" },
   { path: "/alerts", icon: Bell, label: "Cảnh báo" },
-  { path: "/compare", icon: BarChart3, label: "So sánh" },
   { path: "/map", icon: Map, label: "Bản đồ giá" },
 ]
 
 const DEALER_NAV = [
-  { path: "/", icon: Home, label: "Nguồn hàng" },
-  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
+  { path: "/", icon: Home, label: "Trang chủ" },
   { path: "/negotiation", icon: Users, label: "Thương lượng" },
   { path: "/community", icon: Users, label: "Cộng đồng" },
+  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
+  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
 ]
 
 const ADMIN_NAV = [

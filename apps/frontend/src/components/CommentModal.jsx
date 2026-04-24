@@ -1,123 +1,96 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, ThumbsUp, MessageCircle, MoreVertical } from "lucide-react";
-import api from "@/lib/api";
+import { X, ThumbsUp, MessageCircle, MoreVertical, Send, Sparkles, Share2, Loader2 } from "lucide-react";
+import api, { BACKEND_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { io } from "socket.io-client";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-// import { socket } from "@/socket";
-
 import { useAuth } from "../context/AuthContext";
-// const socket = io(import.meta.env.VITE_API_URL);
-const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000");
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
 
-// helper initials (giữ như bạn có)
 function getInitials(name = "") {
   return name
     .split(" ")
-    .map((w) => w[0]?.toUpperCase() ?? "")
+    .map((word) => word[0])
     .join("")
-    .slice(0, 2);
+    .toUpperCase();
 }
 
-function formatCommentAge(value) {
-  const date = new Date(value);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
-
-  if (diffMinutes < 60) return `${diffMinutes}m`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d`;
-
-  const diffWeeks = Math.floor(diffDays / 7);
-  if (diffWeeks < 5) return `${diffWeeks}w`;
-
-  const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths}mo`;
-
-  const diffYears = Math.floor(diffDays / 365);
-  return `${diffYears}y`;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export default function CommentModal({ post, onClose, onCommentCountChange }) {
   const { user } = useAuth();
+  const token = localStorage.getItem("token");
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(post.likes ?? 0);
-  const [sortOrder, setSortOrder] = useState("newest");
+  const [isLoading, setIsLoading] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(post.comments_count || 0);
+  const processedCommentIds = useRef(new Set());
+  const [likesCount, setLikesCount] = useState(post.likes || 0);
+  const [liked, setLiked] = useState(post.liked || false);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingContent, setEditingContent] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [viewerImage, setViewerImage] = useState(null);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
-  const LIMIT = 8;
-
-  // lock body scroll while modal open
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  // close on ESC
+  // ⭐ ESC Key Fix
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (viewerImage) {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewerImage(null);
+        } else {
+          onClose();
+        }
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose, viewerImage]);
 
-  // initially load comments (latest first)
   useEffect(() => {
-    console.log("🔌 Connected?", socket.connected);
-    socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
-
     setComments([]);
     setOffset(0);
     setHasMore(true);
-    setEditingCommentId(null);
-    setEditingContent("");
-    onCommentCountChange?.(post.comments_count ?? 0);
-
     fetchComments(0);
 
-    const fetchLikeStatus = async () => {
-      try {
-        const res = await api.get(`/community/posts/${post.id}/like-status`);
-        setIsLiked(res.data.liked);
-        setLikesCount(res.data.likes); // FIX
-      } catch { }
-    };
-    fetchLikeStatus();
-    console.log("📡 Subscribing to comment_added for post:", post.id);
-    // ===== COMMENT SOCKET =====
-    const handleCommentAdded = ({ postId, comment }) => {
-      console.log("🔥 nhận comment realtime:", postId, comment);
+    const socket = io(SOCKET_URL, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+    });
 
+    const handleCommentAdded = ({ postId, comment }) => {
       if (Number(postId) === Number(post.id)) {
         setComments((prev) => {
           if (prev.some((item) => item.id === comment.id)) return prev;
-          onCommentCountChange?.(prev.length + 1);
-          return [...prev, comment];
+          
+          // ⭐ Chống đếm trùng tuyệt đối bằng Set
+          if (!processedCommentIds.current.has(comment.id)) {
+            processedCommentIds.current.add(comment.id);
+            onCommentCountChange?.(prevCount => prevCount + 1);
+            setCommentsCount(prevCount => prevCount + 1);
+          }
+          
+          return [comment, ...prev];
         });
       }
     };
-    socket.onAny((event, data) => {
-      console.log("📥 nhận event bất kỳ:", event, data);
-    });
 
     const handleCommentUpdated = ({ postId, comment }) => {
       if (Number(postId) !== Number(post.id)) return;
@@ -131,11 +104,12 @@ export default function CommentModal({ post, onClose, onCommentCountChange }) {
     const handleCommentDeleted = ({ postId, commentId }) => {
       if (Number(postId) !== Number(post.id)) return;
       setComments((prev) => {
-        const next = prev.filter((item) => item.id !== commentId);
-        if (next.length !== prev.length) {
-          onCommentCountChange?.(next.length);
+        const isExisted = prev.some((item) => item.id === commentId);
+        if (isExisted) {
+          onCommentCountChange?.(prevCount => Math.max(0, prevCount - 1));
+          setCommentsCount(prevCount => Math.max(0, prevCount - 1));
         }
-        return next;
+        return prev.filter((item) => item.id !== commentId);
       });
     };
 
@@ -143,406 +117,420 @@ export default function CommentModal({ post, onClose, onCommentCountChange }) {
     socket.on("community:comment_updated", handleCommentUpdated);
     socket.on("community:comment_deleted", handleCommentDeleted);
 
+    // ⭐ Socket Likes Fix
+    socket.on("community:like", ({ postId, userId: likerId }) => {
+      if (Number(postId) === Number(post.id) && Number(likerId) !== Number(user?.id)) {
+        setLikesCount(prev => prev + 1);
+      }
+    });
+
+    socket.on("community:unlike", ({ postId, userId: unlikerId }) => {
+      if (Number(postId) === Number(post.id) && Number(unlikerId) !== Number(user?.id)) {
+        setLikesCount(prev => Math.max(0, prev - 1));
+      }
+    });
+
     return () => {
-      socket.off("community:comment_added", handleCommentAdded);
-      socket.off("community:comment_updated", handleCommentUpdated);
-      socket.off("community:comment_deleted", handleCommentDeleted);
+      socket.disconnect();
     };
-  }, [post.id]);
+  }, [post.id, token]);
 
   const fetchComments = async (o = offset) => {
+    if (isLoading) return;
+    setIsLoading(true);
     try {
       const res = await api.get(`/community/posts/${post.id}/comments`, {
-        params: { limit: LIMIT, offset: o },
+        params: { limit: 10, offset: o },
       });
-      const data = res.data.data || [];
-      if (data.length < LIMIT) setHasMore(false);
-      // API returns ORDER BY id DESC so it's newest->oldest. We want oldest->newest in thread,
-      // but for FB-like feed show newest at bottom; here we'll push in order returned.
-      setComments((prev) => {
-        // avoid duplicates
-        const ids = new Set(prev.map((c) => c.id));
-        const filtered = data.filter((c) => !ids.has(c.id));
-        return [...prev, ...filtered];
-      });
-      setOffset(o + LIMIT);
+      const newBatch = res.data.data || [];
+      if (o === 0) {
+        setComments(newBatch);
+      } else {
+        setComments((prev) => [...prev, ...newBatch]);
+      }
+      setHasMore(newBatch.length === 10);
+      setOffset(o + newBatch.length);
     } catch (err) {
       console.error("fetch comments", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAIGenerate = async () => {
+    if (isGeneratingAI) return;
+    setIsGeneratingAI(true);
+    try {
+      const res = await api.post("/community/ai-generate-comment", {
+        postContent: post.content
+      });
+      if (res.data && res.data.data) {
+        setNewComment(res.data.data);
+      }
+    } catch (err) {
+      console.error("Lỗi AI Generate:", err);
+      alert("AI hiện đang bận, vui lòng thử lại sau");
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
+    setIsSubmitting(true);
     try {
       const content = newComment.trim();
       const res = await api.post(`/community/posts/${post.id}/comments`, {
         content,
       });
+      
+      const commentData = res.data.data || res.data.comment || {
+        ...res.data,
+        author_name: user.name,
+        avatar_url: user.avatar_url,
+        created_at: new Date().toISOString(),
+        user_id: user.id
+      };
 
-      const createdComment = res.data.data;
-      setComments((prev) => {
-        if (prev.some((item) => item.id === createdComment.id)) return prev;
-        onCommentCountChange?.(prev.length + 1);
-        return [...prev, createdComment];
-      });
+      if (commentData && commentData.id) {
+        setComments((prev) => {
+          if (prev.some(c => c.id === commentData.id)) return prev;
+          
+          // ⭐ Đánh dấu đã đếm ID này
+          if (!processedCommentIds.current.has(commentData.id)) {
+            processedCommentIds.current.add(commentData.id);
+            onCommentCountChange?.(prevCount => prevCount + 1);
+            setCommentsCount(prevCount => prevCount + 1);
+          }
+          
+          return [commentData, ...prev];
+        });
+      }
+      
       setNewComment("");
     } catch (err) {
-      console.error("add comment", err);
+      console.error("Lỗi gửi bình luận:", err);
+      alert("Không thể gửi bình luận");
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const handleStartEdit = (comment) => {
-    setEditingCommentId(comment.id);
-    setEditingContent(comment.content);
   };
 
   const handleSaveEdit = async (commentId) => {
     if (!editingContent.trim()) return;
     try {
-      const res = await api.put(
-        `/community/posts/${post.id}/comments/${commentId}`,
-        {
-          content: editingContent.trim(),
-        },
-      );
-
-      const updatedComment = res.data.data;
+      await api.put(`/community/posts/${post.id}/comments/${commentId}`, {
+        content: editingContent.trim(),
+      });
       setComments((prev) =>
-        prev.map((item) =>
-          item.id === commentId ? { ...item, ...updatedComment } : item,
+        prev.map((c) =>
+          c.id === commentId ? { ...c, content: editingContent.trim() } : c,
         ),
       );
       setEditingCommentId(null);
-      setEditingContent("");
     } catch (err) {
       console.error("edit comment", err);
     }
   };
 
   const handleDeleteComment = async (commentId) => {
-    if (!confirm("Bạn chắc chắn muốn xoá bình luận này?")) return;
-
+    if (!confirm("Xoá bình luận này?")) return;
     try {
       await api.delete(`/community/posts/${post.id}/comments/${commentId}`);
       setComments((prev) => {
-        const next = prev.filter((item) => item.id !== commentId);
-        onCommentCountChange?.(next.length);
-        return next;
+        const isExisted = prev.some(c => c.id === commentId);
+        if (isExisted) {
+          onCommentCountChange?.(prevCount => Math.max(0, prevCount - 1));
+          setCommentsCount(prevCount => Math.max(0, prevCount - 1));
+        }
+        return prev.filter((c) => c.id !== commentId);
       });
-
-      if (editingCommentId === commentId) {
-        setEditingCommentId(null);
-        setEditingContent("");
-      }
     } catch (err) {
       console.error("delete comment", err);
     }
   };
 
-  const handleToggleLike = async () => {
+  const toggleLike = async () => {
     try {
       const res = await api.post(`/community/posts/${post.id}/like`);
-      const liked = res.data.liked;
-
-      setIsLiked(liked);
-      setLikesCount((prev) => prev + (liked ? 1 : -1));
+      setLiked(res.data.liked);
+      setLikesCount((prev) => prev + (res.data.liked ? 1 : -1));
     } catch (err) {
-      console.error("toggle like", err);
+      console.error("like error", err);
     }
   };
 
-  const COLORS = [
-    "bg-purple-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-red-500",
-    "bg-yellow-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-  ];
+  const openViewer = (idx, images) => {
+    setViewerIndex(idx);
+    setViewerImage(images);
+  };
 
-  const [randomColor] = useState(() => {
-    return COLORS[Math.floor(Math.random() * COLORS.length)];
-  });
+  const nextImage = (e) => {
+    e.stopPropagation();
+    if (viewerIndex < viewerImage.length - 1) setViewerIndex(v => v + 1);
+  };
 
-  // Render portal to body so overlay not constrained by parent stacking context
+  const prevImage = (e) => {
+    e.stopPropagation();
+    if (viewerIndex > 0) setViewerIndex(v => v - 1);
+  };
+
+  const getFullUrl = (path) => {
+    if (!path) return "";
+    if (path.startsWith("http")) return path;
+    return `${BACKEND_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMore && !isLoading) {
+      fetchComments(offset);
+    }
+  };
+
+  const postImages = (() => {
+    try {
+      if (!post.image_url) return [];
+      const parsed = JSON.parse(post.image_url);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return post.image_url ? [post.image_url] : [];
+    }
+  })();
+
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 lg:p-12 overflow-hidden">
       {/* backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-white/10 backdrop-blur-[1px] animate-in fade-in duration-300"
         onClick={onClose}
       />
 
       {/* panel */}
-      <div
-        className="relative w-full max-w-4xl h-[90vh] mt-8 bg-[#242526] text-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.15, ease: "easeOut" }}
+        className="relative w-full max-w-[550px] h-[90vh] sm:h-fit max-h-[85vh] bg-white text-gray-900 rounded-[20px] shadow-[0_12px_28px_rgba(0,0,0,0.12),0_2px_4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col z-20"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-slate-600 flex items-center justify-center text-sm font-semibold overflow-hidden">
-              {post.avatar_url ? (
-                <img
-                  src={post.avatar_url}
-                  alt={post.author_name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                getInitials(post.author_name)
-              )}
-            </div>
-            <div>
-              <div className="font-semibold">{post.author_name}</div>
-              <div className="text-xs text-gray-300">
-                {new Date(post.created_at).toLocaleString("vi-VN")}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            aria-label="Đóng"
-            className="p-2 rounded-full hover:bg-white/10"
+        <div className="relative flex items-center justify-center px-6 py-3 border-b border-gray-200 bg-white z-20">
+          <h2 className="font-bold text-[17px] text-gray-900 tracking-tight">Bài viết của {post.author_name}</h2>
+          <button 
+            onClick={onClose} 
+            className="absolute right-3 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all text-gray-600 shadow-sm"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* main content area: left content + right comments (FB desktop has left big content + right comments sometimes).
-            For simplicity: top area shows content, below shows comments in a scrollable region.
-        */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {/* post content */}
-          <div className="px-6 py-4 border-b border-gray-700">
-            <div
-              className={`${randomColor} rounded-lg p-6 text-center text-xl md:text-2xl font-bold text-white`}
-            >
-              {post.content}
-            </div>
-
-            {/* reactions row */}
-            <div className="mt-3 flex items-center justify-between text-sm text-gray-300">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1">
-                  <ThumbsUp className="h-4 w-4" />
-                  <span>{post.likes ?? 0}</span>
-                </div>
-                <div>
-                  {comments.length || post.comments_count || 0} bình luận
-                </div>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white" onScroll={handleScroll}>
+          <div className="p-5 border-b border-gray-50">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden">
+                {post.avatar_url ? <img src={post.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="text-orange-600 font-bold">{post.author_name?.charAt(0)}</span>}
               </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleToggleLike}
-                  className={`flex items-center gap-2 px-3 py-1 rounded hover:bg-white/5 ${isLiked ? "text-blue-400" : ""
-                    }`}
-                >
-                  <ThumbsUp className="h-4 w-4" />
-                  {isLiked ? "Đã thích" : "Thích"}
-                </button>
-
-                <button className="flex items-center gap-2 px-3 py-1 rounded hover:bg-white/5">
-                  <MessageCircle className="h-4 w-4" /> Bình luận
-                </button>
+              <div>
+                <p className="font-black text-sm">{post.author_name}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: vi })}</p>
               </div>
             </div>
-          </div>
-          <div className="flex justify-end mb-2">
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="bg-[#3a3b3c] text-sm px-2 py-1 rounded border border-gray-600"
-            >
-              <option value="newest">Mới nhất</option>
-              <option value="oldest">Cũ nhất</option>
-            </select>
-          </div>
-
-          {/* comments list area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* show comments */}
-            {comments.length === 0 ? (
-              <div className="text-gray-300 text-center mt-8">
-                Chưa có bình luận nào
+            
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-4">{post.content}</p>
+            
+            {/* ⭐ Render Tags */}
+            {post.tags && post.tags.length > 0 && (
+              <div className="flex gap-2 flex-wrap mb-4">
+                {post.tags.map(tag => (
+                  <Badge 
+                    key={tag} 
+                    variant="secondary" 
+                    className="bg-gray-50 text-gray-500 font-bold border-none px-2.5 py-1 text-[10px] max-w-[200px]"
+                  >
+                    <span className="truncate">#{tag}</span>
+                  </Badge>
+                ))}
               </div>
-            ) : (
-              <div className="flex flex-col-reverse space-y-4 space-y-reverse">
-                {/* reverse so newest appear at bottom if you prefer; adjust as needed */}
-                {[...comments]
-                  .sort((a, b) => {
-                    if (sortOrder === "newest")
-                      return new Date(b.created_at) - new Date(a.created_at);
-                    return new Date(a.created_at) - new Date(b.created_at);
-                  })
-                  .map((c) => (
-                    <div key={c.id} className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-600 flex items-center justify-center overflow-hidden text-sm font-semibold shrink-0">
-                        {c.avatar_url ? (
-                          <img
-                            src={c.avatar_url}
-                            alt={c.author_name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          getInitials(c.author_name)
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start gap-2">
-                          <div className="max-w-[85%] rounded-[20px] bg-[#3a3b3c] px-4 py-2.5">
-                            <div className="font-semibold text-[13px] leading-tight text-white">
-                              {c.author_name}
+            )}
+            
+            {postImages.length > 0 && (
+              <div className="mt-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-gray-50">
+                {postImages.length === 1 ? (
+                  <div className="h-64 sm:h-80 w-full cursor-zoom-in hover:opacity-95 transition-opacity" onClick={() => openViewer(0, postImages)}>
+                    <img src={getFullUrl(postImages[0])} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1">
+                    {postImages.slice(0, 4).map((img, i) => {
+                      const isLastAndMore = i === 3 && postImages.length > 4;
+                      return (
+                        <div key={i} className="relative overflow-hidden cursor-zoom-in hover:opacity-90 transition-all h-40 sm:h-48" onClick={() => openViewer(i, postImages)}>
+                          <img src={getFullUrl(img)} alt="" className="w-full h-full object-cover" />
+                          {isLastAndMore && (
+                            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white backdrop-blur-[2px]">
+                              <span className="text-2xl font-black">+{postImages.length - 4}</span>
+                              <span className="text-[10px] font-black uppercase tracking-wider">Xem thêm</span>
                             </div>
-                            {editingCommentId === c.id ? (
-                              <div className="mt-2 space-y-2">
-                                <input
-                                  type="text"
-                                  value={editingContent}
-                                  onChange={(e) =>
-                                    setEditingContent(e.target.value)
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleSaveEdit(c.id);
-                                    }
-                                    if (e.key === "Escape") {
-                                      setEditingCommentId(null);
-                                      setEditingContent("");
-                                    }
-                                  }}
-                                  className="w-full rounded-md border border-gray-600 bg-[#242526] px-3 py-2 text-sm text-white outline-none"
-                                />
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingCommentId(null);
-                                      setEditingContent("");
-                                    }}
-                                  >
-                                    Huỷ
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleSaveEdit(c.id)}
-                                  >
-                                    Lưu
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-1 text-[15px] leading-snug text-gray-100">
-                                {c.content}
-                              </div>
-                            )}
-                          </div>
-
-                          {(c.user_id === user?.id ||
-                            user?.role === "admin") && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className="mt-1 rounded-full p-1.5 text-gray-400 hover:bg-white/10 hover:text-white">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-36">
-                                  <DropdownMenuItem
-                                    onClick={() => handleStartEdit(c)}
-                                  >
-                                    Chỉnh sửa
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    onClick={() => handleDeleteComment(c.id)}
-                                  >
-                                    Xoá
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                        </div>
-
-                        <div className="mt-1 flex items-center gap-4 px-3 text-xs font-semibold text-gray-400">
-                          <span>{formatCommentAge(c.created_at)}</span>
-                          <button
-                            type="button"
-                            className="transition hover:text-white"
-                          >
-                            Thích
-                          </button>
-                          <button
-                            type="button"
-                            className="transition hover:text-white"
-                          >
-                            Trả lời
-                          </button>
-                          {editingCommentId !== c.id && (
-                            <span className="text-[11px] font-normal text-gray-500">
-                              {new Date(c.created_at).toLocaleString("vi-VN")}
-                            </span>
                           )}
                         </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            {hasMore && (
-              <div className="flex justify-center">
-                <button
-                  onClick={() => fetchComments()}
-                  className="px-4 py-2 border border-gray-600 rounded hover:bg-white/5"
-                >
-                  Xem thêm bình luận
-                </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* input area fixed bottom of panel */}
-          <div className="px-4 py-3 border-t border-gray-700 bg-[#181819]">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-slate-600 flex items-center justify-center overflow-hidden text-sm font-semibold">
-                {/* current user avatar: nếu có context user, bạn có thể thay */}
-                {/* fallback: post author avatar for now */}
-                {user.avatar_url ? (
-                  <img
-                    src={user.avatar_url}
-                    alt="me"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  getInitials(user.name)
-                )}
-              </div>
+          <div className="p-5 space-y-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{commentsCount} bình luận</span>
+              <select 
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="bg-transparent text-[11px] font-black uppercase text-gray-400 outline-none"
+              >
+                <option value="newest">Mới nhất</option>
+                <option value="oldest">Cũ nhất</option>
+              </select>
+            </div>
 
-              <input
-                type="text"
-                placeholder="Viết bình luận..."
+            <div className="space-y-5">
+              {[...comments]
+                .sort((a, b) => {
+                  const dateA = new Date(a.created_at || Date.now());
+                  const dateB = new Date(b.created_at || Date.now());
+                  return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
+                })
+                .map((c) => (
+                  <div key={c.id} className="flex gap-3 group">
+                    <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                      {c.avatar_url ? <img src={c.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="text-gray-400 font-bold text-xs">{c.author_name?.charAt(0)}</span>}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start gap-2">
+                        <div className="bg-gray-100/70 rounded-2xl px-4 py-2.5 inline-block max-w-[90%]">
+                          <p className="font-black text-xs text-gray-900 mb-0.5">{c.author_name}</p>
+                          {editingCommentId === c.id ? (
+                            <div className="mt-2 space-y-2">
+                              <textarea
+                                value={editingContent}
+                                onChange={(e) => setEditingContent(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
+                                autoFocus
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button onClick={() => setEditingCommentId(null)} className="text-[10px] font-black uppercase">Huỷ</button>
+                                <button onClick={() => handleSaveEdit(c.id)} className="text-[10px] font-black uppercase text-orange-600">Lưu</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[14px] text-gray-700 leading-snug">{c.content}</p>
+                          )}
+                        </div>
+
+                        {(c.user_id === user?.id || user?.role === "admin") && (
+                          <div className="relative">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="mt-1 p-1.5 text-gray-400 hover:text-gray-900 transition-all rounded-full hover:bg-gray-100 opacity-60 hover:opacity-100 shrink-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="z-[1000] bg-white rounded-xl shadow-xl border border-gray-100 p-1">
+                                <DropdownMenuItem onClick={() => { setEditingCommentId(c.id); setEditingContent(c.content); }} className="font-bold text-xs">Chỉnh sửa</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeleteComment(c.id)} className="font-bold text-xs text-red-600">Xoá bình luận</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-3 px-2">
+                        <span className="text-[10px] font-bold text-gray-400">{c.created_at ? formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: vi }) : "Vừa xong"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {hasMore && (
+              <button 
+                onClick={() => fetchComments(offset)} 
+                disabled={isLoading}
+                className="w-full py-2 text-[11px] font-black uppercase text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Xem thêm bình luận"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Input area */}
+        <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+          <div className="flex items-end gap-3">
+            <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+              {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="text-gray-400 font-bold text-xs">{user?.name?.charAt(0)}</span>}
+            </div>
+            <div className="flex-1 bg-gray-50 rounded-2xl border border-gray-100 px-4 py-2 focus-within:bg-white focus-within:border-orange-200 transition-all shadow-sm">
+              <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddComment();
-                  }
-                }}
-                className="flex-1 rounded-full px-4 py-2 bg-[#242526] border border-gray-700 outline-none focus:ring-0 text-sm"
+                placeholder="Viết bình luận..."
+                className="w-full bg-transparent border-none outline-none text-sm text-gray-700 resize-none max-h-32 py-1 custom-scrollbar"
+                rows={1}
               />
-
-              <Button onClick={handleAddComment}>Gửi</Button>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                <div className="flex items-center gap-4 text-gray-400">
+                  <button 
+                    className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${isGeneratingAI ? 'animate-pulse text-orange-500' : ''}`} 
+                    title="Gợi ý AI"
+                    onClick={handleAIGenerate}
+                    disabled={isGeneratingAI}
+                  >
+                    {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    <span className="text-[10px] font-bold uppercase tracking-wider">AI Gợi ý</span>
+                  </button>
+                </div>
+                <button 
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || isSubmitting}
+                  className="text-orange-600 font-black text-sm hover:text-orange-700 disabled:text-gray-300 transition-colors"
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Gửi"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
-  );
+      </motion.div>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {viewerImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-black flex items-center justify-center select-none overflow-hidden"
+            onClick={() => setViewerImage(null)}
+          >
+            <button className="absolute top-5 left-5 z-[10000] bg-black/40 text-white p-2.5 rounded-full border border-white/10" onClick={() => setViewerImage(null)}>
+              <X className="h-6 w-6" />
+            </button>
+            <div className="relative max-w-5xl max-h-[90vh] flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
+              <img src={getFullUrl(viewerImage[viewerIndex])} alt="" className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" />
+              {viewerImage.length > 1 && (
+                <>
+                  <button onClick={prevImage} className="absolute left-4 p-3 rounded-full bg-black/20 text-white hover:bg-black/40"><X className="rotate-90" /></button>
+                  <button onClick={nextImage} className="absolute right-4 p-3 rounded-full bg-black/20 text-white hover:bg-black/40"><X className="-rotate-90" /></button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  , document.body);
 }

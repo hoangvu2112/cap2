@@ -23,6 +23,7 @@ import Community from "./pages/user/Community"
 import Profile from "./pages/user/Profile"
 import PriceMap from "./pages/user/PriceMap"
 import News from "./pages/user/News"
+import Chat from "./pages/user/Chat"
 import DealerDashboard from "./pages/dealer/DealerDashboard"
 import DealerProductDetail from "./pages/dealer/DealerProductDetail"
 import DealerPurchaseRequests from "./pages/dealer/DealerPurchaseRequests"
@@ -82,6 +83,7 @@ function AppContent() {
         <Route path="/purchase-requests" element={<RoleRoute allowedRoles={["dealer"]}><MainLayout2><DealerPurchaseRequests /></MainLayout2></RoleRoute>} />
         <Route path="/negotiation" element={<RoleRoute allowedRoles={["user", "dealer", "admin"]}><MainLayout2><Negotiation /></MainLayout2></RoleRoute>} />
         <Route path="/community" element={<ProtectedRoute><MainLayout2>{isDealer ? <DealerCommunity /> : <Community />}</MainLayout2></ProtectedRoute>} />
+        <Route path="/chat" element={<ProtectedRoute><MainLayout2><Chat /></MainLayout2></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><MainLayout2><Profile /></MainLayout2></ProtectedRoute>} />
         <Route path="/map" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><PriceMap /></MainLayout2></RoleRoute>} />
 

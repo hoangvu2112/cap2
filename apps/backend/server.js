@@ -26,6 +26,9 @@ import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
 import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
 import pool from "./db.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import { syncProducts } from "./cron/syncProducts.js";
 import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
@@ -42,6 +45,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -175,8 +179,6 @@ cron.schedule("*/5 * * * *", async () => {
 });
 
 // Cấu hình đường dẫn file scrape
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const SCRAPED_FILE = path.join(process.cwd(), "scraped/all_regions.json");
 const TEMP_FILE = path.join(__dirname, "./scraped/temp_check.json");
 const scrapePath = path.join(__dirname, "./scraped/scrape.js");
@@ -325,7 +327,10 @@ const startServer = async () => {
   try {
     await pool.query("SELECT 1");
     console.log("✅ MySQL connected!");
-    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📂 Current Working Directory: ${process.cwd()}`);
+    });
   } catch (err) {
     console.error("❌ DB connection failed:", err);
     process.exit(1);

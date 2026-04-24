@@ -4,6 +4,33 @@ import { authenticateToken, isAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 
+router.get("/trends", async (req, res) => {
+  try {
+    const [topGainers] = await pool.query(`
+      SELECT id, name, region, currentPrice, previousPrice,
+      ROUND(((currentPrice - previousPrice) / NULLIF(previousPrice, 0) * 100), 1) as percent
+      FROM products
+      WHERE currentPrice > previousPrice
+      ORDER BY percent DESC
+      LIMIT 3
+    `)
+
+    const [topLosers] = await pool.query(`
+      SELECT id, name, region, currentPrice, previousPrice,
+      ROUND(((currentPrice - previousPrice) / NULLIF(previousPrice, 0) * 100), 1) as percent
+      FROM products
+      WHERE currentPrice < previousPrice
+      ORDER BY percent ASC
+      LIMIT 3
+    `)
+
+    res.json({ topGainers, topLosers })
+  } catch (error) {
+    console.error("❌ Lỗi lấy xu hướng:", error)
+    res.status(500).json({ error: "Lỗi server" })
+  }
+})
+
 
 router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
   try {
