@@ -401,6 +401,42 @@ const initDB = async () => {
       console.log("🍀 Đã chèn dữ liệu mẫu vào bảng 'news'.");
     }
 
+    // Bảng lưu metadata PDF đã cào từ thitruongnongsan.gov.vn (chống trùng)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gov_pdf_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pdf_url VARCHAR(500) NOT NULL UNIQUE,
+        category VARCHAR(100) NOT NULL,
+        report_number INT,
+        report_date DATE,
+        raw_text LONGTEXT,
+        parsed_json JSON,
+        status ENUM('pending','parsed','error') DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_gov_pdf_category_date (category, report_date)
+      )
+    `)
+    console.log("✅ Bảng 'gov_pdf_reports' đã sẵn sàng.")
+
+    // Bảng giá trích xuất từ PDF chính phủ
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gov_market_prices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        report_id INT NOT NULL,
+        product_name VARCHAR(255),
+        region VARCHAR(255),
+        current_price DECIMAL(12,2),
+        previous_price DECIMAL(12,2),
+        price_change DECIMAL(12,2),
+        unit VARCHAR(50) DEFAULT 'VND/kg',
+        extra_data JSON,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (report_id) REFERENCES gov_pdf_reports(id) ON DELETE CASCADE,
+        INDEX idx_gov_price_product_region (product_name, region)
+      )
+    `)
+    console.log("✅ Bảng 'gov_market_prices' đã sẵn sàng.")
+
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool
   } catch (error) {
