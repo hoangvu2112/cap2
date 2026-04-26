@@ -34,3 +34,7 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Ẩn scrollbar nhưng vẫn cuộn được */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

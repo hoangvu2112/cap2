@@ -43,10 +43,10 @@ const USER_NAV = [
 
 const DEALER_NAV = [
   { path: "/", icon: Home, label: "Trang chủ" },
-  { path: "/negotiation", icon: Users, label: "Thương lượng" },
+  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
+  { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
   { path: "/community", icon: Users, label: "Cộng đồng" },
   { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
-  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
 ]
 
 const ADMIN_NAV = [

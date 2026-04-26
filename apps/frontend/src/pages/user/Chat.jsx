@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MessageSquare, Search, Send, UserRound } from "lucide-react";
 import { io } from "socket.io-client";
 import { Button } from "@/components/ui/button";
@@ -52,9 +53,36 @@ export default function Chat() {
     fetchUsers(userSearch);
   }, [userSearch]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   useEffect(() => {
     fetchConversations();
   }, []);
+
+  // Auto-open chat khi navigate từ trang khác với ?userId=X
+  useEffect(() => {
+    const targetUserId = searchParams.get("userId");
+    const targetName = searchParams.get("name");
+    const targetAvatar = searchParams.get("avatar");
+    
+    if (targetUserId && conversations.length >= 0) {
+      const uid = Number(targetUserId);
+      // Kiểm tra xem đã có conversation chưa
+      const existing = conversations.find(c => c.other_user_id === uid);
+      if (existing) {
+        handleSelectConversation(existing);
+      } else {
+        handlePickUser({
+          id: uid,
+          name: targetName || "User",
+          avatar_url: targetAvatar || null,
+          conversation_id: null,
+        });
+      }
+      // Xóa params sau khi xử lý
+      setSearchParams({});
+    }
+  }, [searchParams, conversations.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

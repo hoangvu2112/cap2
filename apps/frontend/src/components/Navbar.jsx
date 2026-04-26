@@ -3,7 +3,7 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { useLayout } from "../context/LayoutContext"
-import { Home, Heart, Bell, BarChart3, Users, User, LogOut, Menu, X, Map, Sprout } from "lucide-react"
+import { Home, Heart, Bell, BarChart3, Users, User, LogOut, Menu, X, Map, Sprout, Handshake, MessageSquare, Newspaper, ShoppingBag } from "lucide-react"
 import { useState } from "react"
 
 export default function Navbar() {
@@ -41,6 +41,9 @@ export default function Navbar() {
             <NavLink to="/community" icon={Users} label="Cộng đồng" />
             <NavLink to="/chat" icon={MessageSquare} label="Trò chuyện" />
             <NavLink to="/news" icon={Newspaper} label="Tin tức" />
+            {user?.role === "dealer" && (
+              <NavLink to="/purchase-requests" icon={ShoppingBag} label="Yêu cầu mua" />
+            )}
 
           <div className="flex items-center gap-4">
             {user && (
@@ -84,6 +87,9 @@ export default function Navbar() {
               <MobileNavLink to="/negotiation" icon={Handshake} label="Thương lượng" onClick={() => setMobileMenuOpen(false)} />
               <MobileNavLink to="/community" icon={Users} label="Cộng đồng" onClick={() => setMobileMenuOpen(false)} />
               <MobileNavLink to="/chat" icon={MessageSquare} label="Trò chuyện" onClick={() => setMobileMenuOpen(false)} />
+              {user?.role === "dealer" && (
+                <MobileNavLink to="/purchase-requests" icon={ShoppingBag} label="Yêu cầu mua" onClick={() => setMobileMenuOpen(false)} />
+              )}
               <MobileNavLink to="/profile" icon={User} label="Hồ sơ" onClick={() => setMobileMenuOpen(false)} />
 
               <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg w-full transition-colors">

@@ -77,8 +77,8 @@ export function generateUniqueAnalysis(product, stats, history, news) {
     analysisPoints.push(`Xu hướng giá của ${product.name} phụ thuộc vào cung cầu thực tế và biến động chi phí vận chuyển tại khu vực.`);
   }
 
-  const direction = sentimentScore >= 2 ? "up" : sentimentScore <= -2 ? "down" : "side";
-  const change_amount = Math.max(Math.round(Math.abs(currentPrice - avg30d) * 0.12 / 100) * 100, 1000);
+  const direction = sentimentScore >= 1 ? "up" : sentimentScore <= -1 ? "down" : "side";
+  const change_amount = Math.max(Math.round(Math.abs(currentPrice - avg30d) * 0.15 / 100) * 100, 1000);
   const volatility = rangeWidth / Math.max(avg30d, 1) > 0.15 ? "Cao" : rangeWidth / Math.max(avg30d, 1) > 0.07 ? "Trung bình" : "Thấp";
 
   return {

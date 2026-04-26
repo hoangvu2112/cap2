@@ -27,13 +27,14 @@ import { Textarea } from "@/components/ui/textarea";
 import api from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import { useAuth } from "../../context/AuthContext";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export default function Community() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const [posts, setPosts] = useState([]);
@@ -49,6 +50,10 @@ export default function Community() {
   const [trends, setTrends] = useState({ topGainers: [], topLosers: [] });
   const [dealers, setDealers] = useState([]);
   const [hotTab, setHotTab] = useState("day"); // "day" or "week"
+  const [featuredPosts, setFeaturedPosts] = useState([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(false);
+  const [dealerPage, setDealerPage] = useState(0);
+  const DEALERS_PER_PAGE = 10;
 
   const imageInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -71,6 +76,10 @@ export default function Community() {
   }, [search]);
 
   useEffect(() => {
+    fetchFeaturedPosts();
+  }, [hotTab]);
+
+  useEffect(() => {
     if (!token) return undefined;
 
     const socket = io(SOCKET_URL, {
@@ -83,6 +92,7 @@ export default function Community() {
         if (prev.some((item) => item.id === post.id)) return prev;
         return [post, ...prev];
       });
+      fetchFeaturedPosts();
     });
 
     socket.on("community:post_deleted", ({ id }) => {
@@ -94,22 +104,23 @@ export default function Community() {
     });
 
     socket.on("community:like", ({ postId, userId: likerId }) => {
-      // Don't double-count if it's the current user (they already updated locally)
-      if (Number(likerId) === Number(user?.id)) return;
-      
-      setPosts((prev) =>
-        prev.map((post) => (post.id === postId ? { ...post, likes: (post.likes || 0) + 1 } : post))
-      );
+      if (Number(likerId) !== Number(user?.id)) {
+        setPosts((prev) =>
+          prev.map((post) => (post.id === postId ? { ...post, likes: (post.likes || 0) + 1 } : post))
+        );
+      }
+      fetchFeaturedPosts();
     });
 
     socket.on("community:unlike", ({ postId, userId: unlikerId }) => {
-      if (Number(unlikerId) === Number(user?.id)) return;
-
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId ? { ...post, likes: Math.max((post.likes || 1) - 1, 0) } : post
-        )
-      );
+      if (Number(unlikerId) !== Number(user?.id)) {
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId ? { ...post, likes: Math.max((post.likes || 1) - 1, 0) } : post
+          )
+        );
+      }
+      fetchFeaturedPosts();
     });
 
     socket.on("community:comment_added", ({ postId }) => {
@@ -165,6 +176,20 @@ export default function Community() {
     }
   };
 
+  const fetchFeaturedPosts = async () => {
+    if (featuredPosts.length === 0) setLoadingFeatured(true);
+    try {
+      const res = await api.get("/community/posts/featured", {
+        params: { range: hotTab, limit: 5 },
+      });
+      setFeaturedPosts(res.data.data || []);
+    } catch (error) {
+      console.error("Lỗi lấy bài nổi bật:", error);
+    } finally {
+      setLoadingFeatured(false);
+    }
+  };
+
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     const newImages = files.map(file => ({
@@ -214,7 +239,7 @@ export default function Community() {
       setImages([]);
       setSelectedTags([]);
       setShowTagSelector(false);
-      // Removed manual setPosts, letting socket handles it for consistency
+      fetchFeaturedPosts();
     } catch (error) {
       console.error("Lỗi đăng bài:", error);
       alert("Không thể đăng bài lúc này. Vui lòng thử lại.");
@@ -225,7 +250,7 @@ export default function Community() {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-6xl animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8">
         
         {/* Main Feed Column */}
         <div className="space-y-6">
@@ -415,115 +440,193 @@ export default function Community() {
               </div>
             ) : (
               posts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
-                  onUpdate={(updated) => setPosts(prev => prev.map(p => p.id === updated.id ? updated : p))}
-                />
+                <div key={post.id} id={`post-${post.id}`}>
+                  <PostCard
+                    post={post}
+                    onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))}
+                    onUpdate={(updated) => setPosts(prev => prev.map(p => p.id === updated.id ? updated : p))}
+                    onLike={fetchFeaturedPosts}
+                  />
+                </div>
               ))
             )}
           </div>
         </div>
 
         {/* Sidebar Column */}
-        <div className="space-y-6">
+        <div className="space-y-6 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:scrollbar-hide">
           
-          {/* Hot Posts Widget */}
-          <Card className="border-none shadow-[0_2px_12px_rgba(0,0,0,0.03)] bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="space-y-4 px-5 pt-5 pb-4">
+          {/* Hot Posts Widget - Real Data from DB */}
+          <Card className="border-none shadow-[0_2px_12px_rgba(0,0,0,0.03)] bg-white rounded-3xl overflow-hidden gap-0 py-0">
+            <CardHeader className="space-y-2 px-5 pt-3 pb-2 gap-0">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-orange-500" />
+                <CardTitle className="text-base font-black text-gray-900 flex items-center gap-2.5">
+                  <Sparkles className="h-5 w-5 text-orange-500" />
                   Bài viết nổi bật
                 </CardTitle>
               </div>
               
-              <div className="flex bg-gray-100/80 p-1 rounded-xl">
+              <div className="flex bg-gray-100/80 p-1.5 rounded-xl">
                 <button 
                   onClick={() => setHotTab("day")}
-                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${hotTab === "day" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                  className={`flex-1 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${hotTab === "day" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
                 >
                   Ngày
                 </button>
                 <button 
                   onClick={() => setHotTab("week")}
-                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${hotTab === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                  className={`flex-1 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${hotTab === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
                 >
                   Tuần
                 </button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-6">
-              {(hotTab === "day" ? [
-                { id: 1, title: "Kinh nghiệm bón phân cho Sầu Riêng mùa hạn mặn...", author: "Minh Trần", likes: 128, comments: 45 },
-                { id: 2, title: "Giá cà phê hôm nay lập đỉnh mới tại Đắk Lắk", author: "Hòa Bình", likes: 95, comments: 22 },
-                { id: 3, title: "Cảnh báo sâu đục thân trên diện rộng tại Tiền Giang", author: "Phòng Nông Nghiệp", likes: 88, comments: 18 }
-              ] : [
-                { id: 4, title: "Tổng kết mùa vụ lúa ST25: Năng suất vượt mong đợi", author: "Thanh Nam", likes: 450, comments: 112 },
-                { id: 5, title: "Cẩm nang xuất khẩu nông sản sang thị trường Trung Quốc", author: "AgroAI Expert", likes: 320, comments: 89 },
-                { id: 6, title: "Top 10 đại lý uy tín nhất khu vực Miền Tây", author: "Cộng Đồng", likes: 280, comments: 64 }
-              ]).map((item, idx) => (
-                <div key={item.id} className="group cursor-pointer">
-                  <div className="flex gap-3 mb-1">
-                    <span className="text-xs font-black text-gray-300 group-hover:text-primary transition-colors">0{idx + 1}</span>
-                    <p className="text-[13px] font-bold text-gray-800 line-clamp-2 leading-tight group-hover:text-primary transition-colors">
-                      {item.title}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between pl-7">
-                    <span className="text-[10px] font-bold text-gray-400">@{item.author}</span>
-                    <div className="flex items-center gap-3 text-[10px] font-bold text-gray-400">
-                      <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" /> {item.likes}</span>
-                      <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {item.comments}</span>
-                    </div>
-                  </div>
-                  {idx < 2 && <div className="mt-3 border-b border-gray-50"></div>}
+            <CardContent className="px-5 pb-5">
+              {loadingFeatured ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="h-6 w-6 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
                 </div>
-              ))}
-              <Button variant="ghost" className="w-full mt-2 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 rounded-xl">
-                Xem tất cả xu hướng
-              </Button>
+              ) : featuredPosts.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Sparkles className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400 font-bold">Chưa có bài nổi bật</p>
+                </div>
+              ) : (
+                featuredPosts.map((item, idx) => {
+                  const diffMs = Date.now() - new Date(item.created_at).getTime();
+                  const diffMin = Math.floor(diffMs / 60000);
+                  const diffHr = Math.floor(diffMin / 60);
+                  const diffDay = Math.floor(diffHr / 24);
+                  const timeAgo = diffMin < 1 ? "Vừa xong" : diffMin < 60 ? `${diffMin}p` : diffHr < 24 ? `${diffHr}h` : `${diffDay}d`;
+                  
+                  const title = (item.content || "").replace(/[\n\r]+/g, " ").slice(0, 60) + ((item.content || "").length > 60 ? "..." : "");
+                  const roleBadge = item.author_role === "admin" ? "Admin" : item.author_role === "dealer" ? "Đại lý" : null;
+                  const isNew = diffHr < 2;
+
+                  return (
+                    <div key={item.id} onClick={() => {
+                      const el = document.getElementById(`post-${item.id}`);
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }} className="group cursor-pointer rounded-xl hover:bg-gray-50/80 px-3 py-2.5 -mx-1 transition-all outline-none focus:outline-none">
+                      <div className="flex gap-3 items-start">
+                        <span className={`text-base font-black tabular-nums leading-none mt-0.5 ${idx === 0 ? "text-orange-500" : idx === 1 ? "text-gray-400" : "text-gray-300"}`}>
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-1.5">
+                            <p className="text-[13px] font-bold text-gray-800 line-clamp-1 leading-snug group-hover:text-green-700 transition-colors flex-1">
+                              {title}
+                            </p>
+                            {isNew && (
+                              <span className="shrink-0 px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-black uppercase rounded-md animate-pulse">
+                                Mới
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-4 w-4 rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+                                {item.avatar_url ? (
+                                  <img src={item.avatar_url} className="h-full w-full object-cover" alt="" />
+                                ) : (
+                                  <span className="flex items-center justify-center h-full w-full text-[6px] font-black text-gray-400">{item.author_name?.[0]}</span>
+                                )}
+                              </div>
+                              <span className="text-[11px] font-bold text-gray-400 truncate max-w-[70px]">{item.author_name}</span>
+                              {roleBadge && (
+                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${item.author_role === "admin" ? "bg-purple-50 text-purple-600" : "bg-blue-50 text-blue-600"}`}>
+                                  {roleBadge}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-gray-300">· {timeAgo}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
+                              <span className="flex items-center gap-0.5"><ThumbsUp className="h-3 w-3" /> {item.likes || 0}</span>
+                              <span className="flex items-center gap-0.5"><MessageCircle className="h-3 w-3" /> {item.comments_count || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
 
           {/* Top Dealers Widget */}
-          <Card className="border-none shadow-[0_2px_12px_rgba(0,0,0,0.03)] bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="pb-3 px-5 pt-5">
-              <CardTitle className="text-sm font-black text-gray-900 flex items-center gap-2">
-                <Users className="h-4 w-4 text-primary" />
-                Top Dealers
-              </CardTitle>
+          <Card className="border-none shadow-[0_2px_12px_rgba(0,0,0,0.03)] bg-white rounded-3xl overflow-hidden gap-0 py-0">
+            <CardHeader className="space-y-0 px-5 pt-3 pb-2 gap-0">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-black text-gray-900 flex items-center gap-2.5">
+                  <Users className="h-5 w-5 text-primary" />
+                  Danh sách Đại Lý
+                </CardTitle>
+                <span className="text-xs font-bold text-gray-400">{dealers.length} đại lý</span>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-5">
-              {dealers.slice(0, 3).map((dealer) => (
-                <div key={dealer.id} className="flex items-center justify-between group cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden border border-gray-100 group-hover:scale-105 transition-transform shadow-sm">
-                      {dealer.avatar_url ? (
-                        <img src={dealer.avatar_url} className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="text-xs font-black text-gray-400">{dealer.name?.[0]}</span>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-gray-900 group-hover:text-primary transition-colors">{dealer.name}</p>
-                      <div className="flex items-center gap-1">
-                        <div className="flex text-[9px]">
-                           {[1,2,3,4,5].map(i => <Star key={i} className="h-2 w-2 fill-orange-400 text-orange-400" />)}
+            <CardContent className="px-5 pb-4">
+              {dealers.length === 0 ? (
+                <div className="py-6 text-center">
+                  <Users className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400 font-bold">Chưa có đại lý</p>
+                </div>
+              ) : (
+                <>
+                  {dealers.slice(dealerPage * DEALERS_PER_PAGE, (dealerPage + 1) * DEALERS_PER_PAGE).map((dealer, idx) => (
+                    <div key={dealer.id} className="group cursor-pointer rounded-xl hover:bg-gray-50/80 px-3 py-2 -mx-1 transition-all outline-none">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black tabular-nums text-gray-300 w-5 text-right">
+                          {String(dealerPage * DEALERS_PER_PAGE + idx + 1).padStart(2, '0')}
+                        </span>
+                        <div className="h-7 w-7 rounded-full bg-gray-100 overflow-hidden border border-gray-200 shrink-0">
+                          {dealer.avatar_url ? (
+                            <img src={dealer.avatar_url} className="h-full w-full object-cover" alt="" />
+                          ) : (
+                            <span className="flex items-center justify-center h-full w-full text-[8px] font-black text-gray-400">{dealer.name?.[0]}</span>
+                          )}
                         </div>
-                        <span className="text-[9px] font-bold text-gray-400">4.9 (2.1k)</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-bold text-gray-800 truncate group-hover:text-primary transition-colors">{dealer.name}</p>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/chat?userId=${dealer.id}&name=${encodeURIComponent(dealer.name)}&avatar=${encodeURIComponent(dealer.avatar_url || '')}`);
+                          }}
+                          className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all active:scale-90 shrink-0"
+                          title={`Chat với ${dealer.name}`}
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <button className="h-7 w-7 rounded-lg bg-green-50 text-green-600 flex items-center justify-center hover:bg-green-600 hover:text-white transition-all active:scale-90">
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-              <Button variant="outline" className="w-full mt-2 rounded-2xl text-[10px] font-black uppercase tracking-widest h-10 border-gray-100 hover:bg-gray-50 transition-all">
-                Xem tất cả đại lý
-              </Button>
+                  ))}
+                  
+                  {/* Pagination */}
+                  {dealers.length > DEALERS_PER_PAGE && (
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-50">
+                      <button 
+                        onClick={() => setDealerPage(p => Math.max(0, p - 1))}
+                        disabled={dealerPage === 0}
+                        className="text-xs font-black text-gray-400 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1 rounded-lg hover:bg-gray-50"
+                      >
+                        ← Trước
+                      </button>
+                      <span className="text-[10px] font-bold text-gray-400">
+                        {dealerPage + 1} / {Math.ceil(dealers.length / DEALERS_PER_PAGE)}
+                      </span>
+                      <button 
+                        onClick={() => setDealerPage(p => Math.min(Math.ceil(dealers.length / DEALERS_PER_PAGE) - 1, p + 1))}
+                        disabled={dealerPage >= Math.ceil(dealers.length / DEALERS_PER_PAGE) - 1}
+                        className="text-xs font-black text-gray-400 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1 rounded-lg hover:bg-gray-50"
+                      >
+                        Tiếp →
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 

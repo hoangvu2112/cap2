@@ -375,6 +375,22 @@ const initDB = async () => {
 `)
     console.log("✅ Bảng 'community_likes' đã sẵn sàng.")
 
+    // B-Tree Indexes cho tối ưu query bài viết nổi bật
+    const indexQueries = [
+      // Index composite cho featured posts: lọc theo thời gian + sort theo engagement
+      `CREATE INDEX IF NOT EXISTS idx_posts_created_at ON community_posts(created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_posts_likes ON community_posts(likes DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_posts_user_created ON community_posts(user_id, created_at DESC)`,
+      // Index cho đếm comments nhanh (thay vì full scan)
+      `CREATE INDEX IF NOT EXISTS idx_comments_post_deleted ON community_comments(post_id, deleted_at)`,
+      // Index cho likes lookup
+      `CREATE INDEX IF NOT EXISTS idx_likes_post_user ON community_likes(post_id, user_id)`,
+    ]
+    for (const q of indexQueries) {
+      try { await pool.query(q) } catch (e) { /* index đã tồn tại */ }
+    }
+    console.log("✅ B-Tree indexes cho community đã sẵn sàng.")
+
     // Bảng lưu session chat
     await pool.query(`
   CREATE TABLE IF NOT EXISTS direct_message_conversations (

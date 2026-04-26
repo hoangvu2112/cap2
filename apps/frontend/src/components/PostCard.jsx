@@ -15,7 +15,7 @@ import { motion } from "framer-motion";
 import EditPostModal from "@/components/EditPostModal";
 
 
-export default function PostCard({ post, onDelete, onUpdate }) {
+export default function PostCard({ post, onDelete, onUpdate, onLike }) {
     const { user } = useAuth();
     const [showComments, setShowComments] = useState(false);
     const [likes, setLikes] = useState(post.likes || 0);
@@ -56,7 +56,17 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         }
     }
 
-    const getFullUrl = (url) => url?.startsWith('http') ? url : `${BACKEND_URL}${url?.startsWith('/') ? '' : '/'}${url}`
+    const getFullUrl = (url) => {
+      if (!url) return '';
+      if (url.startsWith('http')) return url;
+      const full = `${BACKEND_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+      // Thêm token cho ảnh protected
+      if (url.includes('/uploads/')) {
+        const token = localStorage.getItem('token');
+        return token ? `${full}?token=${token}` : full;
+      }
+      return full;
+    }
 
     // ⭐ ESC Key Fix
     useEffect(() => {
@@ -84,7 +94,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         try {
             const res = await api.post(`/community/posts/${post.id}/like`);
             setLiked(res.data.liked);
-            setLikes((prev) => prev + (res.data.liked ? 1 : -1));
+            setLikes((prev) => Math.max(0, prev + (res.data.liked ? 1 : -1)));
+            onLike?.();
         } catch (err) {
             console.error("Lỗi like:", err);
         }
@@ -150,7 +161,18 @@ export default function PostCard({ post, onDelete, onUpdate }) {
 
                             {/* Info */}
                             <div>
-                                <div className="text-sm font-bold text-gray-900">{post.author_name}</div>
+                                <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                    {post.author_name}
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                        post.author_role === "admin" 
+                                            ? "bg-purple-50 text-purple-600" 
+                                            : post.author_role === "dealer" 
+                                                ? "bg-blue-50 text-blue-600" 
+                                                : "bg-green-50 text-green-600"
+                                    }`}>
+                                        {post.author_role === "admin" ? "Admin" : post.author_role === "dealer" ? "Đại Lý" : "Nông Dân"}
+                                    </span>
+                                </div>
                                 <div className="text-[10px] text-gray-400 uppercase font-medium">
                                     {formatDistanceToNow(new Date(post.created_at), {
                                         addSuffix: true,
@@ -251,12 +273,12 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                         <div className="flex items-center border-t border-gray-100 pt-1">
                             <button
                                 onClick={toggleLike}
-                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95 ${liked ? 'text-blue-600 bg-blue-50/50' : 'text-gray-600 hover:bg-gray-50'}`}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95 ${liked ? 'text-[#0866FF] bg-blue-50/50' : 'text-gray-600 hover:bg-gray-50'}`}
                             >
-                                <ThumbsUp className={`h-6 w-6 ${liked ? 'fill-current' : ''}`} />
+                                <ThumbsUp className={`h-6 w-6 ${liked ? 'fill-[#0866FF] stroke-[#0866FF]' : 'stroke-current'}`} />
                                 <div className="flex flex-col items-start leading-none">
                                     <span className="text-sm font-bold">Thích</span>
-                                    <span className="text-[10px] opacity-70">{likes || '0'}</span>
+                                    <span className="text-[10px] font-bold">{likes > 0 ? likes : ''}</span>
                                 </div>
                             </button>
 

@@ -20,7 +20,7 @@ import newsRoutes from "./routes/news.js";
 import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js";
 import favoritesRouter from "./routes/favorites.js";
 import costRoutes from "./routes/costs.js";
-import chatbotRoutes from "./routes/chatbot.js";
+// chatbotRoutes removed — merged into /api/chat (same module, was duplicate)
 import statsRoutes from "./routes/stats.js";
 import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
@@ -45,7 +45,23 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Protected uploads — phải đăng nhập mới xem được ảnh
+app.use("/uploads", (req, res, next) => {
+  // Lấy token từ header hoặc query param (img src không gửi được header)
+  const authHeader = req.headers["authorization"]
+  const token = (authHeader && authHeader.split(" ")[1]) || req.query.token
+  
+  if (!token) {
+    return res.status(401).json({ error: "Cần đăng nhập để xem ảnh" })
+  }
+  
+  try {
+    jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production")
+    next()
+  } catch {
+    return res.status(403).json({ error: "Token không hợp lệ" })
+  }
+}, express.static(path.join(__dirname, "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -60,7 +76,7 @@ app.use("/api/news", newsRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/favorites", favoritesRouter);
 app.use("/api/costs", costRoutes);
-app.use("/api/chatbot", chatbotRoutes);
+// /api/chatbot removed — use /api/chat instead (same chatbot module)
 app.use("/api/stats", statsRoutes); 
 app.use("/api/chat", chatRouter);
 app.use("/api/purchase-requests", purchaseRequestRoutes);
@@ -242,7 +258,8 @@ async function checkAndScrapeIfNeeded() {
       );
 
       if (!oldRegion) {
-        // console.log(`⏩ [Scraper] Bỏ qua vùng mới phát hiện: ${region.name} (${region.region})`);
+        console.log(`✨ [Scraper] Phát hiện vùng mới: ${region.name} (${region.region}). Đang thêm vào hệ thống.`);
+        oldData.regions.push(region);
         continue;
       }
 
@@ -306,10 +323,10 @@ function removeDuplicateRows(arr) {
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
 setTimeout(() => {
-  cron.schedule("0 */8 * * *", async () => {
+  cron.schedule("0 * * * *", async () => {
     await checkAndScrapeIfNeeded();
   });
-  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 5 phút).");
+  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi giờ).");
 
   cron.schedule("17 */6 * * *", async () => {
     await syncChatbotKnowledge({ reason: "scheduled", io });
