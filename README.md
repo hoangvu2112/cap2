@@ -4,6 +4,106 @@
 
 Mục tiêu: cung cấp công cụ cho nông dân, thương nhân/đại lý và người quan tâm theo dõi và giao dịch nông sản.
 
+---
+
+## 🔀 **BRANCH & TEAM COLLABORATION GUIDE**
+
+### 📍 **Active Branches**
+| Branch | Purpose | Status | Last Updated |
+|--------|---------|--------|---------------|
+| **Quoc** | 🎯 Main Development Branch | ✅ Active | 03/05/2026 |
+| **Kien** | 👤 Developer Branch | 🔄 In Progress | - |
+| **main** | 🚀 Production Release | ⏸️ Backup | - |
+
+### 🎯 **Current Branch: Quoc**
+- ✅ **Latest Code** - All updates pushed here
+- ✅ **Production Ready** - Fully functional features
+- ✅ **Team Working** - Multiple developers can pull from here
+- ✅ **Change Tracking** - See `UPDATE_CHANGES.md` for detailed updates
+
+### 📋 **How to Get Latest Code**
+
+#### **Option 1: Fresh Clone (First Time)**
+```bash
+git clone https://github.com/hoangvu2112/cap2.git
+cd cap2
+git checkout Quoc  # Make sure you're on Quoc branch
+npm install
+npm run dev
+```
+
+#### **Option 2: Update Existing Local Code**
+```bash
+git fetch origin
+git checkout Quoc
+git pull origin Quoc
+npm install  # If dependencies changed
+npm run dev
+```
+
+#### **Option 3: Create Personal Dev Branch from Quoc**
+```bash
+git checkout Quoc
+git pull origin Quoc
+git checkout -b Kien  # or your-name-branch
+# Work on your changes...
+git push origin Kien  # Push to your personal branch
+```
+
+### 📊 **Latest Updates (03/05/2026)**
+- ✅ **52 files modified** - Major features updated
+- ✅ **All features integrated** - Backend + Frontend complete
+- ✅ **AI Service updated** - Latest model configuration
+- ✅ **Database schema optimized** - Better performance
+- ✅ **UI/UX improved** - Better user experience
+- ✅ **Documentation added** - See `UPDATE_CHANGES.md`
+
+### ⚙️ **Setup After Pull**
+```bash
+# 1. Install dependencies
+npm install
+npm install --prefix apps/backend
+npm install --prefix apps/frontend
+
+# 2. Create .env files
+cp apps/backend/.env.example apps/backend/.env
+# Fill in: DB_PASS, JWT_SECRET, SMTP credentials, API keys
+
+# 3. Initialize database
+npm run db:init --prefix apps/backend
+
+# 4. Start development
+npm run dev
+```
+
+### 📝 **Important Files to Review**
+- 📄 `UPDATE_CHANGES.md` - Detailed changelog of all updates
+- 📄 `README.md` - Project documentation
+- 📄 `docs/project-overview.md` - Full project details
+- 🔧 `apps/backend/.env.example` - Backend configuration
+- 🔧 `apps/frontend/vite.config.js` - Frontend build config
+
+### ⚠️ **Critical Notes**
+- ❌ **Don't commit** to `Quoc` directly - Create a personal branch first
+- ✅ **Always pull latest** before starting new work
+- ✅ **Test locally** before pushing changes
+- ✅ **Keep .env files** in `.gitignore` - Never commit credentials
+
+### 🚀 **Deployment Status**
+- ✅ Code Ready: YES
+- ✅ All Dependencies Included: YES
+- ✅ Database Schema: UPDATED
+- ✅ Environment Setup: REQUIRED (see .env.example)
+- ✅ Testing: RECOMMENDED
+
+### 📞 **Need Help?**
+- 📖 Check `UPDATE_CHANGES.md` for detailed feature updates
+- 🔍 Review `docs/project-overview.md` for architecture
+- 💬 Check comments in backend/frontend code
+- 📝 See `.env.example` for required configurations
+
+---
+
 <!-- Nội dung chi tiết project (đã gộp từ docs/project-overview.md) -->
 
 # Tổng quan dự án — AgriTrend / Agricultural Price Tracker
