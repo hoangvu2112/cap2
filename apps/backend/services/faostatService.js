@@ -33,7 +33,15 @@ function getFaoItemCode(productName) {
     if (nameStr.includes("lúa") || nameStr.includes("gạo")) return '27'; // Rice, paddy
     // Cà phê (Coffee, green) thường là 656 trong hệ FAO
     if (nameStr.includes("cà phê") || nameStr.includes("cafe")) return '656'; 
-    // Nếu chưa mapping kịp các mã khác (như Sầu Riêng, Tiêu...), tạm thời bỏ qua
+    
+    // Các mặt hàng mới bổ sung
+    if (nameStr.includes("hồ tiêu") || nameStr.includes("tiêu") || nameStr.includes("pepper")) return '687';
+    if (nameStr.includes("hạt điều") || nameStr.includes("điều") || nameStr.includes("cashew")) return '217';
+    if (nameStr.includes("cao su") || nameStr.includes("rubber")) return '836';
+    if (nameStr.includes("sầu riêng") || nameStr.includes("durian")) return '571';
+    if (nameStr.includes("sắn") || nameStr.includes("khoai mì") || nameStr.includes("cassava")) return '125';
+
+    // Nếu chưa mapping kịp các mã khác, tạm thời bỏ qua
     return null;
 }
 

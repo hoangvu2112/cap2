@@ -1,11 +1,11 @@
 import express from "express"
-import { authenticateToken } from "../middleware/auth.js"
+import { authenticateToken, requireRole } from "../middleware/auth.js"
 import pool from "../db.js"
 
 const router = express.Router()
 
 // Lấy danh sách sản phẩm yêu thích của user hiện tại
-router.get("/", authenticateToken, async (req, res) => {
+router.get("/", authenticateToken, requireRole("user"), async (req, res) => {
     const userId = req.user.id
 
     try {
@@ -34,7 +34,7 @@ router.get("/", authenticateToken, async (req, res) => {
 })
 
 // Thêm hoặc bỏ yêu thích (toggle)
-router.post("/:productId", authenticateToken, async (req, res) => {
+router.post("/:productId", authenticateToken, requireRole("user"), async (req, res) => {
     const userId = req.user.id
     const productId = parseInt(req.params.productId)
 

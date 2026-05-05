@@ -11,6 +11,8 @@ const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase()
+
 const verifyGoogleCredential = async (credential) => {
   if (!credential) {
     throw new Error("Missing Google credential")
@@ -81,7 +83,7 @@ const sendOTPEmail = async (to, otp) => {
  */
 router.post("/forgot-password", forgotLimiter, async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body?.email);
     if (!email) return res.status(400).json({ error: "Email bắt buộc" });
 
     // Kiểm tra user tồn tại
@@ -137,7 +139,8 @@ router.post("/forgot-password", forgotLimiter, async (req, res) => {
  */
 router.post("/verify-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const { otp } = req.body
     if (!email || !otp)
       return res.status(400).json({ error: "Email và OTP bắt buộc" })
 
@@ -170,7 +173,8 @@ router.post("/verify-otp", async (req, res) => {
  */
 router.post("/reset-password", async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const { otp, newPassword } = req.body
     if (!email || !otp || !newPassword)
       return res.status(400).json({ error: "Thiếu dữ liệu" })
 
@@ -210,7 +214,7 @@ router.post("/reset-password", async (req, res) => {
  */
 router.get("/otp-status", async (req, res) => {
   try {
-    const { email } = req.query;
+    const email = normalizeEmail(req.query?.email);
     if (!email) return res.status(400).json({ error: "Email bắt buộc" });
 
     const [[user]] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
@@ -240,11 +244,14 @@ router.get("/otp-status", async (req, res) => {
 // Đăng ký tài khoản (email + password)
 router.post("/register", async (req, res) => {
   try {
-    const { email, password, name } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const { password, name } = req.body
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: "Thiếu thông tin đăng ký" })
     }
+
+    const normalizedRole = "user"
 
     // Kiểm tra email tồn tại
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [email])
@@ -257,15 +264,15 @@ router.post("/register", async (req, res) => {
 
     // Thêm user mới
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, password, avatar_url, role, status, joinDate) VALUES (?, ?, ?, ?, 'user', 'active', CURDATE())",
-      [name, email, hashedPassword, ""]
+      "INSERT INTO users (name, email, password, avatar_url, role, status, joinDate) VALUES (?, ?, ?, ?, ?, 'active', CURDATE())",
+      [name, email, hashedPassword, "", normalizedRole]
     )
 
     const newUser = {
       id: result.insertId,
       email,
       name,
-      role: "user",
+      role: normalizedRole,
     }
 
     // Tạo JWT
@@ -280,7 +287,12 @@ router.post("/register", async (req, res) => {
 // Đăng nhập bằng email + password
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const { password } = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Thiếu email hoặc mật khẩu" })
+    }
 
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [email])
     if (rows.length === 0) {
@@ -324,7 +336,8 @@ router.post("/login", async (req, res) => {
 router.post("/google-login", async (req, res) => {
   try {
     const { credential } = req.body
-    const { email, name, imageUrl, googleId } = await verifyGoogleCredential(credential)
+    const { email: rawEmail, name, imageUrl, googleId } = await verifyGoogleCredential(credential)
+    const email = normalizeEmail(rawEmail)
 
     if (!email) {
       return res.status(400).json({ error: "Không lấy được email từ Google" })

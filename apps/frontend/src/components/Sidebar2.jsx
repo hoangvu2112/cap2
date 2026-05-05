@@ -25,16 +25,28 @@ import {
   TrendingDown,
   Minus,
   Shield,
+  ShieldCheck,
+  Handshake,
+  MessageSquare,
 } from "lucide-react"
 
 const USER_NAV = [
-  { path: "/", icon: Home, label: "Bảng giá" },
+  { path: "/", icon: Home, label: "Trang chủ" },
+  { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
+  { path: "/community", icon: Users, label: "Cộng đồng" },
+  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
   { path: "/news", icon: Newspaper, label: "Tin tức" },
   { path: "/favorites", icon: Heart, label: "Yêu thích" },
   { path: "/alerts", icon: Bell, label: "Cảnh báo" },
-  { path: "/compare", icon: BarChart3, label: "So sánh" },
-  { path: "/community", icon: Users, label: "Cộng đồng" },
   { path: "/map", icon: Map, label: "Bản đồ giá" },
+]
+
+const DEALER_NAV = [
+  { path: "/", icon: Home, label: "Trang chủ" },
+  { path: "/negotiation", icon: Users, label: "Thương lượng" },
+  { path: "/community", icon: Users, label: "Cộng đồng" },
+  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
+  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
 ]
 
 const ADMIN_NAV = [
@@ -43,6 +55,7 @@ const ADMIN_NAV = [
   { path: "/admin/users", icon: Users, label: "Người dùng" },
   { path: "/admin/news", icon: Newspaper, label: "Tin tức" },
   { path: "/admin/statistics", icon: BarChart3, label: "Thống kê" },
+  { path: "/admin/dealers", icon: ShieldCheck, label: "Đại lý" },
   { path: "/admin/settings", icon: Settings, label: "Cài đặt" },
 ]
 
@@ -88,6 +101,7 @@ export default function Sidebar2() {
   }
 
   const isActive = (path) => location.pathname === path
+  const roleNav = user?.role === "dealer" ? DEALER_NAV : USER_NAV
 
   return (
     <aside
@@ -124,7 +138,7 @@ export default function Sidebar2() {
           </p>
         )}
 
-        {USER_NAV.map((item) => {
+        {roleNav.map((item) => {
           const active = isActive(item.path)
           return (
             <Link
@@ -186,7 +200,7 @@ export default function Sidebar2() {
           </>
         )}
 
-        {!collapsed && watchlist.length > 0 && (
+        {!collapsed && user?.role !== "dealer" && watchlist.length > 0 && (
           <>
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-5 pb-2">
               <Star className="w-3 h-3 inline mr-1" />
@@ -261,7 +275,11 @@ export default function Sidebar2() {
                   {user.name || user.email}
                 </p>
                 <p className="text-[10px] text-muted-foreground capitalize">
-                  {user.role === "admin" ? "Quản trị viên" : user.role || "Người dùng"}
+                  {user.role === "admin"
+                    ? "Quản trị viên"
+                    : user.role === "dealer"
+                    ? "Đại lý"
+                    : "Nông dân"}
                 </p>
               </div>
             )}

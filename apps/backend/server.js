@@ -23,8 +23,15 @@ import costRoutes from "./routes/costs.js";
 import chatbotRoutes from "./routes/chatbot.js";
 import statsRoutes from "./routes/stats.js";
 import chatRouter from "./routes/chat.js";
+import purchaseRequestRoutes from "./routes/purchaseRequests.js";
+import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
 import pool from "./db.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import { syncProducts } from "./cron/syncProducts.js";
+import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
+import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -38,6 +45,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -55,6 +63,8 @@ app.use("/api/costs", costRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/stats", statsRoutes); 
 app.use("/api/chat", chatRouter);
+app.use("/api/purchase-requests", purchaseRequestRoutes);
+app.use("/api/dealer-upgrade", dealerUpgradeRoutes);
 
 io.use((socket, next) => {
   try {
@@ -169,8 +179,6 @@ cron.schedule("*/5 * * * *", async () => {
 });
 
 // Cấu hình đường dẫn file scrape
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const SCRAPED_FILE = path.join(process.cwd(), "scraped/all_regions.json");
 const TEMP_FILE = path.join(__dirname, "./scraped/temp_check.json");
 const scrapePath = path.join(__dirname, "./scraped/scrape.js");
@@ -271,6 +279,9 @@ async function checkAndScrapeIfNeeded() {
     console.log("✅ Đồng bộ DB...");
     await syncProducts(io);
 
+    console.log("🧠 Đồng bộ tri thức chatbot...");
+    await syncChatbotKnowledge({ reason: "post-scrape", io });
+
   } catch (err) {
     console.error("❌ Lỗi checkAndScrapeIfNeeded:", err);
   } finally {
@@ -290,6 +301,7 @@ function removeDuplicateRows(arr) {
 
 (async () => {
   await checkAndScrapeIfNeeded();
+  await checkDealerExpiration();
 })();
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
@@ -298,6 +310,16 @@ setTimeout(() => {
     await checkAndScrapeIfNeeded();
   });
   console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 5 phút).");
+
+  cron.schedule("17 */6 * * *", async () => {
+    await syncChatbotKnowledge({ reason: "scheduled", io });
+  });
+  console.log("⏱️ Cron đồng bộ chatbot đã bật (chạy mỗi 6 giờ).")
+
+  cron.schedule("0 * * * *", async () => {
+    await checkDealerExpiration();
+  });
+  console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;
@@ -305,7 +327,10 @@ const startServer = async () => {
   try {
     await pool.query("SELECT 1");
     console.log("✅ MySQL connected!");
-    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📂 Current Working Directory: ${process.cwd()}`);
+    });
   } catch (err) {
     console.error("❌ DB connection failed:", err);
     process.exit(1);

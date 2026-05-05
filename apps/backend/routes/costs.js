@@ -1,11 +1,11 @@
 import express from "express";
 import pool from "../db.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // Lấy TẤT CẢ chi phí của người dùng hiện tại (kèm tên sản phẩm)
-router.get("/", authenticateToken, async (req, res) => {
+router.get("/", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT 
@@ -26,7 +26,7 @@ router.get("/", authenticateToken, async (req, res) => {
 });
 
 // Lấy chi phí cho MỘT sản phẩm cụ thể
-router.get("/:productId", authenticateToken, async (req, res) => {
+router.get("/:productId", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const [rows] = await pool.query(
       "SELECT cost_price FROM user_costs WHERE user_id = ? AND product_id = ?",
@@ -44,7 +44,7 @@ router.get("/:productId", authenticateToken, async (req, res) => {
 });
 
 // Thêm hoặc Cập nhật chi phí (Hàm "Upsert")
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, requireRole("user"), async (req, res) => {
   const { product_id, cost_price } = req.body;
   if (!product_id || cost_price === undefined) {
     return res.status(400).json({ error: "Thiếu product_id hoặc cost_price" });
@@ -72,7 +72,7 @@ router.post("/", authenticateToken, async (req, res) => {
 // ==========================================================
 // --- 🚀 TÍNH NĂNG MỚI: Xóa một chi phí ---
 // ==========================================================
-router.delete("/:productId", authenticateToken, async (req, res) => {
+router.delete("/:productId", authenticateToken, requireRole("user"), async (req, res) => {
   try {
     const [result] = await pool.query(
       "DELETE FROM user_costs WHERE user_id = ? AND product_id = ?",

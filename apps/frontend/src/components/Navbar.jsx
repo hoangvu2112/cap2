@@ -36,14 +36,11 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-1">
             <NavLink to="/" icon={Home} label="Trang chủ" />
-            <NavLink to="/favorites" icon={Heart} label="Yêu thích" />
-            <NavLink to="/alerts" icon={Bell} label="Cảnh báo" />
-            <NavLink to="/compare" icon={BarChart3} label="So sánh" />
+            <NavLink to="/negotiation" icon={Handshake} label="Thương lượng" />
             <NavLink to="/community" icon={Users} label="Cộng đồng" />
-            <NavLink to="/map" icon={Map} label="Bản đồ" />
-          </div>
+            <NavLink to="/chat" icon={MessageSquare} label="Trò chuyện" />
+            <NavLink to="/news" icon={Newspaper} label="Tin tức" />
 
           <div className="flex items-center gap-4">
             {user && (
@@ -84,11 +81,9 @@ export default function Navbar() {
           <div className="md:hidden py-4 border-t border-border/50 bg-background/95 backdrop-blur-md animate-in slide-in-from-top-2">
             <div className="flex flex-col gap-2 p-2">
               <MobileNavLink to="/" icon={Home} label="Trang chủ" onClick={() => setMobileMenuOpen(false)} />
-              <MobileNavLink to="/favorites" icon={Heart} label="Yêu thích" onClick={() => setMobileMenuOpen(false)} />
-              <MobileNavLink to="/alerts" icon={Bell} label="Cảnh báo" onClick={() => setMobileMenuOpen(false)} />
-              <MobileNavLink to="/compare" icon={BarChart3} label="So sánh" onClick={() => setMobileMenuOpen(false)} />
+              <MobileNavLink to="/negotiation" icon={Handshake} label="Thương lượng" onClick={() => setMobileMenuOpen(false)} />
               <MobileNavLink to="/community" icon={Users} label="Cộng đồng" onClick={() => setMobileMenuOpen(false)} />
-              <MobileNavLink to="/map" icon={Map} label="Bản đồ giá" onClick={() => setMobileMenuOpen(false)} />
+              <MobileNavLink to="/chat" icon={MessageSquare} label="Trò chuyện" onClick={() => setMobileMenuOpen(false)} />
               <MobileNavLink to="/profile" icon={User} label="Hồ sơ" onClick={() => setMobileMenuOpen(false)} />
 
               <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg w-full transition-colors">

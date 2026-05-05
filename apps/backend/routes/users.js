@@ -4,6 +4,36 @@ import pool from "../db.js"
 
 const router = express.Router()
 
+// 🧑‍💻 Lấy thông tin cá nhân hiện tại
+router.get("/me", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, name, email, avatar_url, region, role, status FROM users WHERE id = ?",
+      [req.user.id]
+    )
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Không tìm thấy người dùng" })
+    }
+    res.json(rows[0])
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy thông tin user:", error)
+    res.status(500).json({ error: "Lỗi server khi lấy thông tin" })
+  }
+})
+
+// 🧑‍💻 Lấy danh sách đại lý (Public)
+router.get("/dealers", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, name, avatar_url, region FROM users WHERE role = 'dealer' AND status = 'active' LIMIT 5"
+    )
+    res.json(rows)
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy danh sách đại lý:", error)
+    res.status(500).json({ error: "Lỗi server" })
+  }
+})
+
 // 🧑‍💻 Người dùng tự cập nhật thông tin cá nhân
 // ⚠️ Đặt TRƯỚC các route có "/:id"
 router.put("/me", authenticateToken, async (req, res) => {
@@ -11,13 +41,14 @@ router.put("/me", authenticateToken, async (req, res) => {
     console.log("📥 Dữ liệu nhận được:", req.body)
     console.log("👤 User ID:", req.user.id)
 
-    const { name, avatar_url } = req.body
+    const { name, avatar_url, region } = req.body
     const [result] = await pool.query(
       `UPDATE users SET 
         name = COALESCE(?, name),
-        avatar_url = COALESCE(?, avatar_url)
+        avatar_url = COALESCE(?, avatar_url),
+        region = COALESCE(?, region)
        WHERE id = ?`,
-      [name, avatar_url, req.user.id]
+      [name, avatar_url, region, req.user.id]
     )
 
     if (result.affectedRows === 0) {
@@ -25,7 +56,7 @@ router.put("/me", authenticateToken, async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      "SELECT id, name, email, avatar_url FROM users WHERE id = ?",
+      "SELECT id, name, email, avatar_url, region, role, status FROM users WHERE id = ?",
       [req.user.id]
     )
     res.json(rows[0])

@@ -3,7 +3,7 @@
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { useLayout } from "../context/LayoutContext"
-import { LayoutDashboard, Package, Users, Newspaper, BarChart3, Settings, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, Package, Users, Newspaper, BarChart3, Settings, LogOut, Menu, X, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 
 export default function AdminNavbar() {
@@ -30,6 +30,7 @@ export default function AdminNavbar() {
     { path: "/admin/users", icon: Users, label: "Người dùng" },
     { path: "/admin/news", icon: Newspaper, label: "Tin tức" },
     { path: "/admin/statistics", icon: BarChart3, label: "Thống kê" },
+    { path: "/admin/dealers", icon: ShieldCheck, label: "Đại lý" },
     { path: "/admin/settings", icon: Settings, label: "Cài đặt" },
   ]
 

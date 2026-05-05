@@ -1,10 +1,38 @@
 import express from "express"
 import pool from "../db.js"
 import { authenticateToken } from "../middleware/auth.js"
+import multer from "multer"
+import path from "path"
+import fs from "fs"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
 export const ioRef = { io: null }
+
+// Cấu hình Multer để lưu ảnh
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Trỏ vào thư mục uploads ở cùng cấp với thư mục routes hoặc apps/backend/uploads
+    const uploadPath = path.join(__dirname, "../uploads")
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true })
+    }
+    cb(null, uploadPath)
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
+    cb(null, "post-" + uniqueSuffix + path.extname(file.originalname))
+  },
+})
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 20 * 1024 * 1024 } // Giới hạn 20MB
+})
 
 const parseTags = (value) => {
   if (!value) return []
@@ -353,7 +381,8 @@ router.get("/posts", async (req, res) => {
 
     const [rows] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, u.name AS author_name, u.avatar_url,
+        (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         ${where}
@@ -376,18 +405,36 @@ router.get("/posts", async (req, res) => {
   }
 })
 
-router.post("/posts", authenticateToken, async (req, res) => {
+router.post("/posts", authenticateToken, upload.array("images", 10), async (req, res) => {
   try {
     const userId = req.user.id
     const { content, tags } = req.body
+    
+    const logData = `[${new Date().toISOString()}] POST /posts (Multi-Upload)\nBody: ${JSON.stringify(req.body)}\nFiles: ${JSON.stringify(req.files)}\n---\n`;
+    fs.appendFileSync(path.join(__dirname, "../logs/debug.log"), logData);
+    
+    console.log("POST /posts body:", req.body)
+    console.log("POST /posts files:", req.files)
+    
+    // Thu thập tất cả URL ảnh
+    let imageUrls = []
+    if (req.files && req.files.length > 0) {
+      imageUrls = req.files.map(file => `/uploads/${file.filename}`)
+    } else if (req.body.imageUrl) {
+      imageUrls = [req.body.imageUrl]
+    }
 
     if (!content?.trim()) {
       return res.status(400).json({ error: "Nội dung không được để trống" })
     }
 
+    const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
+    // Lưu danh sách ảnh dưới dạng JSON string
+    const imagesToSave = JSON.stringify(imageUrls)
+
     const [result] = await pool.query(
-      "INSERT INTO community_posts (user_id, content, tags) VALUES (?, ?, ?)",
-      [userId, content, JSON.stringify(tags || [])]
+      "INSERT INTO community_posts (user_id, content, tags, image_url) VALUES (?, ?, ?, ?)",
+      [userId, content, tagsToSave, imagesToSave]
     )
 
     const [[newPost]] = await pool.query(
@@ -401,6 +448,7 @@ router.post("/posts", authenticateToken, async (req, res) => {
     )
 
     newPost.tags = parseTags(newPost.tags)
+    // Client side will parse image_url
     ioRef.io?.emit("community:new_post", newPost)
 
     res.status(201).json({ message: "Đã tạo bài viết", data: newPost })
@@ -449,11 +497,11 @@ router.get("/posts/:id", async (req, res) => {
   }
 })
 
-router.put("/posts/:id", authenticateToken, async (req, res) => {
+router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (req, res) => {
   try {
     const postId = req.params.id
     const userId = req.user.id
-    const { content, tags } = req.body
+    const { content, tags, image_url } = req.body
 
     const [[post]] = await pool.query(
       "SELECT user_id FROM community_posts WHERE id = ?",
@@ -468,9 +516,28 @@ router.put("/posts/:id", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Không có quyền sửa bài" })
     }
 
+    // 1. Lấy danh sách ảnh cũ được giữ lại
+    let finalImageUrls = []
+    if (image_url) {
+      try {
+        const parsed = JSON.parse(image_url)
+        finalImageUrls = Array.isArray(parsed) ? parsed : [parsed]
+      } catch {
+        finalImageUrls = [image_url]
+      }
+    }
+
+    // 2. Thêm các ảnh mới được upload (nếu có)
+    if (req.files && req.files.length > 0) {
+      const newUrls = req.files.map(file => `/uploads/${file.filename}`)
+      finalImageUrls = [...finalImageUrls, ...newUrls]
+    }
+
+    const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
+
     await pool.query(
-      "UPDATE community_posts SET content = ?, tags = ? WHERE id = ?",
-      [content, JSON.stringify(tags || []), postId]
+      "UPDATE community_posts SET content = ?, tags = ?, image_url = ? WHERE id = ?",
+      [content, tagsToSave, JSON.stringify(finalImageUrls), postId]
     )
 
     const [[updated]] = await pool.query(
@@ -633,11 +700,17 @@ router.delete("/posts/:postId/comments/:commentId", authenticateToken, async (re
       return res.status(403).json({ error: "Không có quyền xoá bình luận" })
     }
 
-    await pool.query("DELETE FROM community_comments WHERE id = ?", [commentId])
+    // 1. Soft Delete the comment
+    await pool.query(
+      "UPDATE community_comments SET deleted_at = NOW() WHERE id = ?",
+      [commentId]
+    );
+
+    // 2. Decrement comments_count in post (legacy counter)
     await pool.query(
       "UPDATE community_posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = ?",
       [postId]
-    )
+    );
 
     ioRef.io?.emit("community:comment_deleted", {
       postId,
@@ -662,7 +735,7 @@ router.get("/posts/:postId/comments", async (req, res) => {
         SELECT c.*, u.name AS author_name, u.avatar_url
         FROM community_comments c
         LEFT JOIN users u ON c.user_id = u.id
-        WHERE c.post_id = ?
+        WHERE c.post_id = ? AND c.deleted_at IS NULL
         ORDER BY c.id DESC
         LIMIT ? OFFSET ?
       `,
@@ -733,6 +806,94 @@ router.get("/posts/:id/like-status", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("GET like-status error:", error)
     res.status(500).json({ error: "Lỗi máy chủ" })
+  }
+})
+
+// --- AI Comment Generation ---
+async function callGroqChat(messages) {
+  if (!process.env.GROQ_API_KEY) return null
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        temperature: 0.7,
+        max_tokens: 150
+      }),
+    })
+    const data = await response.json()
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } catch (err) {
+    console.error("Groq AI Error:", err)
+    return null
+  }
+}
+
+async function callOpenAIChat(messages) {
+  if (!process.env.OPENAI_API_KEY) return null
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
+        messages,
+        temperature: 0.7,
+        max_tokens: 150
+      }),
+    })
+    const data = await response.json()
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } catch (err) {
+    console.error("OpenAI Error:", err)
+    return null
+  }
+}
+
+router.post("/ai-generate-comment", authenticateToken, async (req, res) => {
+  try {
+    const { postContent } = req.body
+    if (!postContent) {
+      return res.status(400).json({ error: "Thiếu nội dung bài viết" })
+    }
+
+    const systemPrompt = `
+      Bạn là một nông dân Việt Nam thân thiện, am hiểu về nông nghiệp.
+      Hãy viết một bình luận ngắn gọn (dưới 30 từ), tích cực và liên quan đến nội dung bài đăng được cung cấp.
+      Ngôn ngữ: Tiếng Việt, sử dụng văn phong gần gũi của người nông dân.
+      Không sử dụng hashtag, không sử dụng icon quá đà.
+    `
+
+    const userPrompt = `Nội dung bài đăng: "${postContent}"`
+
+    let reply = await callGroqChat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ])
+
+    if (!reply) {
+      reply = await callOpenAIChat([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ])
+    }
+
+    if (!reply) {
+      return res.status(503).json({ error: "Dịch vụ AI hiện không khả dụng" })
+    }
+
+    res.json({ data: reply })
+  } catch (error) {
+    console.error("AI Generate Comment Error:", error)
+    res.status(500).json({ error: "Lỗi tạo bình luận AI" })
   }
 })
 
