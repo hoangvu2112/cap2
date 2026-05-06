@@ -5,6 +5,7 @@ import { Link } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { Bell } from "lucide-react"
 import api from "@/lib/api"
+import LivePriceTicker from "./live-price-ticker"
 
 export default function Header2() {
   const { user } = useAuth()
@@ -144,6 +145,9 @@ export default function Header2() {
           )}
         </div>
       </div>
+
+      {/* Tích hợp Live Price Ticker vào Header để hiển thị toàn cục */}
+      <LivePriceTicker />
     </header>
   )
 }

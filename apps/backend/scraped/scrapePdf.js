@@ -168,8 +168,8 @@ async function checkAlreadyScraped(pdfUrl) {
   return rows.length > 0;
 }
 
-async function saveToDatabase(pdfInfo, rawText, parsedData) {
-  // 1. Lưu report metadata
+async function saveReportMetadata(pdfInfo, rawText, parsedData) {
+  // Chỉ lưu metadata để theo dõi PDF nào đã cào (tránh cào trùng)
   const [insertReport] = await pool.query(
     `INSERT INTO gov_pdf_reports (pdf_url, category, report_number, report_date, raw_text, parsed_json, status)
      VALUES (?, ?, ?, ?, ?, ?, 'parsed')`,
@@ -182,49 +182,168 @@ async function saveToDatabase(pdfInfo, rawText, parsedData) {
       JSON.stringify(parsedData),
     ]
   );
+  console.log(`   💾 Đã lưu report #${insertReport.insertId} (${pdfInfo.category})`);
+}
 
-  const reportId = insertReport.insertId;
-  console.log(`   💾 Đã lưu report #${reportId} (${pdfInfo.category})`);
+// ===========================
+// 💾 Đồng bộ dữ liệu PDF vào bảng products chung
+// ===========================
 
-  // 2. Lưu từng dòng giá
-  if (!parsedData?.data?.length) {
-    console.log(`   ⚠️ Không có dữ liệu giá để lưu`);
-    return reportId;
-  }
+// Bảng ánh xạ: key = "tên_pdf|vùng" (lowercase) → value = tên sản phẩm trong DB
+const PDF_NAME_MAP = {
+  // Cà phê nhân xô từ PDF gov → map sang tên products đang có
+  "cà phê nhân xô|lâm đồng": "Cà phê Lâm Đồng",
+  "cà phê nhân xô|đắk lắk": "Cà phê Đắk Lắk",
+  "cà phê nhân xô|đắc lắk": "Cà phê Đắk Lắk",
+  "cà phê nhân xô|gia lai": "Cà phê Gia Lai",
+  "cà phê nhân xô|đắk nông": "Cà phê Đắk Nông",
+  "cà phê nhân xô|đắc nông": "Cà phê Đắk Nông",
+  // Sầu riêng
+  "sầu riêng ri6|cần thơ": "Sầu Riêng Ri6",
+  "sầu riêng ri6|đồng tháp": "Sầu Riêng Ri6",
+  // Tiêu
+  "tiêu|gia lai": "Tiêu Gia Lai",
+  "hồ tiêu|gia lai": "Tiêu Gia Lai",
+  "tiêu|bà rịa - vũng tàu": "Tiêu Bà Rịa - Vũng Tàu",
+  "hồ tiêu|bà rịa - vũng tàu": "Tiêu Bà Rịa - Vũng Tàu",
+  "tiêu|đắk lắk": "Tiêu Đắk Lắk",
+  "hồ tiêu|đắk lắk": "Tiêu Đắk Lắk",
+  "tiêu|bình phước": "Tiêu Bình Phước",
+  "hồ tiêu|bình phước": "Tiêu Bình Phước",
+  "tiêu|đắk nông": "Tiêu Đắk Nông",
+  "hồ tiêu|đắk nông": "Tiêu Đắk Nông",
+};
 
-  let savedCount = 0;
+// Chuẩn hóa tên để so khớp mềm (bỏ dấu cách thừa, lowercase)
+function normalizeForMatch(str) {
+  return (str || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Xác định category từ tên sản phẩm
+function detectCategory(productName) {
+  const lower = (productName || "").toLowerCase();
+  if (lower.includes("cà phê") || lower.includes("ca phe")) return "Cà phê";
+  if (lower.includes("tiêu") || lower.includes("hồ tiêu")) return "Hồ tiêu";
+  if (lower.includes("sầu riêng")) return "Sầu riêng";
+  if (lower.includes("lúa") || lower.includes("gạo")) return "Lúa gạo";
+  return "Trái cây";
+}
+
+async function savePdfToProducts(parsedData, reportDate) {
+  if (!parsedData?.data?.length) return;
+
+  console.log(`\n   🔄 [PDF→Products] Đang đồng bộ ${parsedData.data.length} dòng vào products...`);
+  let updated = 0, created = 0, skipped = 0;
 
   for (const item of parsedData.data) {
-    let extraData = null;
+    if (!item.product || !item.currentPrice) { skipped++; continue; }
 
-    // Cà phê: lưu giá từng ngày vào extra_data
-    if (item.dailyPrices) {
-      extraData = JSON.stringify(item.dailyPrices);
+    const pdfProduct = normalizeForMatch(item.product);
+    const pdfRegion = normalizeForMatch(item.region);
+    const mapKey = pdfRegion ? `${pdfProduct}|${pdfRegion}` : pdfProduct;
+
+    // 1. Tra bảng ánh xạ trước
+    let dbProductName = PDF_NAME_MAP[mapKey] || null;
+
+    // 2. Nếu không có trong map → thử tìm trực tiếp trong DB
+    if (!dbProductName) {
+      // Thử tìm product có tên chứa cả product + region
+      const searchName = pdfRegion ? `${item.product} ${item.region}` : item.product;
+      const [found] = await pool.query(
+        "SELECT name FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))",
+        [searchName]
+      );
+      if (found.length > 0) {
+        dbProductName = found[0].name;
+      } else {
+        // Tạo tên mới chuẩn hóa
+        dbProductName = pdfRegion ? `${item.product} ${item.region}` : item.product;
+      }
     }
 
-    // Rau quả: previousPrice có sẵn trong item
-    const previousPrice = item.previousPrice || null;
+    // 3. Xác định category
+    const categoryName = detectCategory(dbProductName);
+    const [catRows] = await pool.query("SELECT id FROM categories WHERE name = ?", [categoryName]);
+    let categoryId;
+    if (catRows.length > 0) categoryId = catRows[0].id;
+    else {
+      const [ins] = await pool.query("INSERT INTO categories (name) VALUES (?)", [categoryName]);
+      categoryId = ins.insertId;
+    }
 
-    await pool.query(
-      `INSERT INTO gov_market_prices 
-       (report_id, product_name, region, current_price, previous_price, price_change, unit, extra_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        reportId,
-        item.product || null,
-        item.region || null,
-        item.currentPrice || null,
-        previousPrice,
-        item.priceChange || null,
-        parsedData.unit || "VND/kg",
-        extraData,
-      ]
+    // 4. Tìm/tạo product
+    const [exists] = await pool.query(
+      "SELECT * FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))", [dbProductName]
     );
-    savedCount++;
+
+    let productId, product;
+    if (exists.length === 0) {
+      const regionVal = item.region || categoryName;
+      const [ins] = await pool.query(
+        "INSERT INTO products (name, category_id, region, currentPrice, previousPrice, trend, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+        [dbProductName, categoryId, regionVal, item.currentPrice, item.previousPrice || item.currentPrice, "stable"]
+      );
+      productId = ins.insertId;
+      product = { id: productId, currentPrice: item.currentPrice, previousPrice: item.currentPrice };
+      created++;
+      console.log(`      🆕 Tạo sản phẩm mới: ${dbProductName}`);
+    } else {
+      product = exists[0];
+      productId = product.id;
+    }
+
+    // 5. Ghi price_history (tránh trùng theo ngày + giá)
+    const priceDate = reportDate || new Date();
+    const dateStr = new Date(priceDate).toISOString().slice(0, 10);
+    const [hist] = await pool.query(
+      "SELECT id FROM price_history WHERE product_id = ? AND DATE(updated_at) = ? AND price = ?",
+      [productId, dateStr, item.currentPrice]
+    );
+
+    if (hist.length === 0) {
+      await pool.query(
+        "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
+        [productId, item.currentPrice, priceDate]
+      );
+      updated++;
+    } else {
+      skipped++;
+    }
+
+    // Luôn cập nhật giá trị vào bảng products để làm mốc tính % thay đổi cho UI
+    const prev = item.previousPrice || product.currentPrice;
+    const trend = item.currentPrice > prev ? "up" : item.currentPrice < prev ? "down" : "stable";
+    await pool.query(
+      "UPDATE products SET previousPrice=?, currentPrice=?, trend=?, lastUpdate=NOW() WHERE id=?",
+      [prev, item.currentPrice, trend, productId]
+    );
+
+    // Chèn/Ghi đè giá cũ vào price_history mốc 7 ngày trước để biểu đồ được mượt và khớp với UI
+    if (item.previousPrice) {
+      const prevDate = new Date(priceDate);
+      prevDate.setDate(prevDate.getDate() - 7);
+      const prevDateStr = prevDate.toISOString().slice(0, 10);
+      
+      const [prevHist] = await pool.query(
+        "SELECT id FROM price_history WHERE product_id = ? AND DATE(updated_at) = ?",
+        [productId, prevDateStr]
+      );
+      
+      if (prevHist.length === 0) {
+        await pool.query(
+          "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
+          [productId, item.previousPrice, prevDate]
+        );
+      } else {
+        await pool.query(
+          "UPDATE price_history SET price = ? WHERE id = ?",
+          [item.previousPrice, prevHist[0].id]
+        );
+      }
+    }
   }
 
-  console.log(`   📊 Đã lưu ${savedCount} dòng giá vào gov_market_prices`);
-  return reportId;
+  console.log(`   ✅ [PDF→Products] Hoàn tất: ${created} mới, ${updated} cập nhật, ${skipped} bỏ qua`);
 }
 
 // ===========================
@@ -292,8 +411,11 @@ export async function scrapePdfReports() {
           continue;
         }
 
-        // Lưu vào DB (lưu fullText cho tham khảo)
-        await saveToDatabase(pdfInfo, fullText, parsedData);
+        // Lưu metadata report (để track PDF đã cào)
+        await saveReportMetadata(pdfInfo, fullText, parsedData);
+
+        // 💾 Lưu dữ liệu giá vào bảng products chung
+        await savePdfToProducts(parsedData, pdfInfo.reportDate);
         processedCount++;
 
         // Delay 15s giữa các request để tránh Groq rate limit (6000 TPM)

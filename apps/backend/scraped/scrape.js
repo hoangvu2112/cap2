@@ -2,6 +2,7 @@ import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import fs from "fs/promises";
 import path from "path";
+import pool from "../db.js";
 
 puppeteer.use(StealthPlugin());
 
@@ -76,6 +77,101 @@ function mergeRegionData(oldRegion, newRegion) {
 }
 
 // =======================
+// 💾 Lưu trực tiếp vào DB
+// =======================
+
+function parseScrapedDate(str) {
+    if (!str) return new Date();
+    const parts = str.split(/[\/\-]/).map(Number);
+    if (parts.length !== 3) return new Date();
+    const [a, b, c] = parts;
+    if (a > 31) return new Date(a, b - 1, c);
+    return new Date(c, b - 1, a);
+}
+
+function fmtDate(date) {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dbTrend(prev, curr) {
+    if (curr > prev) return "up";
+    if (curr < prev) return "down";
+    return "stable";
+}
+
+async function saveRegionToDb(productName, regionKey, categoryName, dataRows) {
+    try {
+        const [catRows] = await pool.query("SELECT id FROM categories WHERE name = ?", [categoryName]);
+        let categoryId;
+        if (catRows.length > 0) categoryId = catRows[0].id;
+        else {
+            const [ins] = await pool.query("INSERT INTO categories (name) VALUES (?)", [categoryName]);
+            categoryId = ins.insertId;
+        }
+
+        const sorted = dataRows
+            .map(r => ({ ...r, date: parseScrapedDate(r["Ngày"]), price: r.priceValue || 0 }))
+            .filter(r => r.price > 0)
+            .sort((a, b) => b.date - a.date);
+        if (!sorted.length) return;
+
+        const [exists] = await pool.query(
+            "SELECT * FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))", [productName]
+        );
+
+        let productId, product;
+        if (exists.length === 0) {
+            console.log(`   💾 [DB] Tạo sản phẩm: ${productName}`);
+            const [ins] = await pool.query(
+                "INSERT INTO products (name, category_id, region, currentPrice, previousPrice, trend, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+                [productName, categoryId, regionKey, sorted[0].price, sorted[0].price, "stable"]
+            );
+            productId = ins.insertId;
+            product = { id: productId, currentPrice: sorted[0].price, previousPrice: sorted[0].price };
+        } else {
+            product = exists[0];
+            productId = product.id;
+        }
+
+        const [history] = await pool.query(
+            "SELECT price, DATE(updated_at) as date FROM price_history WHERE product_id = ?", [productId]
+        );
+        const histSet = new Set(history.map(h => `${fmtDate(h.date)}|${h.price}`));
+
+        let newCount = 0;
+        for (const item of sorted) {
+            const key = `${fmtDate(item.date)}|${item.price}`;
+            if (!histSet.has(key)) {
+                await pool.query(
+                    "INSERT INTO price_history (product_id, price, updated_at) VALUES (?, ?, ?)",
+                    [productId, item.price, item.date]
+                );
+                newCount++;
+            }
+        }
+
+        const [latest] = await pool.query(
+            "SELECT price FROM price_history WHERE product_id = ? ORDER BY updated_at DESC LIMIT 2", [productId]
+        );
+        const curP = latest[0]?.price || product.currentPrice;
+        const prevP = latest[1]?.price || curP;
+        const trend = dbTrend(Number(prevP), Number(curP));
+
+        if (Number(curP) !== Number(product.currentPrice) || Number(prevP) !== Number(product.previousPrice) || newCount > 0) {
+            await pool.query(
+                "UPDATE products SET previousPrice=?, currentPrice=?, trend=?, lastUpdate=NOW() WHERE id=?",
+                [prevP, curP, trend, productId]
+            );
+        }
+
+        if (newCount > 0) console.log(`   💾 [DB] ${productName}: +${newCount} bản ghi mới`);
+    } catch (err) {
+        console.error(`   ❌ [DB] Lỗi lưu ${productName}:`, err.message);
+    }
+}
+
+// =======================
 // Cào giá cà phê
 // =======================
 async function scrapeCoffeeRegion(page, region, existing) {
@@ -131,6 +227,9 @@ async function scrapeCoffeeRegion(page, region, existing) {
 
         console.table(rows.slice(0, 5));
         console.log(`📊 ${fullName}: ${latest} (${trend})`);
+
+        // 💾 Lưu trực tiếp vào DB
+        await saveRegionToDb(fullName, region.name, "Cà phê", rows);
     } catch (err) {
         console.error(`❌ Lỗi khi cào ${region.name}:`, err.message);
     }
@@ -207,6 +306,9 @@ async function scrapePepper(page, existing) {
             } else {
                 existing.regions.push(newRegion);
             }
+
+            // 💾 Lưu trực tiếp vào DB
+            await saveRegionToDb(fullName, r.KhuVuc, "Hồ tiêu", newRegion.data);
         }
 
         const allDates = existing.regions
@@ -299,7 +401,7 @@ async function scrapeDurian(page, existing) {
         // Ghi từng loại
         // -------------------------
         for (const r of rows) {
-            const regionName = `Sầu riêng ${r.Loai} - ${r.KhuVuc}`;
+            const regionName = `${r.Loai} - ${r.KhuVuc}`;
             const regionKey = `${r.Loai}|${r.KhuVuc}`;
 
             const oldRegion = existing.regions.find(x => x.region === regionKey);
@@ -330,6 +432,9 @@ async function scrapeDurian(page, existing) {
             } else {
                 existing.regions.push(newRegion);
             }
+
+            // 💾 Lưu trực tiếp vào DB
+            await saveRegionToDb(regionName, regionKey, "Sầu riêng", [newRecord]);
         }
 
         // -------------------------
@@ -353,6 +458,73 @@ async function scrapeDurian(page, existing) {
 }
 
 // =======================
+// 🔍 Kiểm tra ngày mới trước khi cào
+// =======================
+const CHECK_WAIT = 3000; // Chỉ đợi 3s khi kiểm tra nhanh (thay vì 8s khi cào)
+
+async function checkForNewDates(page, existing) {
+    console.log("🔍 Kiểm tra dữ liệu mới trên các nguồn...");
+    let hasNew = false;
+
+    // Kiểm tra Cà phê (lấy ngày mới nhất từ bảng giá)
+    try {
+        await page.goto(COFFEE_REGIONS[0].url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await new Promise(r => setTimeout(r, CHECK_WAIT));
+        const latestDate = await page.$eval(
+            "table.price-table tbody tr:first-child td:first-child",
+            el => (el.querySelector("span") || el).innerText.trim()
+        ).catch(() => null);
+        if (latestDate && latestDate !== existing.coffeeDate) {
+            console.log(`   ☕ Cà phê: ngày MỚI "${latestDate}" (cũ: "${existing.coffeeDate || "chưa có"}")`);
+            hasNew = true;
+        } else {
+            console.log(`   ☕ Cà phê: chưa cập nhật (${latestDate || "không đọc được"})`);
+        }
+    } catch (err) {
+        console.log(`   ⚠️ Không thể kiểm tra cà phê: ${err.message}`);
+        hasNew = true; // Lỗi kiểm tra → cào luôn cho chắc
+    }
+
+    // Kiểm tra Tiêu
+    try {
+        await page.goto(PEPPER_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await new Promise(r => setTimeout(r, CHECK_WAIT));
+        const pageText = await page.evaluate(() => document.body?.innerText || "");
+        const dateMatch = pageText.match(/(\d{2}\/\d{2}\/\d{4})/);
+        const latestDate = dateMatch ? dateMatch[1] : null;
+        if (latestDate && latestDate !== existing.pepperDate) {
+            console.log(`   🌶️ Tiêu: ngày MỚI "${latestDate}" (cũ: "${existing.pepperDate || "chưa có"}")`);
+            hasNew = true;
+        } else {
+            console.log(`   🌶️ Tiêu: chưa cập nhật (${latestDate || "không đọc được"})`);
+        }
+    } catch (err) {
+        console.log(`   ⚠️ Không thể kiểm tra tiêu: ${err.message}`);
+        hasNew = true;
+    }
+
+    // Kiểm tra Sầu riêng
+    try {
+        await page.goto(DURIAN_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await new Promise(r => setTimeout(r, CHECK_WAIT));
+        const pageText = await page.evaluate(() => document.body?.innerText || "");
+        const dateMatch = pageText.match(/(\d{2}\/\d{2}\/\d{4})/);
+        const latestDate = dateMatch ? dateMatch[1] : null;
+        if (latestDate && latestDate !== (existing.durianDate || null)) {
+            console.log(`   🍈 Sầu riêng: ngày MỚI "${latestDate}" (cũ: "${existing.durianDate || "chưa có"}")`);
+            hasNew = true;
+        } else {
+            console.log(`   🍈 Sầu riêng: chưa cập nhật (${latestDate || "không đọc được"})`);
+        }
+    } catch (err) {
+        console.log(`   ⚠️ Không thể kiểm tra sầu riêng: ${err.message}`);
+        hasNew = true;
+    }
+
+    return hasNew;
+}
+
+// =======================
 // Chạy tất cả
 // =======================
 (async () => {
@@ -361,6 +533,16 @@ async function scrapeDurian(page, existing) {
     const page = await browser.newPage();
 
     const existing = await loadExistingData();
+
+    // 🔍 Kiểm tra nhanh: có dữ liệu mới không?
+    const hasNew = await checkForNewDates(page, existing);
+    if (!hasNew) {
+        console.log("📅 Không có dữ liệu mới trên web. Thoát ra, đợi lần kiểm tra tiếp theo.\n");
+        await browser.close();
+        process.exit(0);
+    }
+
+    console.log("\n🚀 Phát hiện dữ liệu mới! Bắt đầu cào chi tiết...\n");
 
     await scrapeCoffee(page, existing);
     await scrapePepper(page, existing);
@@ -377,4 +559,5 @@ async function scrapeDurian(page, existing) {
 
     await browser.close();
     console.log("✅ Hoàn tất toàn bộ quá trình cào.\n");
+    process.exit(0);
 })();

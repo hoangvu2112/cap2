@@ -1,7 +1,7 @@
 import pool from "../db.js";
 import fs from "fs";
 import path from "path";
-import { buildFaostatContextForProduct } from "./faostatService.js";
+
 
 /**
  * Phân tích dữ liệu và tạo tóm tắt
@@ -122,22 +122,41 @@ function getPromptForProduct(p) {
     req = `Chú ý hợp đồng xuất khẩu gạo, an ninh lương thực và giá lúa tươi tại ruộng.`;
   }
 
-  return `Bạn là ${role}. Dữ liệu: ${info}. YÊU CẦU: ${req}. TUYỆT ĐỐI KHÔNG được sử dụng dấu chấm (.) để ngăn cách phần thập phân (ví dụ 14000.00). PHẢI sử dụng dấu chấm (.) để ngăn cách phần nghìn và KHÔNG hiển thị phần xu/thập phân. Ví dụ đúng: 145.000 VND hoặc 109.500 VND. Nếu vi phạm định dạng này, phân tích sẽ bị hủy.`;
+  const minPrice = Math.round(p.currentPrice * 0.9);
+  const maxPrice = Math.round(p.currentPrice * 1.1);
+
+  return `Bạn là ${role}.
+Ví dụ mẫu (Few-Shot Prompting): Nếu giá hôm nay là 50.000 VND/kg và xu hướng tăng nhẹ, dự báo ngắn hạn phải nằm trong khoảng 51.000 - 53.000 VND/kg. Tuyệt đối không dự báo vượt quá 20% giá trị hiện tại.
+
+Dữ liệu đầu vào:
+- Tên sản phẩm: ${name}
+- Vùng: ${region}
+- Giá hiện tại: ${p.currentPrice} VND/${p.unit}
+- Thống kê 30 ngày: Cao ${formatVN(stats.high_30d)} VND, Thấp ${formatVN(stats.low_30d)} VND, TB ${formatVN(stats.avg_30d)} VND
+
+YÊU CẦU PHÂN TÍCH: ${req}
+
+YÊU CẦU NGHIÊM NGẶT VỀ TOÁN HỌC VÀ DỮ LIỆU (Hard Constraints):
+1. Con số dự báo (predictedPrice) PHẢI nằm trong biên độ +/- 10% so với Giá hiện tại.
+2. Giá hiện tại là ${p.currentPrice}, do đó dự báo KHÔNG ĐƯỢC thấp hơn ${minPrice} và KHÔNG ĐƯỢC cao hơn ${maxPrice}.
+3. TUYỆT ĐỐI KHÔNG đưa ra con số hàng triệu nếu giá hiện tại chỉ ở hàng chục nghìn.
+4. KHÔNG được sử dụng dấu chấm (.) để ngăn cách phần thập phân. PHẢI sử dụng dấu chấm (.) để ngăn cách phần nghìn (Ví dụ: 145.000 VND).
+5. TUYỆT ĐỐI sử dụng chính xác các con số Thống kê 30 ngày (Cao, Thấp, TB) đã cung cấp ở trên. KHÔNG tự bịa số hoặc làm tròn sai lệch (Ví dụ: Nếu dữ liệu ghi Cao 20.415 VND thì tuyệt đối không viết thành 20.315 VND).`;
 }
 
 // Hàm bổ sung cho phần định dạng JSON
-const getJsonFormatRequirement = (productId) => `
+const getJsonFormatRequirement = (product) => `
 YÊU CẦU TRẢ VỀ: TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC SAU:
 {
-  "id": ${productId},
+  "id": ${product.id},
   "summary": "...",
   "sentiment": "Tích cực" | "Tiêu cực" | "Trung tính",
-  "predictedPrice": <số nguyên, ví dụ: 146500>,,
+  "predictedPrice": <số nguyên nằm trong khoảng ${Math.round(product.currentPrice * 0.9)} đến ${Math.round(product.currentPrice * 1.1)}>,
   "confidence": <50-98>,
   "volatility": "Thấp" | "Trung bình" | "Cao",
   "signal": "...",
   "direction": "up" | "down" | "side",
-  "change_amount": <số>,
+  "change_amount": <số nguyên>,
   "recommendation": "Mua" | "Bán" | "Giữ"
 }`;
 
@@ -148,16 +167,9 @@ export async function generateSingleProductAnalysisWithGroq(product) {
   try {
     if (!process.env.GROQ_API_KEY) throw new Error("Chưa có GROQ_API_KEY");
 
-    // Lấy context bổ sung từ FAOSTAT (nội dung sẽ trống nếu api faostat chưa config)
-    const faostatContext = await buildFaostatContextForProduct(product);
-
     const promptBase = getPromptForProduct(product);
-    const jsonFormat = getJsonFormatRequirement(product.id);
+    const jsonFormat = getJsonFormatRequirement(product);
     let fullPrompt = `${promptBase}\n\n${jsonFormat}`;
-    
-    if (faostatContext) {
-        fullPrompt = `${faostatContext}\n\n${fullPrompt}`;
-    }
 
     console.log(`\n=============================================`);
     console.log(`🤖 [AI PROMPT] - Dành cho NS: ${product.name}`);

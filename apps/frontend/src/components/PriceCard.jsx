@@ -117,7 +117,7 @@ export default function PriceCard({ item, onCreateAlert, showAlertButton = false
                                 <span className="text-3xl font-black text-gray-900 tracking-tight">
                                     {currentPrice.toLocaleString("vi-VN")}
                                 </span>
-                                <span className="text-xs font-bold text-gray-400 ml-1">đ/{product.unit}</span>
+                                <span className="text-xs font-bold text-gray-400 ml-1">đ/{product.unit || "kg"}</span>
                             </div>
                             <div className={cn(
                                 "flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-bold border shadow-sm",

@@ -624,7 +624,7 @@ export default function ProductDetail() {
                         <p className="text-5xl font-black text-gray-900 tracking-tighter leading-none">
                           {currentPrice}
                         </p>
-                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit}</p>
+                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit || "kg"}</p>
                       </div>
                       <span
                         className={cn(

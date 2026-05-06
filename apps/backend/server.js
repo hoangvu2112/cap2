@@ -32,6 +32,7 @@ const __dirname = path.dirname(__filename);
 import { syncProducts } from "./cron/syncProducts.js";
 import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
+import { scrapePdfReports } from "./scraped/scrapePdf.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -306,10 +307,10 @@ function removeDuplicateRows(arr) {
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
 setTimeout(() => {
-  cron.schedule("0 */8 * * *", async () => {
+  cron.schedule("*/30 * * * *", async () => {
     await checkAndScrapeIfNeeded();
   });
-  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 5 phút).");
+  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 30 phút).");
 
   cron.schedule("17 */6 * * *", async () => {
     await syncChatbotKnowledge({ reason: "scheduled", io });
@@ -320,6 +321,15 @@ setTimeout(() => {
     await checkDealerExpiration();
   });
   console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
+
+  // Cào PDF báo cáo tuần từ thitruongnongsan.gov.vn — mỗi Chủ nhật lúc 6h sáng
+  cron.schedule("0 6 * * 0", async () => {
+    console.log("📄 [Cron] Bắt đầu cào PDF báo cáo tuần...");
+    try { await scrapePdfReports(); } catch (err) {
+      console.error("❌ [Cron] Lỗi cào PDF:", err.message);
+    }
+  });
+  console.log("⏱️ Cron cào PDF báo cáo tuần đã bật (Chủ nhật 6h sáng).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;

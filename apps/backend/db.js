@@ -121,7 +121,7 @@ const initDB = async () => {
     category_id INT,
     currentPrice DECIMAL(10,2),
     previousPrice DECIMAL(10,2),
-    unit VARCHAR(50),
+    unit VARCHAR(50) DEFAULT 'kg',
     region VARCHAR(100),
     quantity_available DECIMAL(12,2) DEFAULT 0,
     harvest_start DATE NULL,
@@ -549,10 +549,10 @@ const initDB = async () => {
     await ensureUpgradeColumn("phone_contact", "phone_contact VARCHAR(20) DEFAULT NULL");
     await ensureUpgradeColumn("business_items", "business_items TEXT DEFAULT NULL"); // Các mặt hàng kinh doanh
 
-    // Vô hiệu hóa gói membership cũ nếu tồn tại
-    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code = 'dealer_membership'");
+    // Vô hiệu hóa gói cũ (dealer_membership - 60 ngày) và mọi gói không nằm trong danh sách chuẩn
+    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code NOT IN ('dealer_30', 'dealer_90', 'dealer_365')");
 
-    // Cập nhật/Thêm các gói cước đại lý mới
+    // Đảm bảo 3 gói chuẩn luôn tồn tại và active
     const ensureDealerPlan = async (code, name, price, days) => {
       const [rows] = await pool.query("SELECT id FROM dealer_plans WHERE code = ? LIMIT 1", [code]);
       if (rows.length === 0) {
@@ -568,9 +568,9 @@ const initDB = async () => {
       }
     };
 
-    await ensureDealerPlan("dealer_30", "Gói Đại lý 30 ngày", 100000, 30);
-    await ensureDealerPlan("dealer_90", "Gói Đại lý 90 ngày", 250000, 90);
-    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm", 800000, 365);
+    await ensureDealerPlan("dealer_30",  "Gói Đại lý 30 ngày", 100000, 30);
+    await ensureDealerPlan("dealer_90",  "Gói Đại lý 90 ngày", 250000, 90);
+    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm",   800000, 365);
 
     await pool.query(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -633,24 +633,6 @@ const initDB = async () => {
     `)
     console.log("✅ Bảng 'gov_pdf_reports' đã sẵn sàng.")
 
-    // Bảng giá trích xuất từ PDF chính phủ
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS gov_market_prices (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        report_id INT NOT NULL,
-        product_name VARCHAR(255),
-        region VARCHAR(255),
-        current_price DECIMAL(12,2),
-        previous_price DECIMAL(12,2),
-        price_change DECIMAL(12,2),
-        unit VARCHAR(50) DEFAULT 'VND/kg',
-        extra_data JSON,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES gov_pdf_reports(id) ON DELETE CASCADE,
-        INDEX idx_gov_price_product_region (product_name, region)
-      )
-    `)
-    console.log("✅ Bảng 'gov_market_prices' đã sẵn sàng.")
     // Bảng yêu cầu mua giữa đại lý và nông dân
     await pool.query(`
       CREATE TABLE IF NOT EXISTS purchase_requests (
