@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import fs from "fs/promises";
+import { existsSync } from "fs";
 import path from "path";
 
 puppeteer.use(StealthPlugin());
@@ -23,6 +24,37 @@ const GUAVA_URLS = [
 const OUT_DIR = path.join(process.cwd(), "scraped");
 const DATA_FILE = path.join(OUT_DIR, "all_regions.json");
 const WAIT_MS = 8000;
+
+function resolveChromeExecutablePath() {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+        return process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    const candidates = [
+        "C:/Program Files/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+        "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    ];
+
+    return candidates.find(existsSync) || null;
+}
+
+async function launchBrowserSafe() {
+    const baseArgs = ["--no-sandbox", "--disable-setuid-sandbox"];
+    const executablePath = resolveChromeExecutablePath();
+
+    try {
+        const options = { headless: true, args: baseArgs };
+        if (executablePath) options.executablePath = executablePath;
+        return await puppeteer.launch(options);
+    } catch (error) {
+        console.error("❌ Không khởi tạo được trình duyệt cho scraper:", error.message);
+        console.error("👉 Cách khắc phục nhanh: npx puppeteer browsers install chrome");
+        console.error("👉 Hoặc set PUPPETEER_EXECUTABLE_PATH tới chrome.exe/msedge.exe");
+        return null;
+    }
+}
 
 // =======================
 // Tiện ích
@@ -424,7 +456,11 @@ async function scrapeGuava(page, existing) {
 // =======================
 (async () => {
     await ensureOutDir();
-    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const browser = await launchBrowserSafe();
+    if (!browser) {
+        console.log("⚠️ Bỏ qua lần cào này do thiếu Chrome/Edge cho Puppeteer.");
+        return;
+    }
     const page = await browser.newPage();
 
     const existing = await loadExistingData();

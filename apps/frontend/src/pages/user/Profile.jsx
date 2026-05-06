@@ -419,6 +419,9 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     localStorage.setItem("dealer_upgrade_draft", JSON.stringify(businessData))
   }, [businessData])
 
+  // Current step in upgrade process
+  const [step, setStep] = useState(1)
+
   // Data Step 2
   const [selectedPlanId, setSelectedPlanId] = useState("")
 
