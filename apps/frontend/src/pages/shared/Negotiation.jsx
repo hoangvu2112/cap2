@@ -102,36 +102,11 @@ export default function Negotiation() {
 
   const handleCloseDeal = async () => {
     if (!selected) return
-    // Tính toán tổng và phí trước khi chốt
-    const totalAmount = Number(selected.quantity || 0) * Number(selected.proposed_price || 0)
-    const calculateTotalFee = (amount) => {
-      if (amount < 500000) return 5000
-      if (amount < 2000000) return 15000
-      if (amount < 10000000) return 45000
-      return 80000
-    }
-    const splitFee = (totalFee) => {
-      const farmerFee = Math.round(totalFee * 0.7)
-      const dealerFee = totalFee - farmerFee
-      return { farmerFee, dealerFee }
-    }
-
-    const totalFee = calculateTotalFee(totalAmount)
-    const { farmerFee, dealerFee } = splitFee(totalFee)
-
-    const msg = `Xác nhận chốt đơn này?\n\nSản phẩm: ${selected.product_name}\nSố lượng: ${Number(selected.quantity).toLocaleString('vi-VN')} ${selected.product_unit || 'kg'}\nGiá: ${Number(selected.proposed_price).toLocaleString('vi-VN')} đ/${selected.product_unit || 'kg'}\n\nTổng tiền: ${Number(totalAmount).toLocaleString('vi-VN')} đ\n\nPhí nền tảng: ${Number(totalFee).toLocaleString('vi-VN')} đ\nBạn trả: ${Number(farmerFee).toLocaleString('vi-VN')} đ\nĐại lý trả (ghi nhận): ${Number(dealerFee).toLocaleString('vi-VN')} đ\n\nBạn có chắc chốt đơn và tạo payment (nông dân trả trước)?`
-
-    if (!confirm(msg)) return
-
     try {
-      setActioningId(selected.id)
-      const res = await api.patch(`/purchase-requests/${selected.id}/status`, { status: "closed" })
+      await api.patch(`/purchase-requests/${selected.id}/status`, { status: "closed" })
       setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, status: "closed" } : item)))
-      alert(res.data?.message || "Đã chốt giao dịch. Vui lòng thanh toán phí")
     } catch (error) {
       alert(error.response?.data?.error || "Không thể chốt giao dịch")
-    } finally {
-      setActioningId(null)
     }
   }
 

@@ -48,7 +48,19 @@ export default function AdminDealers() {
   }, [])
 
   const handleReviewRequest = async (requestId, action) => {
-    const adminNote = window.prompt(action === "approve" ? "Ghi chú duyệt (tuỳ chọn)" : "Lý do từ chối (tuỳ chọn)", "")
+    if (action === "revoke") {
+      const confirmRevoke = window.confirm("Bạn có chắc chắn muốn hủy vai trò đại lý của người dùng này? Role sẽ quay về 'user'.")
+      if (!confirmRevoke) return
+    }
+
+    const adminNote = window.prompt(
+      action === "approve"
+        ? "Ghi chú duyệt (tuỳ chọn)"
+        : action === "revoke"
+        ? "Lý do hủy vai trò (tuỳ chọn)"
+        : "Lý do từ chối (tuỳ chọn)",
+      ""
+    )
 
     try {
       setReviewingId(requestId)
@@ -61,7 +73,12 @@ export default function AdminDealers() {
       setDealerRequests((prev) => prev.map((item) => (item.id === requestId ? updated : item)))
       toast({
         title: "Thành công",
-        description: action === "approve" ? "Đã duyệt yêu cầu đại lý" : "Đã từ chối yêu cầu đại lý",
+        description:
+          action === "approve"
+            ? "Đã duyệt yêu cầu đại lý"
+            : action === "revoke"
+            ? "Đã hủy vai trò đại lý"
+            : "Đã từ chối yêu cầu đại lý",
       })
     } catch (error) {
       const msg = error.response?.data?.error || "Không thể xử lý yêu cầu"
@@ -156,28 +173,42 @@ export default function AdminDealers() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4"
-                            onClick={() => handleReviewRequest(request.id, "approve")}
-                            disabled={reviewingId === request.id || request.status === "approved"}
-                          >
-                            {reviewingId === request.id ? "Đang xử lý..." : "Duyệt đại lý"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="h-9 px-4"
-                            onClick={() => handleReviewRequest(request.id, "reject")}
-                            disabled={reviewingId === request.id || request.status === "rejected"}
-                          >
-                            Từ chối
-                          </Button>
+                          {["pending_payment", "pending_review"].includes(request.status) ? (
+                            <>
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4"
+                                onClick={() => handleReviewRequest(request.id, "approve")}
+                                disabled={reviewingId === request.id}
+                              >
+                                {reviewingId === request.id ? "Đang xử lý..." : "Duyệt đại lý"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-9 px-4"
+                                onClick={() => handleReviewRequest(request.id, "reject")}
+                                disabled={reviewingId === request.id}
+                              >
+                                Từ chối
+                              </Button>
+                            </>
+                          ) : request.status === "approved" ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-9 px-4"
+                              onClick={() => handleReviewRequest(request.id, "revoke")}
+                              disabled={reviewingId === request.id}
+                            >
+                              {reviewingId === request.id ? "Đang xử lý..." : "Hủy vai trò"}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Trạng thái: <span className={request.status === 'pending_review' || request.status === 'pending_payment' ? 'text-amber-600' : request.status === 'approved' ? 'text-emerald-600' : 'text-gray-700'}>{request.status}</span></span>
+                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Trạng thái: <span className={['pending_review', 'pending_payment'].includes(request.status) ? 'text-amber-600' : request.status === 'approved' ? 'text-emerald-600' : request.status === 'revoked' ? 'text-rose-600' : 'text-gray-700'}>{request.status}</span></span>
                         <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Thanh toán: <span className={request.payment_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}>{request.payment_status}</span></span>
                         <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-600">Ngày gửi: {new Date(request.created_at).toLocaleString('vi-VN')}</span>
                       </div>

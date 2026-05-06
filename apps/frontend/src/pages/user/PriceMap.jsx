@@ -27,7 +27,6 @@ const PROVINCE_COORDS = {
   "ba ria - vung tau": [10.550000, 107.283333],
   "tay ninh": [11.366667, 106.116667],
   "binh duong": [11.133333, 106.683333],
-  "tp ho chi minh": [10.8231, 106.6297],
 
   // --- Đồng Bằng Sông Cửu Long ---
   "long an": [10.695833, 106.241667],
@@ -66,7 +65,6 @@ const PROVINCE_SPECIALTIES = {
   "ba ria - vung tau": ["Hồ tiêu", "Nhãn xuồng", "Mãng cầu"],
   "tay ninh": ["Mãng cầu Bà Đen", "Mía đường", "Cao su", "Mì (Sắn)"],
   "binh duong": ["Măng cụt Lái Thiêu", "Bưởi", "Cao su"],
-  "tp ho chi minh": ["Rau an toàn", "Hoa lan", "Cây cảnh"],
 
   // --- Đồng Bằng Sông Cửu Long ---
   "long an": ["Lúa gạo", "Thanh long", "Chanh không hạt", "Dưa hấu"],

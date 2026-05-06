@@ -20,22 +20,19 @@ import newsRoutes from "./routes/news.js";
 import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js";
 import favoritesRouter from "./routes/favorites.js";
 import costRoutes from "./routes/costs.js";
-
-// chatbotRoutes removed — merged into /api/chat (same module, was duplicate)
+import chatbotRoutes from "./routes/chatbot.js";
 import statsRoutes from "./routes/stats.js";
 import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
 import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
-import dealerSupplyRoutes from "./routes/dealerSupplies.js";
-import listingBoostRoutes from "./routes/listingBoosts.js";
 import pool from "./db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import ordersRoute from "./routes/orders.js";
 
 import { syncProducts } from "./cron/syncProducts.js";
 import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
+import { scrapePdfReports } from "./scraped/scrapePdf.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -49,23 +46,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Protected uploads — phải đăng nhập mới xem được ảnh
-app.use("/uploads", (req, res, next) => {
-  // Lấy token từ header hoặc query param (img src không gửi được header)
-  const authHeader = req.headers["authorization"]
-  const token = (authHeader && authHeader.split(" ")[1]) || req.query.token
-  
-  if (!token) {
-    return res.status(401).json({ error: "Cần đăng nhập để xem ảnh" })
-  }
-  
-  try {
-    jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production")
-    next()
-  } catch {
-    return res.status(403).json({ error: "Token không hợp lệ" })
-  }
-}, express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -80,14 +61,11 @@ app.use("/api/news", newsRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/favorites", favoritesRouter);
 app.use("/api/costs", costRoutes);
-// /api/chatbot removed — use /api/chat instead (same chatbot module)
+app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/stats", statsRoutes); 
 app.use("/api/chat", chatRouter);
 app.use("/api/purchase-requests", purchaseRequestRoutes);
 app.use("/api/dealer-upgrade", dealerUpgradeRoutes);
-app.use("/api/dealer-supplies", dealerSupplyRoutes);
-app.use("/api/listing-boosts", listingBoostRoutes);
-app.use("/api/orders", ordersRoute);
 
 io.use((socket, next) => {
   try {
@@ -183,24 +161,17 @@ cron.schedule("*/5 * * * *", async () => {
         (alert.alert_condition === "above" && currentPrice > alert.target_price) ||
         (alert.alert_condition === "below" && currentPrice < alert.target_price)
       ) {
-        let emailSent = false;
-
         try {
           await sendEmail(alert.email, product[0].name, currentPrice, alert);
-          emailSent = true;
+          await pool.query("UPDATE price_alerts SET notified = TRUE WHERE id = ?", [alert.id]);
           console.log(`📩 Gửi mail đến ${alert.email} cho sản phẩm ${product[0].name}`);
         } catch (mailError) {
           if (mailError.message === "SMTP_NOT_CONFIGURED") {
-            console.warn("⚠️ SMTP chưa cấu hình, bỏ qua gửi email nhưng vẫn đánh dấu cảnh báo đã kích hoạt.");
+            console.warn("⚠️ Bỏ qua gửi email cảnh báo: SMTP chưa cấu hình.");
           } else {
             console.error("❌ Lỗi gửi email cảnh báo:", mailError.message);
           }
         }
-
-        await pool.query("UPDATE price_alerts SET notified = TRUE WHERE id = ?", [alert.id]);
-        console.log(
-          `✅ Cảnh báo #${alert.id} đã hoàn thành${emailSent ? " và đã gửi email." : " (không gửi email do SMTP chưa cấu hình hoặc lỗi gửi)."}`
-        );
       }
     }
   } catch (error) {
@@ -272,8 +243,7 @@ async function checkAndScrapeIfNeeded() {
       );
 
       if (!oldRegion) {
-        console.log(`✨ [Scraper] Phát hiện vùng mới: ${region.name} (${region.region}). Đang thêm vào hệ thống.`);
-        oldData.regions.push(region);
+        // console.log(`⏩ [Scraper] Bỏ qua vùng mới phát hiện: ${region.name} (${region.region})`);
         continue;
       }
 
@@ -337,10 +307,10 @@ function removeDuplicateRows(arr) {
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
 setTimeout(() => {
-  cron.schedule("0 * * * *", async () => {
+  cron.schedule("*/30 * * * *", async () => {
     await checkAndScrapeIfNeeded();
   });
-  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi giờ).");
+  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 30 phút).");
 
   cron.schedule("17 */6 * * *", async () => {
     await syncChatbotKnowledge({ reason: "scheduled", io });
@@ -351,6 +321,15 @@ setTimeout(() => {
     await checkDealerExpiration();
   });
   console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
+
+  // Cào PDF báo cáo tuần từ thitruongnongsan.gov.vn — mỗi Chủ nhật lúc 6h sáng
+  cron.schedule("0 6 * * 0", async () => {
+    console.log("📄 [Cron] Bắt đầu cào PDF báo cáo tuần...");
+    try { await scrapePdfReports(); } catch (err) {
+      console.error("❌ [Cron] Lỗi cào PDF:", err.message);
+    }
+  });
+  console.log("⏱️ Cron cào PDF báo cáo tuần đã bật (Chủ nhật 6h sáng).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   Dialog,
@@ -33,6 +34,7 @@ import {
   ArrowUp,
   ArrowDown,
   Landmark,
+  Newspaper,
   MapPin,
   Heart,
   Sparkles,
@@ -52,9 +54,10 @@ import {
 import { cn } from "@/lib/utils"
 
 // ===========================================
-// --- 🚀 COMPONENT: THẺ PHÂN TÍCH AI ---
+// --- 🚀 COMPONENT: THẺ PHÂN TÍCH AI (ĐÃ TỐI ƯU LOADING) ---
 // ===========================================
 function AnalysisCard({ analysis, loading, product }) {
+  // Trạng thái đang tải (Skeleton)
   if (loading) {
     return (
       <div className="space-y-3 animate-pulse">
@@ -90,6 +93,7 @@ function AnalysisCard({ analysis, loading, product }) {
 
   return (
     <div className="space-y-3 transition-all duration-500">
+      {/* AI Insight Card */}
       <div className={cn("rounded-xl border p-4", sentimentBg)}>
         <div className="flex items-center gap-2 mb-3">
           <div className="w-8 h-8 rounded-full bg-white/80 flex items-center justify-center">
@@ -102,7 +106,9 @@ function AnalysisCard({ analysis, loading, product }) {
         </p>
       </div>
 
+      {/* Dự đoán + Khuyến nghị */}
       <div className="grid grid-cols-2 gap-3">
+        {/* Dự đoán ngắn hạn */}
         <div className="rounded-2xl border bg-gray-50/30 p-4">
           <p className="text-sm text-muted-foreground mb-1 font-medium">Dự đoán ngắn hạn</p>
           <p className="text-lg font-bold text-gray-900">
@@ -117,6 +123,7 @@ function AnalysisCard({ analysis, loading, product }) {
           )}
         </div>
 
+        {/* Khuyến nghị */}
         <div className="rounded-2xl border bg-gray-50/30 p-4">
           <p className="text-sm text-muted-foreground mb-1 font-medium">Khuyến nghị</p>
           <div className="mt-1">
@@ -146,34 +153,24 @@ export default function ProductDetail() {
   const [error, setError] = useState(null)
   const [range, setRange] = useState("30d")
 
+  // State riêng cho AI Analysis
   const [analysis, setAnalysis] = useState(null)
-  const [analysisLoading, setAnalysisLoading] = useState(false) // Giữ lại nếu sau này tách API AI
-  const [farmers, setFarmers] = useState([])
-  const [selectedFarmer, setSelectedFarmer] = useState("")
+  const [analysisLoading, setAnalysisLoading] = useState(false)
 
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false)
   const [alertCondition, setAlertCondition] = useState("above")
   const [alertPrice, setAlertPrice] = useState("")
   const [alertSaving, setAlertSaving] = useState(false)
   const [alertError, setAlertError] = useState(null)
+  const [farmers, setFarmers] = useState([])
+  const [selectedFarmer, setSelectedFarmer] = useState("")
+  const [requestQty, setRequestQty] = useState("")
+  const [requestPrice, setRequestPrice] = useState("")
+  const [requestNote, setRequestNote] = useState("")
+  const [requestSaving, setRequestSaving] = useState(false)
 
+  // 1. Fetch thông tin sản phẩm chính (Giá, Biểu đồ) - Cần nhanh
   useEffect(() => {
-    const fetchFarmers = async (productId) => {
-      try {
-        const response = await api.get("/purchase-requests/partners", {
-          params: { productId },
-        })
-        const options = Array.isArray(response.data) ? response.data : []
-        setFarmers(options)
-        if (options.length > 0) {
-          setSelectedFarmer((current) => current || String(options[0].id))
-        }
-      } catch (err) {
-        console.warn("Không thể tải danh sách đối tác cho sản phẩm:", err)
-        setFarmers([])
-      }
-    }
-
     const fetchProduct = async () => {
       setLoading(true)
       try {
@@ -181,30 +178,29 @@ export default function ProductDetail() {
           params: { range },
         })
 
-        const formattedHistory = Array.isArray(res.data.history)
-          ? res.data.history.map((item) => ({
-              ...item,
-              date: new Date(item.date).toLocaleDateString("vi-VN", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              }),
-              price: parseFloat(item.price),
-              forecast: item.forecast ? parseFloat(item.forecast) : null,
-            }))
-          : []
+        const formattedHistory = res.data.history.map(item => ({
+          ...item,
+          date: new Date(item.date).toLocaleDateString("vi-VN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric"
+          }),
+          price: parseFloat(item.price),
+          forecast: item.forecast ? parseFloat(item.forecast) : null,
+        }));
 
         setProduct({
           ...res.data,
           history: formattedHistory,
-        })
+        });
 
+        // ✅ Cập nhật Insight AI ngay lập tức từ dữ liệu gộp
         if (res.data.analysis_data) {
-          setAnalysis(res.data.analysis_data)
+          setAnalysis(res.data.analysis_data);
         }
 
-        setAlertPrice(Math.round(res.data.currentPrice / 1000) * 1000)
-        fetchFarmers(id)
+        setAlertPrice(Math.round(res.data.currentPrice / 1000) * 1000);
+
       } catch (err) {
         setError(err.response?.data?.error || "Không thể tải dữ liệu sản phẩm.")
       } finally {
@@ -214,6 +210,25 @@ export default function ProductDetail() {
 
     fetchProduct()
   }, [id, range])
+
+  useEffect(() => {
+    const fetchFarmers = async () => {
+      if (!product?.id) return
+      try {
+        const res = await api.get("/purchase-requests/farmers", {
+          params: { productId: product.id },
+        })
+        setFarmers(res.data || [])
+        if ((res.data || []).length > 0) {
+          setSelectedFarmer(String(res.data[0].id))
+        }
+      } catch (error) {
+        console.error("Lỗi tải danh sách nông dân:", error)
+      }
+    }
+    fetchFarmers()
+  }, [product?.id])
+
 
   const handleSaveAlert = async () => {
     if (!user) {
@@ -251,6 +266,38 @@ export default function ProductDetail() {
       setIsAlertModalOpen(true);
     }
   };
+
+  const handleSendPurchaseRequest = async () => {
+    if (!user) {
+      navigate("/login")
+      return
+    }
+
+    if (!selectedFarmer || !requestQty || !requestPrice) {
+      alert("Vui lòng nhập đủ nông dân, số lượng và giá đề xuất")
+      return
+    }
+
+    setRequestSaving(true)
+    try {
+      await api.post("/purchase-requests", {
+        product_id: product.id,
+        farmer_id: Number(selectedFarmer),
+        quantity: Number(requestQty),
+        proposed_price: Number(requestPrice),
+        note: requestNote,
+      })
+
+      setRequestQty("")
+      setRequestPrice("")
+      setRequestNote("")
+      alert("Đã gửi yêu cầu mua thành công")
+    } catch (error) {
+      alert(error.response?.data?.error || "Không thể gửi yêu cầu mua")
+    } finally {
+      setRequestSaving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -398,7 +445,7 @@ export default function ProductDetail() {
 
           {/* Cột phụ (Thông tin & AI) */}
           <div className="lg:col-span-1">
-            <Card className="overflow-hidden shadow-xl border-none ring-1 ring-gray-200 rounded-3xl sticky top-24">
+            <Card className="overflow-hidden shadow-xl border-none ring-1 ring-gray-200 rounded-3xl">
               <CardContent className="p-6 space-y-6">
 
                 {/* Section Giá & Xu hướng */}
@@ -422,7 +469,7 @@ export default function ProductDetail() {
                         <p className="text-5xl font-black text-gray-900 tracking-tighter leading-none">
                           {currentPrice}
                         </p>
-                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit}</p>
+                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit || "kg"}</p>
                       </div>
                       <span
                         className={cn(
@@ -501,13 +548,40 @@ export default function ProductDetail() {
                     product={product}
                   />
 
-                  {/* Nút Cảnh báo giá */}
-                  <div className="pt-2">
-                     <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg h-14 text-base font-black rounded-2xl gap-2 active:scale-95 transition-all"
-                      onClick={handleAlertButtonClick}
+                  <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
+                    <div>
+                      <span className="text-sm font-bold text-gray-900">Gửi yêu cầu mua</span>
+                      <p className="text-xs text-muted-foreground mt-1">Ví dụ: Tôi muốn mua 2 tấn, giá 10k/kg.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number"
+                        value={requestQty}
+                        onChange={(e) => setRequestQty(e.target.value)}
+                        placeholder={`Số lượng (${product.unit || "kg"})`}
+                      />
+                      <Input
+                        type="number"
+                        value={requestPrice}
+                        onChange={(e) => setRequestPrice(e.target.value)}
+                        placeholder={`Giá đề xuất (đ/${product.unit || "kg"})`}
+                      />
+                    </div>
+
+                    <Textarea
+                      value={requestNote}
+                      onChange={(e) => setRequestNote(e.target.value)}
+                      placeholder="Ghi chú giao dịch..."
+                      className="min-h-[80px]"
+                    />
+
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      disabled={requestSaving}
+                      onClick={handleSendPurchaseRequest}
                     >
-                      🔔 Tạo cảnh báo giá
+                      {requestSaving ? "Đang gửi..." : "Gửi yêu cầu mua"}
                     </Button>
                   </div>
 
@@ -528,6 +602,7 @@ export default function ProductDetail() {
                 </div>
               </CardContent>
             </Card>
+
             <div className="mt-6 space-y-4">
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg h-14 text-base font-black rounded-2xl gap-2 active:scale-95 transition-all"
@@ -540,7 +615,6 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Modal Cảnh báo giá (Giữ nguyên) */}
       <Dialog open={isAlertModalOpen} onOpenChange={setIsAlertModalOpen}>
         <DialogContent className="sm:max-w-[425px] rounded-3xl">
           <DialogHeader>

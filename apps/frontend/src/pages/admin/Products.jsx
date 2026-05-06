@@ -55,10 +55,6 @@ export default function AdminProducts() {
     currentPrice: "",
     unit: "kg",
     region: "",
-    quantity_available: "",
-    harvest_start: "",
-    harvest_end: "",
-    farmer_user_id: "",
   })
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
@@ -135,10 +131,6 @@ export default function AdminProducts() {
         ...productForm,
         currentPrice: Number(productForm.currentPrice),
         previousPrice: Number(editingProduct?.currentPrice || productForm.currentPrice),
-        quantity_available: Number(productForm.quantity_available || 0),
-        harvest_start: productForm.harvest_start || null,
-        harvest_end: productForm.harvest_end || null,
-        farmer_user_id: productForm.farmer_user_id ? Number(productForm.farmer_user_id) : null,
       }
       if (editingProduct) {
         await api.put(`/products/${editingProduct.id}`, payload)
@@ -175,10 +167,6 @@ export default function AdminProducts() {
         currentPrice: p.currentPrice,
         unit: p.unit,
         region: p.region,
-        quantity_available: p.quantity_available ?? "",
-        harvest_start: p.harvest_start ? String(p.harvest_start).slice(0, 10) : "",
-        harvest_end: p.harvest_end ? String(p.harvest_end).slice(0, 10) : "",
-        farmer_user_id: p.farmer_user_id ?? "",
       })
     } else {
       resetProductForm()
@@ -188,17 +176,7 @@ export default function AdminProducts() {
 
   const resetProductForm = () => {
     setEditingProduct(null)
-    setProductForm({
-      name: "",
-      category: "",
-      currentPrice: "",
-      unit: "kg",
-      region: "",
-      quantity_available: "",
-      harvest_start: "",
-      harvest_end: "",
-      farmer_user_id: "",
-    })
+    setProductForm({ name: "", category: "", currentPrice: "", unit: "kg", region: "" })
   }
 
   // Xử lý danh mục (giữ nguyên logic cũ)
@@ -508,49 +486,6 @@ export default function AdminProducts() {
                     />
                   </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Số lượng sẵn có</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={productForm.quantity_available}
-                    onChange={(e) => setProductForm({ ...productForm, quantity_available: e.target.value })}
-                    placeholder="Ví dụ: 1200"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>ID nông dân sở hữu</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={productForm.farmer_user_id}
-                    onChange={(e) => setProductForm({ ...productForm, farmer_user_id: e.target.value })}
-                    placeholder="Để trống nếu chưa gán"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Thu hoạch từ ngày</Label>
-                  <Input
-                    type="date"
-                    value={productForm.harvest_start}
-                    onChange={(e) => setProductForm({ ...productForm, harvest_start: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Thu hoạch đến ngày</Label>
-                  <Input
-                    type="date"
-                    value={productForm.harvest_end}
-                    onChange={(e) => setProductForm({ ...productForm, harvest_end: e.target.value })}
-                  />
-                </div>
-              </div>
-
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setShowProductModal(false)}>Hủy</Button>
                 <Button type="submit" className="bg-green-600 hover:bg-green-700">Lưu thông tin</Button>

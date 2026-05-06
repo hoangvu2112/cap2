@@ -59,14 +59,10 @@ const initDB = async () => {
     `)
     console.log("✅ Bảng 'users' đã sẵn sàng.")
 
-    // Đồng bộ enum role cho DB cũ (bọc try/catch để tránh crash khi có lock/deadlock)
-    try {
-      await pool.query(
-        "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','dealer') DEFAULT 'user'"
-      )
-    } catch (e) {
-      console.log("ℹ️ Bỏ qua ALTER TABLE users MODIFY COLUMN role nếu không thực hiện được:", e.message)
-    }
+    // Đồng bộ enum role cho DB cũ
+    await pool.query(
+      "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','dealer') DEFAULT 'user'"
+    )
 
     // Đảm bảo cột region tồn tại
     const [userColumns] = await pool.query(`
@@ -125,7 +121,7 @@ const initDB = async () => {
     category_id INT,
     currentPrice DECIMAL(10,2),
     previousPrice DECIMAL(10,2),
-    unit VARCHAR(50),
+    unit VARCHAR(50) DEFAULT 'kg',
     region VARCHAR(100),
     quantity_available DECIMAL(12,2) DEFAULT 0,
     harvest_start DATE NULL,
@@ -176,111 +172,6 @@ const initDB = async () => {
     } catch {
       // Bỏ qua nếu constraint đã tồn tại
     }
-
-    // Bảng nguồn hàng nông dân khai báo cho dealer xem
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_supply_listings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        product_id INT NOT NULL,
-        quantity_available DECIMAL(12,2) DEFAULT 0,
-        harvest_start DATE NULL,
-        harvest_end DATE NULL,
-        supply_status ENUM('available','soon','partial','sold') DEFAULT 'available',
-        note TEXT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_user_supply_user (user_id),
-        INDEX idx_user_supply_product (product_id),
-        INDEX idx_user_supply_status (supply_status),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-      )
-    `)
-    console.log("✅ Bảng 'user_supply_listings' đã sẵn sàng.")
-
-    // Bảng gói ghim tin nguồn hàng
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS boost_plans (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        description VARCHAR(255) DEFAULT NULL,
-        duration_days INT NOT NULL,
-        price DECIMAL(12,2) NOT NULL,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log("✅ Bảng 'boost_plans' đã sẵn sàng.")
-
-    const [boostPlanCount] = await pool.query("SELECT COUNT(*) AS c FROM boost_plans")
-    if (boostPlanCount[0].c === 0) {
-      await pool.query(`
-        INSERT INTO boost_plans (name, description, duration_days, price)
-        VALUES
-        ('Ghim 3 ngày', 'Đưa nguồn hàng lên nhóm tin ghim trong 3 ngày', 3, 19000),
-        ('Ghim 7 ngày', 'Phù hợp với nông sản tươi cần bán nhanh trong 1 tuần', 7, 39000),
-        ('Ghim 14 ngày', 'Giữ nguồn hàng nổi bật lâu hơn trong 2 tuần', 14, 69000)
-      `)
-      console.log("🍀 Đã chèn dữ liệu mẫu vào bảng 'boost_plans'.")
-    }
-
-    // Bảng thanh toán mô phỏng
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS payments (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        amount DECIMAL(12,2) NOT NULL,
-        payment_type ENUM('listing_boost','subscription','commission','transaction') NOT NULL,
-        status ENUM('pending','paid','failed','cancelled') DEFAULT 'pending',
-        reference_id INT NULL,
-        note VARCHAR(255) DEFAULT NULL,
-        paid_at DATETIME NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_payments_user (user_id),
-        INDEX idx_payments_type_status (payment_type, status),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `)
-    console.log("✅ Bảng 'payments' đã sẵn sàng.")
-
-      // Đảm bảo ENUM payment_type chứa 'transaction' cho các migration cũ
-      try {
-        const [ptypeRows] = await pool.query(
-          `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'payment_type' LIMIT 1`
-        )
-        const currentType = ptypeRows && ptypeRows[0] && ptypeRows[0].COLUMN_TYPE || ''
-        if (!currentType.includes('transaction')) {
-          await pool.query(`ALTER TABLE payments MODIFY COLUMN payment_type ENUM('listing_boost','subscription','commission','transaction') NOT NULL`)
-          console.log("✅ Đã cập nhật ENUM 'payments.payment_type' để thêm 'transaction'.")
-        }
-      } catch (e) {
-        console.log("ℹ️ Không thể cập nhật payment_type enum (bỏ qua nếu có):", e.message)
-      }
-
-    // Bảng lưu lượt ghim nguồn hàng
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS listing_boosts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        listing_id INT NOT NULL,
-        user_id INT NOT NULL,
-        plan_id INT NOT NULL,
-        payment_id INT NULL,
-        status ENUM('pending','active','expired','cancelled') DEFAULT 'pending',
-        boost_start_at DATETIME NULL,
-        boost_end_at DATETIME NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_listing_boost_listing (listing_id),
-        INDEX idx_listing_boost_status_end (status, boost_end_at),
-        FOREIGN KEY (listing_id) REFERENCES user_supply_listings(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (plan_id) REFERENCES boost_plans(id) ON DELETE RESTRICT,
-        FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
-      )
-    `)
-    console.log("✅ Bảng 'listing_boosts' đã sẵn sàng.")
 
     // Bảng analysis_data (Lưu bản mới nhất)
     await pool.query(`
@@ -484,22 +375,6 @@ const initDB = async () => {
 `)
     console.log("✅ Bảng 'community_likes' đã sẵn sàng.")
 
-    // B-Tree Indexes cho tối ưu query bài viết nổi bật
-    const indexQueries = [
-      // Index composite cho featured posts: lọc theo thời gian + sort theo engagement
-      `CREATE INDEX IF NOT EXISTS idx_posts_created_at ON community_posts(created_at DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_posts_likes ON community_posts(likes DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_posts_user_created ON community_posts(user_id, created_at DESC)`,
-      // Index cho đếm comments nhanh (thay vì full scan)
-      `CREATE INDEX IF NOT EXISTS idx_comments_post_deleted ON community_comments(post_id, deleted_at)`,
-      // Index cho likes lookup
-      `CREATE INDEX IF NOT EXISTS idx_likes_post_user ON community_likes(post_id, user_id)`,
-    ]
-    for (const q of indexQueries) {
-      try { await pool.query(q) } catch (e) { /* index đã tồn tại */ }
-    }
-    console.log("✅ B-Tree indexes cho community đã sẵn sàng.")
-
     // Bảng lưu session chat
     await pool.query(`
   CREATE TABLE IF NOT EXISTS direct_message_conversations (
@@ -674,10 +549,10 @@ const initDB = async () => {
     await ensureUpgradeColumn("phone_contact", "phone_contact VARCHAR(20) DEFAULT NULL");
     await ensureUpgradeColumn("business_items", "business_items TEXT DEFAULT NULL"); // Các mặt hàng kinh doanh
 
-    // Vô hiệu hóa gói membership cũ nếu tồn tại
-    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code = 'dealer_membership'");
+    // Vô hiệu hóa gói cũ (dealer_membership - 60 ngày) và mọi gói không nằm trong danh sách chuẩn
+    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code NOT IN ('dealer_30', 'dealer_90', 'dealer_365')");
 
-    // Cập nhật/Thêm các gói cước đại lý mới
+    // Đảm bảo 3 gói chuẩn luôn tồn tại và active
     const ensureDealerPlan = async (code, name, price, days) => {
       const [rows] = await pool.query("SELECT id FROM dealer_plans WHERE code = ? LIMIT 1", [code]);
       if (rows.length === 0) {
@@ -693,9 +568,9 @@ const initDB = async () => {
       }
     };
 
-    await ensureDealerPlan("dealer_30", "Gói Đại lý 30 ngày", 100000, 30);
-    await ensureDealerPlan("dealer_90", "Gói Đại lý 90 ngày", 250000, 90);
-    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm", 800000, 365);
+    await ensureDealerPlan("dealer_30",  "Gói Đại lý 30 ngày", 100000, 30);
+    await ensureDealerPlan("dealer_90",  "Gói Đại lý 90 ngày", 250000, 90);
+    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm",   800000, 365);
 
     await pool.query(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -740,6 +615,23 @@ const initDB = async () => {
       `);
       console.log("🍀 Đã chèn dữ liệu mẫu vào bảng 'news'.");
     }
+
+    // Bảng lưu metadata PDF đã cào từ thitruongnongsan.gov.vn (chống trùng)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gov_pdf_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pdf_url VARCHAR(500) NOT NULL UNIQUE,
+        category VARCHAR(100) NOT NULL,
+        report_number INT,
+        report_date DATE,
+        raw_text LONGTEXT,
+        parsed_json JSON,
+        status ENUM('pending','parsed','error') DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_gov_pdf_category_date (category, report_date)
+      )
+    `)
+    console.log("✅ Bảng 'gov_pdf_reports' đã sẵn sàng.")
 
     // Bảng yêu cầu mua giữa đại lý và nông dân
     await pool.query(`
@@ -839,69 +731,6 @@ const initDB = async () => {
       )
     `)
     console.log("✅ Bảng 'purchase_request_messages' đã sẵn sàng.")
-
-    // Bảng orders (liên quan tới purchase_requests)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        purchase_request_id INT UNIQUE,
-        product_id INT NOT NULL,
-        farmer_id INT NOT NULL,
-        dealer_id INT NOT NULL,
-        quantity DECIMAL(20,2) NOT NULL,
-        price_per_unit DECIMAL(20,2) NOT NULL,
-        total_amount DECIMAL(20,2) NOT NULL,
-        total_fee INT NOT NULL DEFAULT 0,
-        farmer_fee INT NOT NULL DEFAULT 0,
-        dealer_fee INT NOT NULL DEFAULT 0,
-        status ENUM('pending','completed') NOT NULL DEFAULT 'pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (purchase_request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-        FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (dealer_id) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_orders_farmer (farmer_id),
-        INDEX idx_orders_dealer (dealer_id),
-        INDEX idx_orders_status (status)
-      )
-    `)
-    console.log("✅ Bảng 'orders' đã sẵn sàng.")
-
-    // Nếu bảng orders được tạo trước đó mà thiếu cột purchase_request_id (migration cũ), thử thêm cột an toàn
-    try {
-      const [colCheck] = await pool.query(
-        `SELECT COUNT(*) AS c FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'orders' AND column_name = 'purchase_request_id'`
-      )
-      if (!colCheck || colCheck[0].c === 0) {
-        await pool.query(`ALTER TABLE orders ADD COLUMN purchase_request_id INT UNIQUE`)
-        console.log("✅ Đã thêm cột 'purchase_request_id' vào bảng 'orders'.")
-      } else {
-        console.log("✅ Cột 'purchase_request_id' đã tồn tại.")
-      }
-    } catch (err) {
-      console.log("ℹ️ Kiểm tra/ thêm cột 'purchase_request_id' gặp vấn đề (bỏ qua):", err.message)
-    }
-
-    // Nếu các cột fee bị thiếu (migration cũ), thử thêm từng cột an toàn
-    const ensureOrdersColumn = async (columnName, definitionSql) => {
-      try {
-        const [rows] = await pool.query(
-          `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = ? LIMIT 1`,
-          [columnName]
-        )
-        if (rows.length === 0) {
-          await pool.query(`ALTER TABLE orders ADD COLUMN ${definitionSql}`)
-          console.log(`✅ Đã thêm cột '${columnName}' vào bảng 'orders'.`)
-        }
-      } catch (e) {
-        console.log(`ℹ️ Bỏ qua khi thêm cột orders.${columnName}:`, e.message)
-      }
-    }
-
-    await ensureOrdersColumn('total_fee', 'total_fee INT NOT NULL DEFAULT 0')
-    await ensureOrdersColumn('farmer_fee', 'farmer_fee INT NOT NULL DEFAULT 0')
-    await ensureOrdersColumn('dealer_fee', 'dealer_fee INT NOT NULL DEFAULT 0')
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS dealer_fee_transactions (

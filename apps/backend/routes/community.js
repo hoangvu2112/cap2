@@ -2,7 +2,6 @@ import express from "express"
 import pool from "../db.js"
 import { authenticateToken } from "../middleware/auth.js"
 import multer from "multer"
-import sharp from "sharp"
 import path from "path"
 import fs from "fs"
 import { fileURLToPath } from "url"
@@ -34,50 +33,6 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 20 * 1024 * 1024 } // Giới hạn 20MB
 })
-
-// Middleware nén ảnh tự động sau khi upload (giảm ~70-80% dung lượng)
-const compressImages = async (req, res, next) => {
-  if (!req.files || req.files.length === 0) return next()
-  
-  try {
-    const promises = req.files.map(async (file) => {
-      const originalPath = file.path
-      const ext = path.extname(file.originalname).toLowerCase()
-      
-      // Chỉ xử lý ảnh
-      if (!['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'].includes(ext)) return
-      
-      const compressedName = file.filename.replace(path.extname(file.filename), '.webp')
-      const compressedPath = path.join(path.dirname(originalPath), compressedName)
-      
-      // Nén: resize max 1200px width, chuyển WebP, quality 80
-      await sharp(originalPath)
-        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toFile(compressedPath)
-      
-      // Xóa file gốc nếu khác tên (tránh xóa khi file gốc đã là .webp)
-      if (originalPath !== compressedPath) {
-        fs.unlinkSync(originalPath)
-      }
-      
-      // Cập nhật thông tin file
-      const stats = fs.statSync(compressedPath)
-      file.filename = compressedName
-      file.path = compressedPath
-      file.size = stats.size
-      
-      console.log(`📸 Nén ảnh: ${file.originalname} (${(file.size / 1024).toFixed(0)}KB → ${(stats.size / 1024).toFixed(0)}KB WebP)`)
-    })
-    
-    await Promise.all(promises)
-  } catch (err) {
-    console.error("Lỗi nén ảnh:", err)
-    // Không block request nếu nén lỗi, giữ ảnh gốc
-  }
-  
-  next()
-}
 
 const parseTags = (value) => {
   if (!value) return []
@@ -409,91 +364,6 @@ router.patch("/messages/conversations/:conversationId/read", authenticateToken, 
   }
 })
 
-router.get("/posts/featured", async (req, res) => {
-  try {
-    const range = req.query.range || "day" // "day" or "week"
-    const limit = Math.min(Number(req.query.limit) || 5, 20)
-
-    let dateFilter = ""
-    if (range === "day") {
-      dateFilter = "AND p.created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
-    } else if (range === "week") {
-      dateFilter = "AND p.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
-    }
-
-    // Tối ưu: LEFT JOIN + GROUP BY thay vì correlated subquery (O(log n) nhờ B-Tree index)
-    const [rows] = await pool.query(
-      `
-        SELECT 
-          p.id, 
-          p.content, 
-          p.tags,
-          p.image_url,
-          p.likes, 
-          p.created_at,
-          u.id AS user_id,
-          u.name AS author_name, 
-          u.avatar_url,
-          u.role AS author_role,
-          COUNT(c.id) AS comments_count
-        FROM community_posts p
-        LEFT JOIN users u ON p.user_id = u.id
-        LEFT JOIN community_comments c ON c.post_id = p.id AND c.deleted_at IS NULL
-        WHERE 1=1 ${dateFilter}
-        GROUP BY p.id
-        ORDER BY (p.likes + COUNT(c.id)) DESC, p.created_at DESC
-        LIMIT ?
-      `,
-      [limit]
-    )
-
-    // Nếu không đủ bài trong khoảng thời gian, lấy thêm bài gần nhất
-    if (rows.length < limit) {
-      const existingIds = rows.map(r => r.id)
-      const placeholders = existingIds.length > 0 
-        ? `AND p.id NOT IN (${existingIds.map(() => '?').join(',')})` 
-        : ''
-      
-      const [fallbackRows] = await pool.query(
-        `
-          SELECT 
-            p.id, 
-            p.content, 
-            p.tags,
-            p.image_url,
-            p.likes, 
-            p.created_at,
-            u.id AS user_id,
-            u.name AS author_name, 
-            u.avatar_url,
-            u.role AS author_role,
-            COUNT(c.id) AS comments_count
-          FROM community_posts p
-          LEFT JOIN users u ON p.user_id = u.id
-          LEFT JOIN community_comments c ON c.post_id = p.id AND c.deleted_at IS NULL
-          WHERE 1=1 ${placeholders}
-          GROUP BY p.id
-          ORDER BY (p.likes + COUNT(c.id)) DESC, p.created_at DESC
-          LIMIT ?
-        `,
-        [...existingIds, limit - rows.length]
-      )
-      rows.push(...fallbackRows)
-    }
-
-    res.json({
-      range,
-      data: rows.map((post) => ({
-        ...post,
-        tags: parseTags(post.tags),
-      })),
-    })
-  } catch (error) {
-    console.error("GET /posts/featured error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
-  }
-})
-
 router.get("/posts", async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 10
@@ -511,7 +381,7 @@ router.get("/posts", async (req, res) => {
 
     const [rows] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url, u.role AS author_role,
+        SELECT p.*, u.name AS author_name, u.avatar_url,
         (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
@@ -535,17 +405,13 @@ router.get("/posts", async (req, res) => {
   }
 })
 
-router.post("/posts", authenticateToken, upload.array("images", 10), compressImages, async (req, res) => {
+router.post("/posts", authenticateToken, upload.array("images", 10), async (req, res) => {
   try {
     const userId = req.user.id
     const { content, tags } = req.body
     
-    const logDir = path.join(__dirname, "../logs");
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
     const logData = `[${new Date().toISOString()}] POST /posts (Multi-Upload)\nBody: ${JSON.stringify(req.body)}\nFiles: ${JSON.stringify(req.files)}\n---\n`;
-    fs.appendFileSync(path.join(logDir, "debug.log"), logData);
+    fs.appendFileSync(path.join(__dirname, "../logs/debug.log"), logData);
     
     console.log("POST /posts body:", req.body)
     console.log("POST /posts files:", req.files)
@@ -573,7 +439,7 @@ router.post("/posts", authenticateToken, upload.array("images", 10), compressIma
 
     const [[newPost]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url, u.role AS author_role
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -598,7 +464,7 @@ router.get("/posts/:id", async (req, res) => {
 
     const [[post]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url, u.role AS author_role
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -631,7 +497,7 @@ router.get("/posts/:id", async (req, res) => {
   }
 })
 
-router.put("/posts/:id", authenticateToken, upload.array("images", 10), compressImages, async (req, res) => {
+router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (req, res) => {
   try {
     const postId = req.params.id
     const userId = req.user.id
@@ -676,7 +542,7 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 10), compress
 
     const [[updated]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url, u.role AS author_role
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -942,43 +808,6 @@ router.get("/posts/:id/like-status", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Lỗi máy chủ" })
   }
 })
-// 🧩 Lấy bài viết nổi bật (Featured Posts)
-router.get("/posts/featured", authenticateToken, async (req, res) => {
-  try {
-    const range = req.query.range || "day"; // "day" hoặc "week"
-    const limit = Number(req.query.limit) || 5;
-
-    // Tính toán mốc thời gian lọc
-    let timeCondition = "p.created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)";
-    if (range === "week") {
-      timeCondition = "p.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
-    }
-
-    // Tiêu chí Nổi bật: Tính điểm dựa trên số Like và Comment
-    const [featuredPosts] = await pool.query(
-      `
-        SELECT p.*, u.name AS author_name, u.avatar_url, u.role AS author_role
-        FROM community_posts p
-        LEFT JOIN users u ON p.user_id = u.id
-        WHERE ${timeCondition}
-        ORDER BY (p.likes * 2 + p.comments_count) DESC, p.created_at DESC
-        LIMIT ?
-      `,
-      [limit]
-    );
-
-    // Xử lý lại tags từ JSON string sang mảng trước khi trả về
-    const formattedPosts = featuredPosts.map((post) => ({
-      ...post,
-      tags: parseTags(post.tags),
-    }));
-
-    res.json({ data: formattedPosts });
-  } catch (error) {
-    console.error("❌ Lỗi khi lấy bài viết nổi bật:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
-  }
-});
 
 // --- AI Comment Generation ---
 async function callGroqChat(messages) {

@@ -24,9 +24,7 @@ import Profile from "./pages/user/Profile"
 import PriceMap from "./pages/user/PriceMap"
 import News from "./pages/user/News"
 import Chat from "./pages/user/Chat"
-import MySupplyPage from "./pages/user/MySupply" // <-- THÊM IMPORT
 import DealerDashboard from "./pages/dealer/DealerDashboard"
-import DealerSupplyHub from "./pages/dealer/DealerSupplyHub"
 import DealerProductDetail from "./pages/dealer/DealerProductDetail"
 import DealerPurchaseRequests from "./pages/dealer/DealerPurchaseRequests"
 import DealerCommunity from "./pages/dealer/DealerCommunity"
@@ -88,8 +86,6 @@ function AppContent() {
         <Route path="/chat" element={<ProtectedRoute><MainLayout2><Chat /></MainLayout2></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><MainLayout2><Profile /></MainLayout2></ProtectedRoute>} />
         <Route path="/map" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><PriceMap /></MainLayout2></RoleRoute>} />
-        <Route path="/my-supply" element={<RoleRoute allowedRoles={["user"]}><MainLayout2><MySupplyPage /></MainLayout2></RoleRoute>} />
-        <Route path="/dealer/supplies" element={<RoleRoute allowedRoles={["dealer"]}><MainLayout2><DealerSupplyHub /></MainLayout2></RoleRoute>} />
 
         {/* Admin routes — cũng dùng MainLayout2 */}
         <Route path="/admin" element={<AdminRoute><MainLayout2><AdminDashboard /></MainLayout2></AdminRoute>} />

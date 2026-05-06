@@ -7,10 +7,8 @@ import { Search, X, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import PriceCard from "@/components/PriceCard"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLocation } from "react-router-dom"
 
 export default function Alerts() {
-  const location = useLocation()
   const [products, setProducts] = useState([])
   const [search, setSearch] = useState("")
   const [filtered, setFiltered] = useState([])
@@ -23,7 +21,6 @@ export default function Alerts() {
   const [deletingAlertId, setDeletingAlertId] = useState(null)
   const [smtpConfigured, setSmtpConfigured] = useState(true)
   const [showAlertsList, setShowAlertsList] = useState(false)
-  const [highlightedAlertId, setHighlightedAlertId] = useState(null)
 
   // 🧠 Lấy danh sách sản phẩm
   useEffect(() => {
@@ -75,25 +72,6 @@ export default function Alerts() {
     setFiltered(f)
   }, [search, products])
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const highlightId = params.get("highlight")
-
-    if (!highlightId) return
-
-    setShowAlertsList(true)
-    setHighlightedAlertId(highlightId)
-
-    const timer = setTimeout(() => {
-      const element = document.getElementById(`alert-card-${highlightId}`)
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "center" })
-      }
-    }, 200)
-
-    return () => clearTimeout(timer)
-  }, [location.search, alerts])
-
   // 📩 Tạo cảnh báo mới
   const handleCreateAlert = async () => {
     if (!targetPrice || !selectedProduct) return setMessage("⚠️ Vui lòng nhập đủ thông tin.")
@@ -117,7 +95,7 @@ export default function Alerts() {
 
   // 🗑️ Xoá cảnh báo
   const handleDeleteAlert = async (alertId) => {
-    if (!confirm("Bạn có chắc muốn xoá cảnh báo này? Nếu xoá, bạn sẽ không nhận được thông báo về sản phẩm này nữa.")) return
+    if (!confirm("Bạn có chắc muốn xoá cảnh báo này?")) return
     try {
       setDeletingAlertId(alertId)
       await api.delete(`/alerts/${alertId}`)
@@ -128,20 +106,6 @@ export default function Alerts() {
       setMessage(err.response?.data?.error || "❌ Lỗi khi xoá cảnh báo.")
     } finally {
       setDeletingAlertId(null)
-    }
-  }
-
-  // 🧠 Đánh dấu hoàn thành thủ công
-  const handleManualComplete = async (alertId) => {
-    try {
-      await api.patch(`/alerts/${alertId}/complete`)
-      setAlerts((prev) =>
-        prev.map((a) => (a.id === alertId ? { ...a, notified: true } : a))
-      )
-      setMessage("✅ Đã đánh dấu hoàn thành cảnh báo.")
-    } catch (err) {
-      console.error(err)
-      setMessage("❌ Không thể cập nhật trạng thái.")
     }
   }
 
@@ -181,8 +145,7 @@ export default function Alerts() {
               {alerts.map((a) => (
                 <div
                   key={a.id}
-                  id={`alert-card-${a.id}`}
-                  className={`border rounded-lg p-4 flex justify-between items-center scroll-mt-24 ${highlightedAlertId === String(a.id) ? "ring-2 ring-primary ring-offset-2" : ""} ${a.notified
+                  className={`border rounded-lg p-4 flex justify-between items-center ${a.notified
                     ? "bg-green-50 border-green-300"
                     : "bg-yellow-50 border-yellow-300"
                     }`}
@@ -226,15 +189,6 @@ export default function Alerts() {
 
                   {/* Trạng thái + Xoá */}
                   <div className="flex items-center gap-3">
-                    {!a.notified && (
-                      <button
-                        onClick={() => handleManualComplete(a.id)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-blue-200 text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition"
-                        title="Đánh dấu cảnh báo đã hoàn thành"
-                      >
-                        Đánh dấu hoàn thành
-                      </button>
-                    )}
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium ${a.notified
                         ? "bg-green-600 text-white"

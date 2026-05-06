@@ -1,17 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search } from "lucide-react" // Đã dọn bớt các icon không dùng tới
+import { TrendingUp, TrendingDown, Heart, Search } from "lucide-react"
 import Navbar from "@/components/Navbar"
 import Footer from "@/components/Footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import api from "@/lib/api"
-import LivePriceTicker from "@/components/live-price-ticker.jsx"
 import PriceCard from "@/components/PriceCard"
 import { io } from "socket.io-client"
-
+// import { socket } from "@/socket"
 const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000")
 
 export default function Dashboard() {
@@ -31,7 +30,7 @@ export default function Dashboard() {
 
   const fetchCategories = async () => {
     try {
-      const res = await api.get("/products/categories")
+      const res = await api.get("/products/categories") //
       setCategories(["all", ...res.data.map(c => c.name)])
     } catch (error) {
       console.error("⚠️ Failed to fetch categories:", error)
@@ -52,6 +51,9 @@ export default function Dashboard() {
     fetchProducts()
     fetchCategories()
     fetchRegions()
+    // socket.onAny((event, data) => {
+    //   console.log("📥 nhận event bất kỳ:", event, data);
+    // });
 
     socket.on("productAdded", (newProduct) => {
       setProducts((prev) => [...prev, newProduct])
@@ -71,7 +73,7 @@ export default function Dashboard() {
     try {
       setLoading(true)
 
-      const response = await api.get("/products", {
+      const response = await api.get("/products", { //
         params: {
           page,
           search: searchQuery,
@@ -85,6 +87,7 @@ export default function Dashboard() {
       })
 
       const { data, totalPages } = response.data
+
       const token = localStorage.getItem("token")
       let favoriteIds = []
       let userCosts = new Map()
@@ -92,31 +95,33 @@ export default function Dashboard() {
       if (token) {
         try {
           const [favResponse, costResponse] = await Promise.all([
-            api.get("/favorites"),
+            api.get("/favorites"), //
+            // --- SỬA LỖI Ở ĐÂY: Bỏ "/api" ---
             api.get("/costs")
-          ])
+          ]);
 
           favoriteIds = favResponse.data.map(f => f.productId)
 
           costResponse.data.forEach(c => {
-            userCosts.set(c.product_id, c.cost_price)
-          })
+            userCosts.set(c.product_id, c.cost_price);
+          });
+
         } catch (err) {
           console.warn("⚠️ Không thể tải danh sách yêu thích hoặc chi phí:", err)
         }
       }
 
       const merged = data.map(p => {
-        const productId = p.id || p.productId
-        const userCost = userCosts.get(productId) || 0
+        const productId = p.id || p.productId;
+        const userCost = userCosts.get(productId) || 0;
 
         return {
           ...p,
           id: productId,
           isFavorite: favoriteIds.includes(productId),
           userCost: userCost,
-        }
-      })
+        };
+      });
 
       setProducts(merged)
       setTotalPages(totalPages)
@@ -143,7 +148,6 @@ export default function Dashboard() {
   return (
     <div>
       <Navbar />
-      <LivePriceTicker />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tiêu đề */}

@@ -33,11 +33,9 @@ export async function syncProducts(io) {
         let categoryName = "Cà phê";
         const lowerName = (regionObj.name || "").toLowerCase();
         if (lowerName.includes("tiêu")) {
-            categoryName = "Tiêu";
+            categoryName = "Hồ tiêu";
         } else if (lowerName.includes("sầu riêng") || lowerName.includes("durian")) {
             categoryName = "Sầu riêng";
-        } else if (lowerName.includes("ổi") || lowerName.includes("guava")) {
-            categoryName = "Trái cây";
         }
 
         const [catRows] = await pool.query("SELECT id FROM categories WHERE name = ?", [categoryName]);

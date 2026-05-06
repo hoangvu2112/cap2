@@ -135,10 +135,9 @@ export default function Compare() {
   }, [selectedProducts]);
 
   const handleSelectProduct = (productId) => {
-    const normalizedId = Number(productId);
-    if (!normalizedId || selectedProducts.length >= 5) return;
-    if (selectedProducts.find(p => Number(p.id) === normalizedId)) return;
-    const productToAdd = allProducts.find(p => Number(p.id) === normalizedId);
+    if (!productId || selectedProducts.length >= 5) return;
+    if (selectedProducts.find(p => String(p.id) === String(productId))) return;
+    const productToAdd = allProducts.find(p => String(p.id) === String(productId));
     if (productToAdd) setSelectedProducts([...selectedProducts, productToAdd]);
   };
 

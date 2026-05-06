@@ -89,23 +89,4 @@ router.delete("/:id", authenticateToken, requireRole("user"), async (req, res) =
   }
 })
 
-// Đánh dấu hoàn thành thủ công
-router.patch("/:id/complete", authenticateToken, requireRole("user"), async (req, res) => {
-  try {
-    const [result] = await pool.query(
-      "UPDATE price_alerts SET notified = TRUE WHERE id = ? AND user_id = ?",
-      [req.params.id, req.user.id]
-    )
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Không tìm thấy cảnh báo." })
-    }
-
-    res.json({ message: "✅ Đã đánh dấu hoàn thành" })
-  } catch (error) {
-    console.error("❌ Lỗi cập nhật cảnh báo:", error)
-    res.status(500).json({ error: "Lỗi hệ thống." })
-  }
-})
-
 export default router

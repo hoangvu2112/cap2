@@ -204,8 +204,6 @@ export default function ProductDetail() {
   const [analysisLoading, setAnalysisLoading] = useState(false)
 
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false)
-  const [myOrders, setMyOrders] = useState([])
-  const [payingOrderId, setPayingOrderId] = useState(null)
   const [alertCondition, setAlertCondition] = useState("above")
   const [alertPrice, setAlertPrice] = useState("")
   const [alertSaving, setAlertSaving] = useState(false)
@@ -296,36 +294,6 @@ export default function ProductDetail() {
     fetchPartners()
   }, [product?.id, user])
 
-  // Lấy các orders của user để hiển thị nút thanh toán nếu có order pending cho sản phẩm này
-  useEffect(() => {
-    const fetchMyOrders = async () => {
-      if (!user) return
-      try {
-        const res = await api.get(`/orders/my/${user.id}`)
-        setMyOrders(res.data || [])
-      } catch (err) {
-        console.error("Lỗi tải orders của user:", err)
-      }
-    }
-    fetchMyOrders()
-  }, [user])
-
-  const handlePayOrder = async (orderId) => {
-    if (!orderId) return
-    if (!confirm('Xác nhận thanh toán phí giao dịch?')) return
-    try {
-      setPayingOrderId(orderId)
-      await api.post(`/orders/${orderId}/pay`)
-      // cập nhật local state
-      setMyOrders((prev) => prev.map(o => o.id === Number(orderId) ? { ...o, status: 'completed' } : o))
-      alert('Thanh toán thành công — đơn đã hoàn tất')
-    } catch (err) {
-      alert(err.response?.data?.error || 'Thanh toán thất bại')
-    } finally {
-      setPayingOrderId(null)
-    }
-  }
-
 
   const handleSaveAlert = async () => {
     if (!user) {
@@ -337,8 +305,8 @@ export default function ProductDetail() {
     try {
       await api.post("/alerts", {
         product_id: id,
-        threshold_price: Number(alertPrice),
-        condition: alertCondition,
+        target_price: Number(alertPrice),
+        alert_condition: alertCondition,
         email: user.email
       });
       setAlertSaving(false);
@@ -656,7 +624,7 @@ export default function ProductDetail() {
                         <p className="text-5xl font-black text-gray-900 tracking-tighter leading-none">
                           {currentPrice}
                         </p>
-                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit}</p>
+                        <p className="text-sm font-bold text-muted-foreground mt-2 ml-1">đ /{product.unit || "kg"}</p>
                       </div>
                       <span
                         className={cn(
@@ -689,26 +657,6 @@ export default function ProductDetail() {
                     loading={analysisLoading}
                     product={product}
                   />
-
-                    {/* Nếu có order pending của user cho sản phẩm này -> hiển thị nút Thanh toán */}
-                    {myOrders.filter(o => o.product_id === product.id && o.status === 'pending').length > 0 && (
-                      <div className="mt-4 rounded-xl border border-amber-100 p-4 bg-amber-50/30">
-                        <h4 className="font-bold">Đơn chờ thanh toán</h4>
-                        {myOrders.filter(o => o.product_id === product.id && o.status === 'pending').map((o) => (
-                          <div key={o.id} className="flex items-center justify-between mt-3">
-                            <div>
-                              <div className="text-sm font-bold">Đơn #{o.id} — {o.quantity} x {Number(o.price_per_unit).toLocaleString('vi-VN')} đ</div>
-                              <div className="text-xs text-muted-foreground">Phí: {Number(o.farmer_fee || 0).toLocaleString('vi-VN')} đ (Bạn)</div>
-                            </div>
-                            <div>
-                              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handlePayOrder(o.id)} disabled={payingOrderId === o.id}>
-                                {payingOrderId === o.id ? 'Đang thanh toán...' : 'Thanh toán'}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
 
                   {isDealer && (
                     <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">

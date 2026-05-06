@@ -32,7 +32,7 @@ router.get("/trends", async (req, res) => {
 })
 
 
-router.get("/trends", authenticateToken, isAdmin, async (req, res) => {
+router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
   try {
     const rangeType = req.query.range || "7d"
     let startDate = new Date()
