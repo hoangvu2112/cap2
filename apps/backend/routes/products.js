@@ -39,6 +39,7 @@ router.get("/", async (req, res) => {
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE 1=1
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
     `
     const params = []
     if (ids) {
@@ -124,6 +125,7 @@ router.get("/all", async (req, res) => {
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN users u ON u.id = p.farmer_user_id
+      WHERE p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden'
       ORDER BY p.id DESC
     `)
     const products = rows.map(p => ({
@@ -155,6 +157,7 @@ router.get("/map-data", async (req, res) => {
       WHERE p.region IS NOT NULL 
         AND p.region != 'Toàn quốc' 
         AND p.currentPrice > 0
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
     `);
 
     const mapData = rows.map(p => ({
@@ -301,6 +304,7 @@ router.get("/ticker", async (req, res) => {
     const [rows] = await pool.query(
       `SELECT id, name, currentPrice, previousPrice, trend 
        FROM products 
+       WHERE dealer_visibility_status IS NULL OR dealer_visibility_status <> 'hidden'
        ORDER BY lastUpdate DESC 
        LIMIT 10`
     )
@@ -346,6 +350,7 @@ router.get("/:id", async (req, res) => {
       LEFT JOIN users u ON u.id = p.farmer_user_id
       LEFT JOIN analysis_data ad ON p.id = ad.product_id
       WHERE p.id = ?
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
       `,
       [productId]
     )

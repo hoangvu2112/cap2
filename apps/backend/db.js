@@ -53,6 +53,7 @@ const initDB = async () => {
         region VARCHAR(100) DEFAULT NULL,
         role ENUM('admin','user','dealer') DEFAULT 'user',
         status VARCHAR(50) DEFAULT 'active',
+        dealer_expires_at DATETIME DEFAULT NULL,
         joinDate DATE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -127,6 +128,9 @@ const initDB = async () => {
     harvest_start DATE NULL,
     harvest_end DATE NULL,
     farmer_user_id INT NULL,
+    dealer_visibility_status ENUM('visible','hidden') NOT NULL DEFAULT 'visible',
+    dealer_hidden_at DATETIME NULL,
+    dealer_hidden_until DATETIME NULL,
     lastUpdate DATETIME,
     trend ENUM('up','down','stable'),
     analysis_at DATETIME DEFAULT NULL,
@@ -166,6 +170,9 @@ const initDB = async () => {
     await ensureProductColumn("harvest_start", "harvest_start DATE NULL")
     await ensureProductColumn("harvest_end", "harvest_end DATE NULL")
     await ensureProductColumn("farmer_user_id", "farmer_user_id INT NULL")
+    await ensureProductColumn("dealer_visibility_status", "dealer_visibility_status ENUM('visible','hidden') NOT NULL DEFAULT 'visible'")
+    await ensureProductColumn("dealer_hidden_at", "dealer_hidden_at DATETIME NULL")
+    await ensureProductColumn("dealer_hidden_until", "dealer_hidden_until DATETIME NULL")
 
     try {
       await pool.query("ALTER TABLE products ADD CONSTRAINT fk_products_farmer_user FOREIGN KEY (farmer_user_id) REFERENCES users(id) ON DELETE SET NULL")
@@ -491,88 +498,6 @@ const initDB = async () => {
     console.log("✅ Bảng 'conversation_messages' đã sẵn sàng.");
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS dealer_plans (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        code VARCHAR(50) UNIQUE NOT NULL,
-        name VARCHAR(120) NOT NULL,
-        price_vnd INT NOT NULL DEFAULT 0,
-        duration_days INT NOT NULL DEFAULT 30,
-        is_active BOOLEAN NOT NULL DEFAULT TRUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `)
-    console.log("✅ Bảng 'dealer_plans' đã sẵn sàng.")
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS dealer_upgrade_requests (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        plan_id INT NOT NULL,
-        status ENUM('pending_payment','pending_review','approved','rejected','cancelled') NOT NULL DEFAULT 'pending_payment',
-        payment_status ENUM('unpaid','paid','refunded') NOT NULL DEFAULT 'unpaid',
-        payment_ref VARCHAR(120) DEFAULT NULL,
-        note TEXT,
-        admin_note TEXT,
-        warning_sent BOOLEAN DEFAULT FALSE,
-        reviewed_by INT DEFAULT NULL,
-        reviewed_at DATETIME DEFAULT NULL,
-        approved_at DATETIME DEFAULT NULL,
-        expires_at DATETIME DEFAULT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_dealer_request_user (user_id, status),
-        INDEX idx_dealer_request_status (status, payment_status),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (plan_id) REFERENCES dealer_plans(id) ON DELETE RESTRICT,
-        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
-      )
-    `)
-    console.log("✅ Bảng 'dealer_upgrade_requests' đã sẵn sàng.")
-
-    // Thêm các cột thông tin pháp lý cho đại lý
-    const ensureUpgradeColumn = async (columnName, definitionSql) => {
-      const [colRows] = await pool.query(`
-        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'dealer_upgrade_requests' AND COLUMN_NAME = ?
-      `, [DB_NAME, columnName]);
-      if (colRows.length === 0) {
-        await pool.query(`ALTER TABLE dealer_upgrade_requests ADD COLUMN ${definitionSql}`);
-        console.log(`✅ Đã thêm cột '${columnName}' vào bảng 'dealer_upgrade_requests'.`);
-      }
-    };
-
-    await ensureUpgradeColumn("business_name", "business_name VARCHAR(255) DEFAULT NULL");
-    await ensureUpgradeColumn("tax_code", "tax_code VARCHAR(50) DEFAULT NULL");
-    await ensureUpgradeColumn("business_address", "business_address TEXT DEFAULT NULL");
-    await ensureUpgradeColumn("representative_name", "representative_name VARCHAR(100) DEFAULT NULL");
-    await ensureUpgradeColumn("phone_contact", "phone_contact VARCHAR(20) DEFAULT NULL");
-    await ensureUpgradeColumn("business_items", "business_items TEXT DEFAULT NULL"); // Các mặt hàng kinh doanh
-
-    // Vô hiệu hóa gói cũ (dealer_membership - 60 ngày) và mọi gói không nằm trong danh sách chuẩn
-    await pool.query("UPDATE dealer_plans SET is_active = FALSE WHERE code NOT IN ('dealer_30', 'dealer_90', 'dealer_365')");
-
-    // Đảm bảo 3 gói chuẩn luôn tồn tại và active
-    const ensureDealerPlan = async (code, name, price, days) => {
-      const [rows] = await pool.query("SELECT id FROM dealer_plans WHERE code = ? LIMIT 1", [code]);
-      if (rows.length === 0) {
-        await pool.query(
-          "INSERT INTO dealer_plans (code, name, price_vnd, duration_days, is_active) VALUES (?, ?, ?, ?, TRUE)",
-          [code, name, price, days]
-        );
-      } else {
-        await pool.query(
-          "UPDATE dealer_plans SET name = ?, price_vnd = ?, duration_days = ?, is_active = TRUE WHERE code = ?",
-          [name, price, days, code]
-        );
-      }
-    };
-
-    await ensureDealerPlan("dealer_30",  "Gói Đại lý 30 ngày", 100000, 30);
-    await ensureDealerPlan("dealer_90",  "Gói Đại lý 90 ngày", 250000, 90);
-    await ensureDealerPlan("dealer_365", "Gói Đại lý 1 năm",   800000, 365);
-
-    await pool.query(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -715,6 +640,9 @@ const initDB = async () => {
       }
     }
 
+    await pool.query("ALTER TABLE purchase_requests MODIFY COLUMN status ENUM('pending','responded','closed','completed') DEFAULT 'pending'")
+    console.log("✅ Đã nâng cấp enum status cho purchase_requests.")
+
     await ensureColumnType("purchase_requests", "quantity", "DECIMAL(20,2)")
     await ensureColumnType("purchase_requests", "proposed_price", "DECIMAL(20,2)")
 
@@ -731,22 +659,6 @@ const initDB = async () => {
       )
     `)
     console.log("✅ Bảng 'purchase_request_messages' đã sẵn sàng.")
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS dealer_fee_transactions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        request_id INT NOT NULL UNIQUE,
-        dealer_id INT NOT NULL,
-        amount INT NOT NULL DEFAULT 30000,
-        status ENUM('recorded','refunded') NOT NULL DEFAULT 'recorded',
-        note VARCHAR(255) DEFAULT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
-        FOREIGN KEY (dealer_id) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_dealer_fee_dealer (dealer_id, status)
-      )
-    `)
-    console.log("✅ Bảng 'dealer_fee_transactions' đã sẵn sàng.")
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS dealer_reports (
@@ -828,6 +740,89 @@ const initDB = async () => {
       )
     `)
     console.log("✅ Bảng 'chatbot_chunks' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_supply_listings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        product_id INT NOT NULL,
+        quantity_available DECIMAL(12,2) NOT NULL,
+        harvest_start DATE,
+        harvest_end DATE,
+        supply_status ENUM('available', 'soon', 'partial', 'sold') DEFAULT 'available',
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'user_supply_listings' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS listing_boosts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id INT NOT NULL,
+        user_id INT NOT NULL,
+        status ENUM('pending', 'active', 'cancelled', 'expired') DEFAULT 'pending',
+        boost_start_at DATETIME,
+        boost_end_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (listing_id) REFERENCES user_supply_listings(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'listing_boosts' đã sẵn sàng.")
+
+    // Bảng wallets
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS wallets (
+        user_id INT PRIMARY KEY,
+        balance DECIMAL(20,2) NOT NULL DEFAULT 0,
+        bonus_balance DECIMAL(20,2) NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log("✅ Bảng 'wallets' đã sẵn sàng.");
+
+    // Bảng wallet_transactions
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        amount DECIMAL(20,2) NOT NULL,
+        type ENUM('deposit', 'deduct') NOT NULL,
+        purpose ENUM('boost_pin', 'commission', 'mock_deposit', 'upgrade_dealer') NOT NULL,
+        source ENUM('balance', 'bonus_balance') NOT NULL,
+        note VARCHAR(255),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log("✅ Bảng 'wallet_transactions' đã sẵn sàng.");
+
+    // Bảng commissions
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS commissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL,
+        farmer_id INT NOT NULL,
+        buyer_id INT NOT NULL,
+        total_amount DECIMAL(20,2) NOT NULL,
+        fee_amount DECIMAL(20,2) NOT NULL,
+        farmer_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+        buyer_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log("✅ Bảng 'commissions' đã sẵn sàng.");
 
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool

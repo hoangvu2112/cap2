@@ -26,32 +26,50 @@ async function sendDealerEmail(to, subject, htmlContent) {
   });
 }
 
-export async function checkDealerExpiration() {
+async function hideDealerProducts(userId) {
+  await pool.query(
+    `
+      UPDATE products
+      SET
+        dealer_visibility_status = 'hidden',
+        dealer_hidden_at = NOW(),
+        dealer_hidden_until = DATE_ADD(NOW(), INTERVAL 30 DAY)
+      WHERE farmer_user_id = ?
+    `,
+    [userId]
+  )
+}
+
+function forceLogoutDealer(io, userId, message) {
+  if (!io || !userId) return
+  io.to(`user:${userId}`).emit("auth:force_logout", {
+    code: "ROLE_CHANGED",
+    message,
+  })
+}
+
+export async function checkDealerExpiration(io) {
   console.log("⏱️ Cảnh báo & Hết hạn Đại Lý: Đang kiểm tra...");
   try {
-    // 1. Quét cảnh báo (còn <= 3 ngày)
+    // 1. Quét cảnh báo (Còn đúng 3 ngày)
     const [warnings] = await pool.query(`
-      SELECT r.id, r.user_id, r.expires_at, u.email, u.name, p.name as plan_name
-      FROM dealer_upgrade_requests r
-      JOIN users u ON u.id = r.user_id
-      JOIN dealer_plans p ON p.id = r.plan_id
-      WHERE r.status = 'approved' 
-        AND r.warning_sent = 0
-        AND r.expires_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)
-        AND r.expires_at > NOW()
+      SELECT id, email, name, dealer_expires_at
+      FROM users
+      WHERE role = 'dealer' 
+        AND dealer_expires_at IS NOT NULL
+        AND DATE(dealer_expires_at) = DATE(DATE_ADD(NOW(), INTERVAL 3 DAY))
     `);
 
-    for (const req of warnings) {
+    for (const user of warnings) {
       try {
         const emailHtml = `
           <h2>Cảnh báo hết hạn gói Đại lý</h2>
-          <p>Chào <b>${req.name || req.email}</b>,</p>
-          <p>Gói đại lý <b>${req.plan_name}</b> của bạn sẽ hết hạn vào <b>${new Date(req.expires_at).toLocaleString("vi-VN")}</b>.</p>
-          <p>Vui lòng đăng nhập và đăng ký gia hạn nếu bạn muốn giữ các đặc quyền hiện có nhé.</p>
+          <p>Chào <b>${user.name || user.email}</b>,</p>
+          <p>Gói đại lý của bạn sẽ hết hạn vào <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>.</p>
+          <p>Vui lòng đăng nhập và thanh toán phí Nông Xu để tiếp tục giữ hạng đại lý nhé.</p>
         `;
-        await sendDealerEmail(req.email, "⚠️ Gói Đại Lý sắp hết hạn", emailHtml);
-        await pool.query("UPDATE dealer_upgrade_requests SET warning_sent = 1 WHERE id = ?", [req.id]);
-        console.log(`📩 Đã gửi cảnh báo hết hạn tới ${req.email}`);
+        await sendDealerEmail(user.email, "⚠️ Gói Đại Lý sắp hết hạn", emailHtml);
+        console.log(`📩 Đã gửi cảnh báo hết hạn tới ${user.email}`);
       } catch (err) {
         if (err.message === "SMTP_NOT_CONFIGURED") {
             console.warn("⚠️ Bỏ qua gửi email cảnh báo đại lý: SMTP chưa cấu hình.");
@@ -63,29 +81,29 @@ export async function checkDealerExpiration() {
 
     // 2. Quét hết hạn (quá hạn)
     const [expired] = await pool.query(`
-      SELECT r.id, r.user_id, r.expires_at, u.email, u.name, p.name as plan_name
-      FROM dealer_upgrade_requests r
-      JOIN users u ON u.id = r.user_id
-      JOIN dealer_plans p ON p.id = r.plan_id
-      WHERE r.status = 'approved' 
-        AND r.expires_at <= NOW()
+      SELECT id, email, name, dealer_expires_at
+      FROM users
+      WHERE role = 'dealer' 
+        AND dealer_expires_at IS NOT NULL
+        AND dealer_expires_at <= NOW()
     `);
 
-    for (const req of expired) {
-      // Hạ cấp role của users
-      await pool.query("UPDATE users SET role = 'user' WHERE id = ?", [req.user_id]);
-      // Cập nhật trạng thái request
-      await pool.query("UPDATE dealer_upgrade_requests SET status = 'expired' WHERE id = ?", [req.id]);
+    for (const user of expired) {
+      // Hạ cấp role của users và ẩn dữ liệu dealer
+      await pool.query("UPDATE users SET role = 'user', dealer_expires_at = NULL WHERE id = ?", [user.id]);
+      await hideDealerProducts(user.id)
+
+      forceLogoutDealer(io, user.id, "Vai trò đại lý của bạn đã hết hạn. Vui lòng đăng nhập lại để cập nhật phiên làm việc.")
       
       try {
         const emailHtml = `
           <h2>Thông báo Gói Đại Lý Đã Hết Hạn</h2>
-          <p>Chào <b>${req.name || req.email}</b>,</p>
-          <p>Gói đại lý <b>${req.plan_name}</b> của bạn đã hết hạn vào <b>${new Date(req.expires_at).toLocaleString("vi-VN")}</b>.</p>
-          <p>Tài khoản của bạn đã được chuyển về cấp độ Người dùng cơ bản. Bạn có thể đăng ký nâng cấp lại trên hệ thống bất cứ lúc nào.</p>
+          <p>Chào <b>${user.name || user.email}</b>,</p>
+          <p>Gói đại lý của bạn đã hết hạn vào <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>.</p>
+          <p>Tài khoản của bạn đã được chuyển về cấp độ Người dùng cơ bản. Bạn có thể đăng ký nâng cấp lại trên hệ thống bằng Ví Nông Xu bất cứ lúc nào.</p>
         `;
-        await sendDealerEmail(req.email, "⏳ Gói Đại Lý Của Bạn Đã Hết Hạn", emailHtml);
-        console.log(`📩 Đã gửi thông báo hết hạn tới ${req.email} và hạ cấp thành user`);
+        await sendDealerEmail(user.email, "⏳ Gói Đại Lý Của Bạn Đã Hết Hạn", emailHtml);
+        console.log(`📩 Đã gửi thông báo hết hạn tới ${user.email} và hạ cấp thành user`);
       } catch (err) {
         if (err.message === "SMTP_NOT_CONFIGURED") {
             console.warn("⚠️ Bỏ qua gửi email hết hạn đại lý: SMTP chưa cấu hình.");

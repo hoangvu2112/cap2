@@ -9,17 +9,21 @@ import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import InvoicePopup from "@/components/InvoicePopup"
+import { socket } from "@/socket"
 
 const STATUS_LABEL = {
   pending: "Chờ phản hồi",
   responded: "Đã phản hồi",
-  closed: "Đã chốt",
+  closed: "Đang chốt đơn",
+  completed: "Hoàn thành",
 }
 
 const STATUS_CLASS = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
   responded: "bg-blue-100 text-blue-700 border-blue-200",
-  closed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  closed: "bg-purple-100 text-purple-700 border-purple-200",
+  completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
 }
 
 export default function Negotiation() {
@@ -31,6 +35,8 @@ export default function Negotiation() {
   const [draft, setDraft] = useState("")
   const [loading, setLoading] = useState(true)
   const [actioningId, setActioningId] = useState(null)
+  const [showInvoice, setShowInvoice] = useState(false)
+  const [invoiceData, setInvoiceData] = useState(null)
 
   const selected = useMemo(
     () => requests.find((item) => item.id === selectedId) || null,
@@ -73,7 +79,14 @@ export default function Negotiation() {
       if (res.data.request) {
         setRequests((prev) =>
           prev.map((item) =>
-            item.id === requestId ? { ...item, status: res.data.request.status, updated_at: res.data.request.updated_at } : item
+            item.id === requestId ? { 
+              ...item, 
+              status: res.data.request.status, 
+              updated_at: res.data.request.updated_at,
+              farmer_status: res.data.request.farmer_status,
+              buyer_status: res.data.request.buyer_status,
+              fee_amount: res.data.request.fee_amount
+            } : item
           )
         )
       }
@@ -100,28 +113,22 @@ export default function Negotiation() {
     }
   }
 
-  const handleCloseDeal = async () => {
+  const handleOpenInvoice = async () => {
     if (!selected) return
     try {
-      await api.patch(`/purchase-requests/${selected.id}/status`, { status: "closed" })
-      setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, status: "closed" } : item)))
+      const res = await api.get(`/wallet/invoice-preview/${selected.id}`)
+      if (res.data.success) {
+        setInvoiceData(res.data)
+        setShowInvoice(true)
+      }
     } catch (error) {
-      alert(error.response?.data?.error || "Không thể chốt giao dịch")
+      alert(error.response?.data?.error || "Không thể lấy thông tin hoá đơn")
     }
   }
 
-  const handleDealerConfirm = async () => {
-    if (!selected) return
-    try {
-      setActioningId(selected.id)
-      const res = await api.patch(`/purchase-requests/${selected.id}/dealer-confirm`)
-      setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, ...res.data } : item)))
-      alert("Đã ghi nhận phí đại lý 30k")
-    } catch (error) {
-      alert(error.response?.data?.error || "Không thể ghi nhận phí")
-    } finally {
-      setActioningId(null)
-    }
+  const handlePaymentSuccess = () => {
+    alert("Thanh toán thành công!")
+    fetchMessages(selectedId) // refresh data
   }
 
   const handleDealerReport = async () => {
@@ -162,6 +169,28 @@ export default function Negotiation() {
     fetchMessages(selectedId)
   }, [selectedId])
 
+  useEffect(() => {
+    socket.on("commission_paid", (data) => {
+      if (data.request_id === selectedId) {
+        fetchMessages(selectedId)
+      }
+      fetchRequests() // Cập nhật danh sách bên trái
+    })
+
+    socket.on("order_completed", (data) => {
+      if (data.request_id === selectedId) {
+        fetchMessages(selectedId)
+        alert("Đơn hàng đã hoàn thành! Cả hai bên đã thanh toán hoa hồng.")
+      }
+      fetchRequests() // Cập nhật danh sách bên trái
+    })
+
+    return () => {
+      socket.off("commission_paid")
+      socket.off("order_completed")
+    }
+  }, [selectedId])
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -194,9 +223,25 @@ export default function Negotiation() {
                       <p className="text-xs text-muted-foreground">
                         Đề xuất: {Number(item.proposed_price).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}
                       </p>
-                      <span className={`mt-2 inline-flex px-2 py-1 border rounded-full text-[11px] font-semibold ${STATUS_CLASS[item.status] || STATUS_CLASS.pending}`}>
-                        {STATUS_LABEL[item.status] || item.status}
-                      </span>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <span className={`inline-flex px-2 py-1 border rounded-full text-[11px] font-semibold ${STATUS_CLASS[item.status] || STATUS_CLASS.pending}`}>
+                          {STATUS_LABEL[item.status] || item.status}
+                        </span>
+                        {item.status === 'closed' && (
+                          <>
+                            {(item.farmer_id !== user?.id && item.farmer_status === 'paid') && (
+                              <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
+                                Đối tác đã thanh toán
+                              </span>
+                            )}
+                            {(item.buyer_id !== user?.id && item.buyer_status === 'paid') && (
+                              <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
+                                Đối tác đã thanh toán
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -258,26 +303,31 @@ export default function Negotiation() {
                       disabled={selected.status === "closed"}
                     />
                     <div className="flex gap-2">
-                      <Button onClick={handleSendMessage} disabled={selected.status === "closed" || !draft.trim()}>
+                      <Button onClick={handleSendMessage} disabled={selected.status === "completed" || !draft.trim()}>
                         Gửi tin nhắn
                       </Button>
-                      {user?.role === "user" && selected.status !== "closed" && (
-                        <Button variant="outline" onClick={handleCloseDeal}>
-                          Đã chốt
+                      {selected.status !== "completed" && (
+                        <Button 
+                          variant={selected.status === "closed" ? "default" : "outline"} 
+                          onClick={handleOpenInvoice}
+                          disabled={(selected.farmer_id === user?.id && selected.farmer_status === "paid") || 
+                                    (selected.buyer_id === user?.id && selected.buyer_status === "paid")}
+                        >
+                          {(selected.farmer_id === user?.id && selected.farmer_status === "paid") || 
+                           (selected.buyer_id === user?.id && selected.buyer_status === "paid")
+                            ? "Đã thanh toán (Chờ đối tác)" 
+                            : (selected.status === "closed" ? "Thanh toán Hoa hồng" : "Chốt đơn")}
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  {user?.role === "dealer" && selected.status === "closed" && (
+                  {selected.status === "completed" && (
                     <div className="rounded-lg border p-3 bg-emerald-50/60 space-y-2">
-                      <p className="text-sm font-medium text-emerald-800">Đơn đã được user chốt. Bạn có thể xác nhận giao dịch để hệ thống ghi phí 30k.</p>
+                      <p className="text-sm font-medium text-emerald-800">Đơn hàng đã hoàn thành. Cả hai bên đã thanh toán hoa hồng.</p>
                       <div className="flex flex-wrap gap-2">
-                        <Button onClick={handleDealerConfirm} disabled={actioningId === selected.id || selected.dealer_fee_status === "recorded"}>
-                          {selected.dealer_fee_status === "recorded" ? "Đã ghi phí 30k" : "Đã mua / xác nhận"}
-                        </Button>
                         <Button variant="outline" onClick={handleDealerReport} disabled={actioningId === selected.id || selected.dealer_report_status === "reported"}>
-                          {selected.dealer_report_status === "reported" ? "Đã báo cáo" : "Báo cáo user"}
+                          {selected.dealer_report_status === "reported" ? "Đã báo cáo" : "Báo cáo người dùng"}
                         </Button>
                       </div>
                     </div>
@@ -291,6 +341,16 @@ export default function Negotiation() {
         </div>
       </main>
       <Footer />
+      
+      {showInvoice && (
+        <InvoicePopup 
+          isOpen={showInvoice}
+          onClose={() => setShowInvoice(false)}
+          requestId={selectedId}
+          invoiceData={invoiceData}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }

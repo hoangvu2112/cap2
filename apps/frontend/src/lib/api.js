@@ -22,6 +22,7 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const message = error.response?.data?.error || "";
+    const code = error.response?.data?.code || "";
     const messageLower = String(message).toLowerCase();
 
     console.error("❌ API response error:", status, message);
@@ -35,7 +36,10 @@ api.interceptors.response.use(
         messageLower.includes("unauthorized") ||
         messageLower.includes("authentication") ||
         messageLower.includes("không hợp lệ") ||
-        messageLower.includes("chưa đăng nhập"));
+        messageLower.includes("chưa đăng nhập") ||
+        code === "ROLE_CHANGED" ||
+        messageLower.includes("vui lòng đăng nhập lại") ||
+        messageLower.includes("không còn quyền"));
 
     const isTokenError = is401 || isAuth403;
 

@@ -35,7 +35,7 @@ export default function AdminStatistics() {
     const fetchStats = async () => {
       setLoading(true)
       try {
-        const res = await api.get(`/stats/advanced?range=${timeRange}&category=${selectedCategory}`)
+        const res = await api.get(`/stats/trends?range=${timeRange}&category=${selectedCategory}`)
         setData({
           priceVolatilityData: res.data.priceVolatilityData || [],
           regionData: res.data.regionData || [],

@@ -13,19 +13,50 @@ const router = express.Router()
 
 export const ioRef = { io: null }
 
+const uploadDir = path.join(__dirname, "../uploads/community")
+
+const ensureUploadDir = () => {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true })
+  }
+}
+
+const parseImages = (value) => {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter(Boolean)
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed.filter(Boolean)
+      if (typeof parsed === "string" && parsed.trim()) return [parsed.trim()]
+    } catch {
+      return value.split(",").map((item) => item.trim()).filter(Boolean)
+    }
+  }
+
+  return []
+}
+
+const normalizePost = (post) => {
+  if (!post) return post
+
+  const images = parseImages(post.images ?? post.image_url)
+  post.images = images
+  post.image_url = JSON.stringify(images)
+  post.tags = parseTags(post.tags)
+  return post
+}
+
 // Cấu hình Multer để lưu ảnh
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Trỏ vào thư mục uploads ở cùng cấp với thư mục routes hoặc apps/backend/uploads
-    const uploadPath = path.join(__dirname, "../uploads")
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true })
-    }
-    cb(null, uploadPath)
+    ensureUploadDir()
+    cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
-    cb(null, "post-" + uniqueSuffix + path.extname(file.originalname))
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`)
   },
 })
 
@@ -397,7 +428,7 @@ router.get("/posts", async (req, res) => {
       limit,
       total: countRow.total,
       totalPages: Math.ceil(countRow.total / limit),
-      data: rows.map((post) => ({ ...post, tags: parseTags(post.tags) })),
+      data: rows.map((post) => normalizePost(post)),
     })
   } catch (error) {
     console.error("GET /posts error:", error)
@@ -405,23 +436,14 @@ router.get("/posts", async (req, res) => {
   }
 })
 
-router.post("/posts", authenticateToken, upload.array("images", 10), async (req, res) => {
+router.post("/posts", authenticateToken, upload.array("images", 5), async (req, res) => {
   try {
     const userId = req.user.id
     const { content, tags } = req.body
-    
-    const logData = `[${new Date().toISOString()}] POST /posts (Multi-Upload)\nBody: ${JSON.stringify(req.body)}\nFiles: ${JSON.stringify(req.files)}\n---\n`;
-    fs.appendFileSync(path.join(__dirname, "../logs/debug.log"), logData);
-    
-    console.log("POST /posts body:", req.body)
-    console.log("POST /posts files:", req.files)
-    
-    // Thu thập tất cả URL ảnh
+
     let imageUrls = []
     if (req.files && req.files.length > 0) {
-      imageUrls = req.files.map(file => `/uploads/${file.filename}`)
-    } else if (req.body.imageUrl) {
-      imageUrls = [req.body.imageUrl]
+      imageUrls = req.files.map((file) => `/uploads/community/${file.filename}`)
     }
 
     if (!content?.trim()) {
@@ -429,17 +451,16 @@ router.post("/posts", authenticateToken, upload.array("images", 10), async (req,
     }
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
-    // Lưu danh sách ảnh dưới dạng JSON string
     const imagesToSave = JSON.stringify(imageUrls)
 
     const [result] = await pool.query(
-      "INSERT INTO community_posts (user_id, content, tags, image_url) VALUES (?, ?, ?, ?)",
+      "INSERT INTO community_posts (user_id, content, tags, images) VALUES (?, ?, ?, ?)",
       [userId, content, tagsToSave, imagesToSave]
     )
 
     const [[newPost]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -447,13 +468,38 @@ router.post("/posts", authenticateToken, upload.array("images", 10), async (req,
       [result.insertId]
     )
 
-    newPost.tags = parseTags(newPost.tags)
-    // Client side will parse image_url
+    normalizePost(newPost)
     ioRef.io?.emit("community:new_post", newPost)
 
     res.status(201).json({ message: "Đã tạo bài viết", data: newPost })
   } catch (error) {
     console.error("POST /posts error:", error)
+    res.status(500).json({ error: "Lỗi máy chủ" })
+  }
+})
+
+router.get("/posts/featured", async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 5, 10)
+
+    const [rows] = await pool.query(
+      `
+        SELECT
+          p.*, p.images AS image_url,
+          u.name AS author_name,
+          u.avatar_url,
+          (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
+        FROM community_posts p
+        LEFT JOIN users u ON p.user_id = u.id
+        ORDER BY COALESCE(p.likes, 0) DESC, comments_count DESC, p.id DESC
+        LIMIT ?
+      `,
+      [limit]
+    )
+
+    res.json({ data: rows.map((post) => normalizePost(post)) })
+  } catch (error) {
+    console.error("GET /posts/featured error:", error)
     res.status(500).json({ error: "Lỗi máy chủ" })
   }
 })
@@ -464,7 +510,7 @@ router.get("/posts/:id", async (req, res) => {
 
     const [[post]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -476,7 +522,7 @@ router.get("/posts/:id", async (req, res) => {
       return res.status(404).json({ error: "Không tìm thấy bài" })
     }
 
-    post.tags = parseTags(post.tags)
+    normalizePost(post)
 
     const [comments] = await pool.query(
       `
@@ -497,11 +543,11 @@ router.get("/posts/:id", async (req, res) => {
   }
 })
 
-router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (req, res) => {
+router.put("/posts/:id", authenticateToken, upload.array("images", 5), async (req, res) => {
   try {
     const postId = req.params.id
     const userId = req.user.id
-    const { content, tags, image_url } = req.body
+    const { content, tags, image_url, images } = req.body
 
     const [[post]] = await pool.query(
       "SELECT user_id FROM community_posts WHERE id = ?",
@@ -517,32 +563,24 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (r
     }
 
     // 1. Lấy danh sách ảnh cũ được giữ lại
-    let finalImageUrls = []
-    if (image_url) {
-      try {
-        const parsed = JSON.parse(image_url)
-        finalImageUrls = Array.isArray(parsed) ? parsed : [parsed]
-      } catch {
-        finalImageUrls = [image_url]
-      }
-    }
+    let finalImageUrls = parseImages(images || image_url)
 
     // 2. Thêm các ảnh mới được upload (nếu có)
     if (req.files && req.files.length > 0) {
-      const newUrls = req.files.map(file => `/uploads/${file.filename}`)
+      const newUrls = req.files.map((file) => `/uploads/community/${file.filename}`)
       finalImageUrls = [...finalImageUrls, ...newUrls]
     }
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
 
     await pool.query(
-      "UPDATE community_posts SET content = ?, tags = ?, image_url = ? WHERE id = ?",
+      "UPDATE community_posts SET content = ?, tags = ?, images = ? WHERE id = ?",
       [content, tagsToSave, JSON.stringify(finalImageUrls), postId]
     )
 
     const [[updated]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -550,7 +588,7 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (r
       [postId]
     )
 
-    updated.tags = parseTags(updated.tags)
+    normalizePost(updated)
     ioRef.io?.emit("community:post_updated", updated)
 
     res.json({ message: "Đã cập nhật bài", data: updated })

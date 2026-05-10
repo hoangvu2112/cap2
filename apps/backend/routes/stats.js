@@ -4,7 +4,7 @@ import { authenticateToken, isAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 
-router.get("/trends", async (req, res) => {
+router.get("/market-trends", async (req, res) => {
   try {
     const [topGainers] = await pool.query(`
       SELECT id, name, region, currentPrice, previousPrice,
@@ -31,8 +31,7 @@ router.get("/trends", async (req, res) => {
   }
 })
 
-
-router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
+const buildTrendStats = async (req, res) => {
   try {
     const rangeType = req.query.range || "7d"
     let startDate = new Date()
@@ -191,6 +190,9 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
     console.error("❌ Lỗi thống kê nâng cao:", error)
     res.status(500).json({ error: "Lỗi server khi lấy thống kê" })
   }
-})
+}
+
+router.get("/trends", authenticateToken, isAdmin, buildTrendStats)
+router.get("/advanced", authenticateToken, isAdmin, buildTrendStats)
 
 export default router

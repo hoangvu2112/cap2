@@ -28,11 +28,14 @@ import {
   ShieldCheck,
   Handshake,
   MessageSquare,
+  Wallet,
 } from "lucide-react"
 
 const USER_NAV = [
   { path: "/", icon: Home, label: "Trang chủ" },
+  { path: "/my-supply", icon: Sprout, label: "Nguồn hàng" },
   { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
+  { path: "/wallet", icon: Wallet, label: "Ví Nông Xu" },
   { path: "/community", icon: Users, label: "Cộng đồng" },
   { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
   { path: "/news", icon: Newspaper, label: "Tin tức" },
@@ -43,7 +46,9 @@ const USER_NAV = [
 
 const DEALER_NAV = [
   { path: "/", icon: Home, label: "Trang chủ" },
+  { path: "/dealer-supply", icon: Sprout, label: "Cơ hội mua" },
   { path: "/negotiation", icon: Users, label: "Thương lượng" },
+  { path: "/wallet", icon: Wallet, label: "Ví Nông Xu" },
   { path: "/community", icon: Users, label: "Cộng đồng" },
   { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
   { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },

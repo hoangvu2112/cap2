@@ -25,6 +25,10 @@ import statsRoutes from "./routes/stats.js";
 import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
 import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
+import listingBoostsRoutes from "./routes/listingBoosts.js";
+import dealerSuppliesRoutes from "./routes/dealerSupplies.js";
+import ordersRoutes from "./routes/orders.js";
+import walletRoutes from "./routes/wallet.js";
 import pool from "./db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +50,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -66,6 +70,10 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/chat", chatRouter);
 app.use("/api/purchase-requests", purchaseRequestRoutes);
 app.use("/api/dealer-upgrade", dealerUpgradeRoutes);
+app.use("/api/listing-boosts", listingBoostsRoutes);
+app.use("/api/dealer-supplies", dealerSuppliesRoutes);
+app.use("/api/orders", ordersRoutes);
+app.use("/api/wallet", walletRoutes);
 
 io.use((socket, next) => {
   try {
@@ -302,7 +310,7 @@ function removeDuplicateRows(arr) {
 
 (async () => {
   await checkAndScrapeIfNeeded();
-  await checkDealerExpiration();
+  await checkDealerExpiration(io);
 })();
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
@@ -318,7 +326,7 @@ setTimeout(() => {
   console.log("⏱️ Cron đồng bộ chatbot đã bật (chạy mỗi 6 giờ).")
 
   cron.schedule("0 * * * *", async () => {
-    await checkDealerExpiration();
+    await checkDealerExpiration(io);
   });
   console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
 

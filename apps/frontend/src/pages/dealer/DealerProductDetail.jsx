@@ -162,12 +162,6 @@ export default function ProductDetail() {
   const [alertPrice, setAlertPrice] = useState("")
   const [alertSaving, setAlertSaving] = useState(false)
   const [alertError, setAlertError] = useState(null)
-  const [farmers, setFarmers] = useState([])
-  const [selectedFarmer, setSelectedFarmer] = useState("")
-  const [requestQty, setRequestQty] = useState("")
-  const [requestPrice, setRequestPrice] = useState("")
-  const [requestNote, setRequestNote] = useState("")
-  const [requestSaving, setRequestSaving] = useState(false)
 
   // 1. Fetch thông tin sản phẩm chính (Giá, Biểu đồ) - Cần nhanh
   useEffect(() => {
@@ -211,25 +205,6 @@ export default function ProductDetail() {
     fetchProduct()
   }, [id, range])
 
-  useEffect(() => {
-    const fetchFarmers = async () => {
-      if (!product?.id) return
-      try {
-        const res = await api.get("/purchase-requests/farmers", {
-          params: { productId: product.id },
-        })
-        setFarmers(res.data || [])
-        if ((res.data || []).length > 0) {
-          setSelectedFarmer(String(res.data[0].id))
-        }
-      } catch (error) {
-        console.error("Lỗi tải danh sách nông dân:", error)
-      }
-    }
-    fetchFarmers()
-  }, [product?.id])
-
-
   const handleSaveAlert = async () => {
     if (!user) {
       setAlertError("Bạn cần đăng nhập để tạo cảnh báo.");
@@ -266,38 +241,6 @@ export default function ProductDetail() {
       setIsAlertModalOpen(true);
     }
   };
-
-  const handleSendPurchaseRequest = async () => {
-    if (!user) {
-      navigate("/login")
-      return
-    }
-
-    if (!selectedFarmer || !requestQty || !requestPrice) {
-      alert("Vui lòng nhập đủ nông dân, số lượng và giá đề xuất")
-      return
-    }
-
-    setRequestSaving(true)
-    try {
-      await api.post("/purchase-requests", {
-        product_id: product.id,
-        farmer_id: Number(selectedFarmer),
-        quantity: Number(requestQty),
-        proposed_price: Number(requestPrice),
-        note: requestNote,
-      })
-
-      setRequestQty("")
-      setRequestPrice("")
-      setRequestNote("")
-      alert("Đã gửi yêu cầu mua thành công")
-    } catch (error) {
-      alert(error.response?.data?.error || "Không thể gửi yêu cầu mua")
-    } finally {
-      setRequestSaving(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -512,78 +455,12 @@ export default function ProductDetail() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-gray-100 p-4 bg-white space-y-3">
-                    <h3 className="font-bold text-gray-900">Nông dân cung ứng</h3>
-                    <p className="text-xs text-muted-foreground">Thông tin liên hệ được giữ trong hệ thống, hãy nhắn trực tiếp để trao đổi.</p>
-                    {farmers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Chưa có danh sách nông dân phù hợp.</p>
-                    ) : (
-                      <>
-                        <select
-                          value={selectedFarmer}
-                          onChange={(e) => setSelectedFarmer(e.target.value)}
-                          className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
-                        >
-                          {farmers.map((farmer) => (
-                            <option key={farmer.id} value={farmer.id}>
-                              {farmer.name} ({farmer.role === "dealer" ? "Đại lý" : "Nông dân"})
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => navigate(`/community?targetUser=${selectedFarmer}`)}
-                        >
-                          <MessageSquare className="w-4 h-4 mr-2" /> Nhắn tin thương lượng
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
                   {/* AI INSIGHT SECTION (Bây giờ có loading state) */}
                   <AnalysisCard
                     analysis={analysis}
                     loading={analysisLoading}
                     product={product}
                   />
-
-                  <div className="rounded-2xl border border-gray-100 p-4 bg-gray-50/60 space-y-3">
-                    <div>
-                      <span className="text-sm font-bold text-gray-900">Gửi yêu cầu mua</span>
-                      <p className="text-xs text-muted-foreground mt-1">Ví dụ: Tôi muốn mua 2 tấn, giá 10k/kg.</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="number"
-                        value={requestQty}
-                        onChange={(e) => setRequestQty(e.target.value)}
-                        placeholder={`Số lượng (${product.unit || "kg"})`}
-                      />
-                      <Input
-                        type="number"
-                        value={requestPrice}
-                        onChange={(e) => setRequestPrice(e.target.value)}
-                        placeholder={`Giá đề xuất (đ/${product.unit || "kg"})`}
-                      />
-                    </div>
-
-                    <Textarea
-                      value={requestNote}
-                      onChange={(e) => setRequestNote(e.target.value)}
-                      placeholder="Ghi chú giao dịch..."
-                      className="min-h-[80px]"
-                    />
-
-                    <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700"
-                      disabled={requestSaving}
-                      onClick={handleSendPurchaseRequest}
-                    >
-                      {requestSaving ? "Đang gửi..." : "Gửi yêu cầu mua"}
-                    </Button>
-                  </div>
 
                   {/* Footer Info */}
                   <div className="flex items-center justify-between pt-6 border-t border-gray-100 mt-2">

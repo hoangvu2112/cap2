@@ -1,10 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import api from "../../lib/api"
+import { useAuth } from "../../context/AuthContext"
+import { useToast } from "@/components/ui/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import {
   Card,
   CardHeader,
@@ -19,7 +30,15 @@ function SupplyManager() {
   const [allProducts, setAllProducts] = useState([])
   const [boostPlans, setBoostPlans] = useState([])
   const [boostingId, setBoostingId] = useState(null)
+  const formRef = useRef(null)
   
+  const { user, setUser } = useAuth()
+  const { toast } = useToast()
+  
+  const [boostModalOpen, setBoostModalOpen] = useState(false)
+  const [boostItem, setBoostItem] = useState(null)
+  const [selectedPlanId, setSelectedPlanId] = useState("")
+
   // States cho Form
   const [editingId, setEditingId] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState("")
@@ -110,7 +129,7 @@ function SupplyManager() {
     
     setSupplyStatus(item.supply_status)
     setNote(item.note || "")
-    window.scrollTo({ top: 0, behavior: "smooth" })
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   const handleCancelEdit = () => {
@@ -167,49 +186,66 @@ function SupplyManager() {
     }
   }
 
-  const handleBoostListing = async (item) => {
+  const handleBoostListing = (item) => {
     const availablePlans = normalizeBoostPlans(boostPlans)
 
     if (item.is_boosted) {
-      alert("Nguồn hàng này đang được ghim, chưa cần mua thêm gói.")
+      toast({
+        variant: "destructive",
+        title: "Thông báo",
+        description: "Nguồn hàng này đang được ghim, chưa cần mua thêm gói."
+      })
       return
     }
 
     if (availablePlans.length === 0) {
-      alert("Chưa có gói ghim khả dụng. Vui lòng thử lại sau.")
+      toast({
+        variant: "destructive",
+        title: "Thông báo",
+        description: "Chưa có gói ghim khả dụng. Vui lòng thử lại sau."
+      })
       return
     }
 
-    const planText = availablePlans
-      .map((plan, index) => `${index + 1}. ${plan.name} - ${Number(plan.price).toLocaleString("vi-VN")}đ`)
-      .join("\n")
-    const selected = prompt(`Chọn gói ghim cho ${item.product_name}:\n${planText}\n\nNhập số thứ tự gói:`)
-    if (!selected) return
+    setBoostItem(item)
+    setSelectedPlanId(String(availablePlans[0].id))
+    setBoostModalOpen(true)
+  }
 
-    const plan = availablePlans[Number(selected) - 1]
-    if (!plan) {
-      alert("Gói ghim không hợp lệ")
-      return
-    }
-
-    const ok = confirm(`Mô phỏng thanh toán ${Number(plan.price).toLocaleString("vi-VN")}đ cho gói ${plan.name}?`)
-    if (!ok) return
+  const handleConfirmBoost = async () => {
+    if (!boostItem || !selectedPlanId) return
 
     try {
-      setBoostingId(item.id)
+      setBoostingId(boostItem.id)
       const paymentRes = await api.post("/listing-boosts/create-payment", {
-        listing_id: item.id,
-        plan_id: plan.id,
+        listing_id: boostItem.id,
+        plan_id: Number(selectedPlanId),
       })
-      const paymentId = paymentRes.data?.payment?.id
-      if (!paymentId) throw new Error("Không tạo được mã thanh toán")
+      
+      toast({
+        title: "Ghim tin thành công. Đã trừ tiền từ Ví Nông Xu",
+        className: "bg-emerald-500 text-white border-none",
+      })
 
-      await api.post(`/listing-boosts/payments/${paymentId}/simulate-success`)
-      alert("Thanh toán mô phỏng thành công. Tin của bạn đã được ghim!")
+      // Cập nhật profile để update số dư
+      try {
+        const profileRes = await api.get("/auth/me")
+        if (profileRes.data && typeof setUser === "function") {
+          setUser(profileRes.data)
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      setBoostModalOpen(false)
       fetchListings()
     } catch (error) {
       console.error("Lỗi ghim tin", error)
-      alert(error.response?.data?.error || "Không thể ghim nguồn hàng")
+      toast({
+        variant: "destructive",
+        title: "Lỗi",
+        description: error.response?.data?.error || "Không thể ghim nguồn hàng",
+      })
     } finally {
       setBoostingId(null)
     }
@@ -217,6 +253,11 @@ function SupplyManager() {
 
 
   const statusLabel = { available: "Đang có hàng", soon: "Sắp thu hoạch", partial: "Bán một phần", sold: "Đã bán gần hết" }
+
+  const availableProducts = allProducts.filter((p) => {
+    if (editingId && selectedProduct === String(p.id)) return true
+    return !listings.some((listing) => listing.product_id === p.id)
+  })
 
   return (
     <Card>
@@ -226,12 +267,12 @@ function SupplyManager() {
       </CardHeader>
       <CardContent className="space-y-6">
         
-        <form onSubmit={handleSaveListing} className={`space-y-4 rounded-lg border p-4 transition-colors ${editingId ? "border-emerald-500 bg-emerald-50/20" : "border-border"}`}>
+        <form ref={formRef} onSubmit={handleSaveListing} className={`space-y-4 rounded-lg border p-4 transition-colors ${editingId ? "border-emerald-500 bg-emerald-50/20" : "border-border"}`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium">Sản phẩm</label>
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="flex h-10 w-full items-center rounded-md border bg-background px-3 py-2 text-sm">
-                {allProducts.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.region})</option>)}
+                {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.region})</option>)}
               </select>
             </div>
             <div>
@@ -292,7 +333,12 @@ function SupplyManager() {
                   <div className="flex-grow space-y-1">
                     <p className="font-bold text-foreground text-lg">{item.product_name}</p>
                     <p className="text-sm">📦 Sản lượng: <span className="font-medium">{item.quantity_available.toLocaleString()} kg</span></p>
-                    <p className="text-sm">🏷️ Trạng thái: <span className="font-medium text-emerald-700">{statusLabel[item.supply_status]}</span></p>
+                    <p className="text-sm flex items-center gap-2">
+                      🏷️ Trạng thái:
+                      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-none">
+                        {statusLabel[item.supply_status]}
+                      </Badge>
+                    </p>
                     {item.is_boosted ? (
                       <p className="text-sm font-semibold text-amber-700">
                         📌 Đang ghim{item.boost_end_at ? ` đến ${new Date(item.boost_end_at).toLocaleDateString("vi-VN")}` : ""}
@@ -330,6 +376,42 @@ function SupplyManager() {
           )}
         </div>
       </CardContent>
+
+      <Dialog open={boostModalOpen} onOpenChange={setBoostModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Xác nhận thanh toán gói Ghim tin bằng Ví Nông Xu</DialogTitle>
+            <DialogDescription>
+              Vui lòng chọn gói ghim cho sản phẩm <span className="font-bold text-foreground">{boostItem?.product_name}</span>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <label className="mb-2 block text-sm font-medium">Chọn gói ghim</label>
+            <select
+              value={selectedPlanId}
+              onChange={(e) => setSelectedPlanId(e.target.value)}
+              className="flex h-10 w-full items-center rounded-md border bg-background px-3 py-2 text-sm"
+            >
+              {normalizeBoostPlans(boostPlans).map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} - {Number(plan.price).toLocaleString("vi-VN")}đ ({plan.duration_days} ngày)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBoostModalOpen(false)} disabled={boostingId === boostItem?.id}>
+              Hủy
+            </Button>
+            <Button onClick={handleConfirmBoost} disabled={boostingId === boostItem?.id} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {boostingId === boostItem?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Xác nhận
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

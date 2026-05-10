@@ -3,7 +3,7 @@ import AdminNavbar from "@/components/AdminNavbar"
 import api from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, RefreshCw } from "lucide-react"
+import { ShieldCheck, RefreshCw, ExternalLink } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function AdminDealers() {
@@ -15,6 +15,7 @@ export default function AdminDealers() {
   const [dealerReports, setDealerReports] = useState([])
   const [reportLoading, setReportLoading] = useState(false)
   const [reportReviewingId, setReportReviewingId] = useState(null)
+  const [activeDealerTab, setActiveDealerTab] = useState("pending")
 
   const loadDealerRequests = async () => {
     try {
@@ -120,7 +121,16 @@ export default function AdminDealers() {
     }
   }
 
-  const openRequests = dealerRequests.filter((request) => ["pending_payment", "pending_review"].includes(request.status))
+  const pendingRequests = dealerRequests.filter((request) => ["requesting", "pending_review", "pending_payment"].includes(request.status))
+  const activeRequests = dealerRequests.filter((request) => request.status === "approved")
+  const endedRequests = dealerRequests.filter((request) => ["revoked", "rejected", "expired"].includes(request.status))
+
+  const visibleDealerRequests =
+    activeDealerTab === "pending"
+      ? pendingRequests
+      : activeDealerTab === "active"
+      ? activeRequests
+      : endedRequests
 
   return (
     <div className="min-h-screen bg-[#fcfaf8]">
@@ -144,7 +154,7 @@ export default function AdminDealers() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm text-gray-500">
-                  {dealerLoading ? "Đang tải yêu cầu..." : `${openRequests.length} yêu cầu đang chờ xử lý`}
+                  {dealerLoading ? "Đang tải yêu cầu..." : `${pendingRequests.length} yêu cầu chờ duyệt`}
                 </div>
                 <Button variant="outline" size="sm" onClick={loadDealerRequests} disabled={dealerLoading}>
                   <RefreshCw className={`w-4 h-4 mr-2 ${dealerLoading ? "animate-spin" : ""}`} />
@@ -152,13 +162,35 @@ export default function AdminDealers() {
                 </Button>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  { id: "pending", label: "Chờ duyệt", count: pendingRequests.length },
+                  { id: "active", label: "Đang hoạt động", count: activeRequests.length },
+                  { id: "ended", label: "Đã hết hạn/Bị huỷ", count: endedRequests.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveDealerTab(tab.id)}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${activeDealerTab === tab.id ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                  >
+                    <div className="text-sm font-semibold text-gray-900">{tab.label}</div>
+                    <div className="text-xs text-gray-500 mt-1">{tab.count} yêu cầu</div>
+                  </button>
+                ))}
+              </div>
+
               <div className="space-y-4 max-h-[700px] overflow-auto pr-2">
                 {dealerRequests.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-gray-200 p-8 text-sm text-gray-500 text-center">
                     Chưa có yêu cầu nâng cấp đại lý.
                   </div>
+                ) : visibleDealerRequests.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-gray-200 p-8 text-sm text-gray-500 text-center">
+                    Không có yêu cầu trong tab này.
+                  </div>
                 ) : (
-                  dealerRequests.map((request) => (
+                  visibleDealerRequests.map((request) => (
                     <div key={request.id} className="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                         <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
@@ -173,15 +205,15 @@ export default function AdminDealers() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {["pending_payment", "pending_review"].includes(request.status) ? (
+                          {activeDealerTab === "pending" && ["requesting", "pending_review", "pending_payment"].includes(request.status) ? (
                             <>
                               <Button
                                 size="sm"
                                 className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4"
                                 onClick={() => handleReviewRequest(request.id, "approve")}
-                                disabled={reviewingId === request.id}
+                                disabled={reviewingId === request.id || request.payment_status !== "paid"}
                               >
-                                {reviewingId === request.id ? "Đang xử lý..." : "Duyệt đại lý"}
+                                {reviewingId === request.id ? "Đang xử lý..." : request.payment_status === "paid" ? "Duyệt đại lý" : "Chờ thanh toán"}
                               </Button>
                               <Button
                                 size="sm"
@@ -193,7 +225,7 @@ export default function AdminDealers() {
                                 Từ chối
                               </Button>
                             </>
-                          ) : request.status === "approved" ? (
+                          ) : activeDealerTab === "active" && request.status === "approved" ? (
                             <Button
                               size="sm"
                               variant="destructive"
@@ -209,9 +241,26 @@ export default function AdminDealers() {
 
                       <div className="flex flex-wrap gap-2 text-xs">
                         <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Trạng thái: <span className={['pending_review', 'pending_payment'].includes(request.status) ? 'text-amber-600' : request.status === 'approved' ? 'text-emerald-600' : request.status === 'revoked' ? 'text-rose-600' : 'text-gray-700'}>{request.status}</span></span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Thanh toán: <span className={request.payment_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}>{request.payment_status}</span></span>
+                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Thanh toán: <span className={request.payment_status === 'paid' ? 'text-emerald-600' : request.payment_status === 'failed' ? 'text-rose-600' : 'text-amber-600'}>{request.payment_status}</span></span>
                         <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-600">Ngày gửi: {new Date(request.created_at).toLocaleString('vi-VN')}</span>
                       </div>
+
+                      {(request.payment_evidence_url || request.payment_ref) ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 px-4"
+                            onClick={() => window.open(request.payment_evidence_url || request.payment_ref, "_blank", "noopener,noreferrer")}
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Xem bằng chứng thanh toán
+                          </Button>
+                          {request.payment_ref ? (
+                            <span className="text-xs text-gray-500 self-center">Mã tham chiếu: {request.payment_ref}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       {request.note ? (
                         <div className="text-sm text-gray-700 bg-white border border-gray-200 rounded-lg p-3">

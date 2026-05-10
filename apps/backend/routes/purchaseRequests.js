@@ -1,6 +1,7 @@
 import express from "express"
 import pool from "../db.js"
 import { authenticateToken, requireRole, isAdmin } from "../middleware/auth.js"
+import { checkActiveRole } from "../middleware/checkActiveRole.js"
 
 const router = express.Router()
 
@@ -48,8 +49,13 @@ router.get("/partners", authenticateToken, async (req, res) => {
     // 2. Lấy danh sách tỉnh cùng miền để dùng trong SQL
     const sameGroupProvinces = userGroup ? REGION_GROUPS[userGroup] : []
 
-    // 3. Xác định vai trò cần tìm
-    const isDealer = req.user.role === 'dealer'
+    // 3. Xác định vai trò hiện tại từ DB để tránh dùng JWT cũ
+    const [[currentRoleRow]] = await pool.query(
+      "SELECT role FROM users WHERE id = ? AND status = 'active'",
+      [req.user.id]
+    )
+
+    const isDealer = currentRoleRow?.role === 'dealer'
     const targetRoles = isDealer ? "('user', 'dealer')" : "('dealer')"
 
     // 4. Truy vấn với 3 cấp ưu tiên:
@@ -118,9 +124,18 @@ router.post("/", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Không tìm thấy đối tác" })
     }
 
+    const [[initiator]] = await pool.query(
+      "SELECT id, role FROM users WHERE id = ? AND status = 'active'",
+      [initiatorId]
+    )
+
+    if (!initiator) {
+      return res.status(404).json({ error: "Không tìm thấy người khởi tạo" })
+    }
+
     // Xác định ai là người mua, ai là nông dân dựa trên vai trò của người khởi tạo
     let buyer_id, farmer_id;
-    if (req.user.role === 'dealer') {
+    if (initiator.role === 'dealer') {
       buyer_id = initiatorId;
       farmer_id = partner_id;
     } else {
@@ -181,11 +196,14 @@ router.get("/all", authenticateToken, async (req, res) => {
           buyer.name AS buyer_name,
           buyer.avatar_url AS buyer_avatar,
           farmer.name AS farmer_name,
-          farmer.avatar_url AS farmer_avatar
+          farmer.avatar_url AS farmer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         LEFT JOIN products p ON p.id = pr.product_id
         LEFT JOIN users buyer ON buyer.id = pr.buyer_id
         LEFT JOIN users farmer ON farmer.id = pr.farmer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.buyer_id = ? OR pr.farmer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -221,10 +239,13 @@ router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req
           p.region AS product_region,
           farmer.id AS farmer_id,
           farmer.name AS farmer_name,
-          farmer.avatar_url AS farmer_avatar
+          farmer.avatar_url AS farmer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
         JOIN users farmer ON farmer.id = pr.farmer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.buyer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -238,7 +259,7 @@ router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req
   }
 })
 
-router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.patch("/:id/dealer-confirm", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
   try {
     const requestId = Number(req.params.id)
     if (!requestId) {
@@ -282,14 +303,6 @@ router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), as
       [requestId]
     )
 
-    await pool.query(
-      `
-        INSERT INTO dealer_fee_transactions (request_id, dealer_id, amount, status, note)
-        VALUES (?, ?, ?, 'recorded', 'Ghi nhận phí đại lý khi xác nhận đơn')
-      `,
-      [requestId, req.user.id, Number(request.dealer_fee_amount || 30000)]
-    )
-
     const [[updated]] = await pool.query(
       `
         SELECT
@@ -325,7 +338,7 @@ router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), as
   }
 })
 
-router.post("/:id/report", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.post("/:id/report", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
   try {
     const requestId = Number(req.params.id)
     const reason = String(req.body?.reason || "").trim()
@@ -522,10 +535,13 @@ router.get("/incoming", authenticateToken, requireRole("user", "dealer"), async 
           p.region AS product_region,
           buyer.id AS buyer_id,
           buyer.name AS buyer_name,
-          buyer.avatar_url AS buyer_avatar
+          buyer.avatar_url AS buyer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
         JOIN users buyer ON buyer.id = pr.buyer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.farmer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -557,9 +573,13 @@ router.get("/:id/messages", authenticateToken, requireRole("user", "dealer"), as
           p.name AS product_name,
           p.unit AS product_unit,
           pr.quantity,
-          pr.proposed_price
+          pr.proposed_price,
+          c.farmer_status,
+          c.buyer_status,
+          c.fee_amount
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.id = ?
       `,
       [requestId]
