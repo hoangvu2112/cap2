@@ -6,7 +6,13 @@ import { SYSTEM_FEES } from "../utils/constants.js"
 
 const router = express.Router()
 
+// Lấy danh sách các gói nâng cấp đại lý
+router.get("/packages", authenticateToken, async (req, res) => {
+  res.json({ packages: SYSTEM_FEES.DEALER_PACKAGES })
+})
+
 router.post("/apply", authenticateToken, checkActiveRole("user"), async (req, res) => {
+  const { packageId } = req.body
   const connection = await pool.getConnection()
   try {
     if (req.user.role === "admin") {
@@ -16,8 +22,13 @@ router.post("/apply", authenticateToken, checkActiveRole("user"), async (req, re
       return res.status(400).json({ error: "Bạn đã là đại lý rồi" })
     }
 
-    const planPrice = SYSTEM_FEES.DEALER_UPGRADE.price
-    const planDuration = SYSTEM_FEES.DEALER_UPGRADE.duration_days
+    const pkg = SYSTEM_FEES.DEALER_PACKAGES.find(p => p.id === packageId)
+    if (!pkg) {
+      return res.status(400).json({ error: "Gói nâng cấp không hợp lệ" })
+    }
+
+    const planPrice = pkg.price_vnd
+    const planDuration = pkg.duration_days
 
     await connection.beginTransaction()
 
@@ -49,10 +60,12 @@ router.post("/apply", authenticateToken, checkActiveRole("user"), async (req, re
     await connection.query(
       `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
        VALUES (?, ?, 'deduct', 'upgrade_dealer', 'balance', ?)`,
-      [req.user.id, planPrice, `Thanh toán phí nâng cấp Đại lý (${planDuration} ngày)`]
+      [req.user.id, planPrice, `Thanh toán phí nâng cấp Đại lý (${pkg.name})`]
     )
 
     // 4. Cập nhật role và ngày hết hạn trong bảng users
+    // Lưu ý: Nếu user đã có ngày hết hạn cũ (gia hạn), chúng ta có thể cộng dồn, 
+    // nhưng ở đây logic là nâng cấp từ 'user' nên set từ NOW.
     await connection.query(
       "UPDATE users SET role = 'dealer', dealer_expires_at = DATE_ADD(NOW(), INTERVAL ? DAY) WHERE id = ?", 
       [planDuration, req.user.id]
@@ -75,7 +88,7 @@ router.post("/apply", authenticateToken, checkActiveRole("user"), async (req, re
 
     res.status(201).json({
       success: true,
-      message: "Nâng cấp đại lý thành công. Bạn đã trở thành Đại lý."
+      message: `Nâng cấp đại lý thành công. Bạn đã trở thành Đại lý (Hạn dùng: ${planDuration} ngày).`
     })
   } catch (error) {
     await connection.rollback()

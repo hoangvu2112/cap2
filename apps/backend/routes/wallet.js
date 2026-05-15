@@ -150,6 +150,18 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
       [userId, feeAmountToPay, `Thanh toán hoa hồng cho đơn #${requestId}`]
     );
 
+    // 5b. Nếu là người mua (đại lý), cập nhật trạng thái dealer_fee trong purchase_requests
+    if (!isFarmer) {
+      await connection.query(
+        `UPDATE purchase_requests 
+         SET dealer_fee_status = 'recorded', 
+             dealer_fee_amount = ?, 
+             dealer_action_at = NOW() 
+         WHERE id = ?`,
+        [feeAmountToPay, requestId]
+      );
+    }
+
     // 6. Cập nhật bảng commissions
     let [[commission]] = await connection.query(
       "SELECT id, farmer_status, buyer_status FROM commissions WHERE request_id = ?",

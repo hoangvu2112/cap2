@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Wallet as WalletIcon, CreditCard, ArrowDownRight, ArrowUpRight, History, Gift, PlusCircle } from "lucide-react";
 import api from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
 
 export default function Wallet() {
   const [wallet, setWallet] = useState(null);
@@ -138,7 +139,7 @@ export default function Wallet() {
                       {tx.note || (tx.type === 'deposit' ? 'Nạp tiền' : 'Trừ tiền')}
                     </p>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                      {new Date(tx.created_at).toLocaleString('vi-VN')} • Nguồn: {tx.source === 'bonus_balance' ? 'Tiền Tặng' : 'Tiền Nạp'}
+                      {formatDateTime(tx.created_at)} • Nguồn: {tx.source === 'bonus_balance' ? 'Tiền Tặng' : 'Tiền Nạp'}
                     </p>
                   </div>
                 </div>

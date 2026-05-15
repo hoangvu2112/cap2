@@ -8,39 +8,64 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "./.env") });
 
-const DB_NAME = process.env.DB_NAME || "agrirend"
-const DB_HOST = process.env.DB_HOST || "localhost"
-const DB_USER = process.env.DB_USER || "root"
-const DB_PASS = process.env.DB_PASS || ""
+const DB_NAME = (process.env.DB_NAME || "agrirend").trim()
+const DB_HOST = (process.env.DB_HOST || "localhost").trim()
+const DB_USER = (process.env.DB_USER || "root").trim()
+const DB_PASS = (process.env.DB_PASS || "").trim()
+const DB_PORT = process.env.DB_PORT || 3306
 
-// Hàm khởi tạo DB
-const initDB = async () => {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Hàm khởi tạo DB với cơ chế thử lại (Retry)
+const initDB = async (retries = 5) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // 1️⃣ Kết nối MySQL tạm để tạo database nếu chưa có
+      const connection = await mysql.createConnection({
+        host: DB_HOST,
+        user: DB_USER,
+        password: DB_PASS,
+        port: Number(DB_PORT),
+        ssl: { rejectUnauthorized: false }
+      })
+
+      await connection.query(`
+        CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
+        CHARACTER SET utf8mb4
+        COLLATE utf8mb4_unicode_ci
+      `)
+      console.log(`✅ Database "${DB_NAME}" đã sẵn sàng.`)
+      await connection.end()
+
+      // 2️⃣ Kết nối tới database
+      const pool = await mysql.createPool({
+        host: DB_HOST,
+        user: DB_USER,
+        password: DB_PASS,
+        database: DB_NAME,
+        port: Number(DB_PORT),
+        ssl: { rejectUnauthorized: false },
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        dateStrings: true, // Trả về ngày tháng dưới dạng chuỗi để dễ xử lý múi giờ ở Frontend
+      })
+      
+      return pool;
+    } catch (err) {
+      if (i === retries - 1) {
+        console.error("❌ Lỗi khởi tạo MySQL sau nhiều lần thử:", err);
+        throw err;
+      }
+      console.warn(`⚠️ Lỗi kết nối (Lần ${i + 1}/${retries}): ${err.message}. Đang thử lại sau 2 giây...`);
+      await sleep(2000);
+    }
+  }
+}
+
+// Bắt đầu khởi tạo các bảng
+const startInitTables = async (pool) => {
   try {
-    // 1️⃣ Kết nối MySQL tạm để tạo database nếu chưa có
-    const connection = await mysql.createConnection({
-      host: DB_HOST,
-      user: DB_USER,
-      password: DB_PASS,
-    })
-
-    await connection.query(`
-      CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
-      CHARACTER SET utf8mb4
-      COLLATE utf8mb4_unicode_ci
-    `)
-    console.log(`✅ Database "${DB_NAME}" đã sẵn sàng.`)
-    await connection.end()
-
-    // 2️⃣ Kết nối tới database
-    const pool = await mysql.createPool({
-      host: DB_HOST,
-      user: DB_USER,
-      password: DB_PASS,
-      database: DB_NAME,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
 
     // Bảng users
     await pool.query(`
@@ -49,9 +74,9 @@ const initDB = async () => {
         name VARCHAR(100) NOT NULL,
         email VARCHAR(191) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        avatar_url VARCHAR(255) NOT NULL,
+        avatar_url TEXT DEFAULT NULL,
         region VARCHAR(100) DEFAULT NULL,
-        role ENUM('admin','user','dealer') DEFAULT 'user',
+        role ENUM('admin','user','farmer','dealer') DEFAULT 'user',
         status VARCHAR(50) DEFAULT 'active',
         dealer_expires_at DATETIME DEFAULT NULL,
         joinDate DATE,
@@ -60,9 +85,13 @@ const initDB = async () => {
     `)
     console.log("✅ Bảng 'users' đã sẵn sàng.")
 
-    // Đồng bộ enum role cho DB cũ
+    // Đồng bộ enum role cho DB
     await pool.query(
-      "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','dealer') DEFAULT 'user'"
+      "ALTER TABLE users MODIFY COLUMN role ENUM('admin','user','farmer','dealer') DEFAULT 'user'"
+    )
+    // Đồng bộ avatar_url cho DB cũ
+    await pool.query(
+      "ALTER TABLE users MODIFY COLUMN avatar_url TEXT DEFAULT NULL"
     )
 
     // Đảm bảo cột region tồn tại
@@ -205,26 +234,26 @@ const initDB = async () => {
     console.log("✅ Bảng 'analysis_history' đã sẵn sàng.");
 
 
-  //   const [productCount] = await pool.query("SELECT COUNT(*) AS c FROM products")
-  //   if (productCount[0].c === 0) {
-  //     // Lấy id của từng category
-  //     const [cats] = await pool.query("SELECT id, name FROM categories")
-  //     const cat = Object.fromEntries(cats.map(c => [c.name, c.id]))
+    const [productCount] = await pool.query("SELECT COUNT(*) AS c FROM products")
+    if (productCount[0].c === 0) {
+      // Lấy id của từng category
+      const [cats] = await pool.query("SELECT id, name FROM categories")
+      const cat = Object.fromEntries(cats.map(c => [c.name, c.id]))
 
-  //     await pool.query(`
-  //   INSERT INTO products (name, category_id, currentPrice, previousPrice, unit, region, lastUpdate, trend)
-  //   VALUES
-  //   ('Lúa Gạo ST25', ?, 8500, 8200, 'kg', 'Đồng bằng sông Cửu Long', '2025-09-10 13:42:00', 'up'),
-  //   ('Xoài Cát Hòa Lộc', ?, 45000, 47000, 'kg', 'Tiền Giang', '2025-09-09 10:30:00', 'down'),
-  //   ('Cà Phê Robusta', ?, 120000, 118000, 'kg', 'Đắk Lắk', '2025-09-11 08:20:00', 'up'),
-  //   ('Sầu Riêng Ri6', ?, 150000, 145000, 'kg', 'Cần Thơ', '2025-09-11 09:00:00', 'up'),
-  //   ('Hồ Tiêu Chư Sê', ?, 155000, 158000, 'kg', 'Gia Lai', '2025-09-11 07:30:00', 'down'),
-  //   ('Thanh Long Bình Thuận', ?, 15000, 14000, 'kg', 'Bình Thuận', '2025-09-10 15:20:00', 'up'),
-  //   ('Tôm Thẻ Chân Trắng', ?, 135000, 135000, 'kg', 'Sóc Trăng', '2025-09-11 10:00:00', 'stable'),
-  //   ('Cá Tra Phi Lê', ?, 32000, 31500, 'kg', 'An Giang', '2025-09-11 06:45:00', 'up')
-  // `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"], cat["Trái cây"], cat["Hồ tiêu"], cat["Trái cây"], cat["Thủy hải sản"], cat["Thủy hải sản"]])
-  //     console.log("🍀 Đã chèn sản phẩm mẫu vào bảng 'products'.")
-  //   }
+      await pool.query(`
+    INSERT INTO products (name, category_id, currentPrice, previousPrice, unit, region, lastUpdate, trend)
+    VALUES
+    ('Lúa Gạo ST25', ?, 8500, 8200, 'kg', 'Đồng bằng sông Cửu Long', '2025-09-10 13:42:00', 'up'),
+    ('Xoài Cát Hòa Lộc', ?, 45000, 47000, 'kg', 'Tiền Giang', '2025-09-09 10:30:00', 'down'),
+    ('Cà Phê Robusta', ?, 120000, 118000, 'kg', 'Đắk Lắk', '2025-09-11 08:20:00', 'up'),
+    ('Sầu Riêng Ri6', ?, 150000, 145000, 'kg', 'Cần Thơ', '2025-09-11 09:00:00', 'up'),
+    ('Hồ Tiêu Chư Sê', ?, 155000, 158000, 'kg', 'Gia Lai', '2025-09-11 07:30:00', 'down'),
+    ('Thanh Long Bình Thuận', ?, 15000, 14000, 'kg', 'Bình Thuận', '2025-09-10 15:20:00', 'up'),
+    ('Tôm Thẻ Chân Trắng', ?, 135000, 135000, 'kg', 'Sóc Trăng', '2025-09-11 10:00:00', 'stable'),
+    ('Cá Tra Phi Lê', ?, 32000, 31500, 'kg', 'An Giang', '2025-09-11 06:45:00', 'up')
+  `, [cat["Lúa gạo"], cat["Trái cây"], cat["Cà phê"], cat["Trái cây"], cat["Hồ tiêu"], cat["Trái cây"], cat["Thủy hải sản"], cat["Thủy hải sản"]])
+      console.log("🍀 Đã chèn sản phẩm mẫu vào bảng 'products'.")
+    }
 
     // Bảng price_history ở đây
     await pool.query(`
@@ -824,6 +853,16 @@ const initDB = async () => {
     `);
     console.log("✅ Bảng 'commissions' đã sẵn sàng.");
 
+    // Đảm bảo Enum purpose của wallet_transactions có 'upgrade_dealer'
+    const [purposeCols] = await pool.query(`
+      SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'wallet_transactions' AND COLUMN_NAME = 'purpose'
+    `, [DB_NAME]);
+    if (purposeCols.length > 0 && !purposeCols[0].COLUMN_TYPE.includes('upgrade_dealer')) {
+      await pool.query("ALTER TABLE wallet_transactions MODIFY COLUMN purpose ENUM('boost_pin', 'commission', 'mock_deposit', 'upgrade_dealer') NOT NULL");
+      console.log("✅ Đã cập nhật enum 'purpose' cho 'wallet_transactions'.");
+    }
+
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool
   } catch (error) {
@@ -832,7 +871,15 @@ const initDB = async () => {
   }
 }
 
-// Gọi hàm khởi tạo
+// Khởi tạo pool và các bảng
 const pool = await initDB()
+await startInitTables(pool)
+
+// Chỉ tự động đóng kết nối và thoát nếu chạy trực tiếp script này
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  console.log("👋 Đã hoàn tất khởi tạo, đang đóng kết nối...");
+  // Đợi một chút để log kịp in ra
+  setTimeout(() => process.exit(0), 500);
+}
 
 export default pool;

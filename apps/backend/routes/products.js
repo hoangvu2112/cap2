@@ -370,6 +370,7 @@ router.get("/:id", async (req, res) => {
     } else {
       if (range === "7d") interval = 7
       if (range === "30d") interval = 30
+      if (range === "60d") interval = 60
       if (range === "6m") interval = 180
       if (range === "1y") interval = 365
 
@@ -674,6 +675,8 @@ router.post("/compare", async (req, res) => {
     const nameMap = new Map(products.map(p => [p.id, p.name]));
     let interval = 30;
     if (range === "7d") interval = 7;
+    if (range === "30d") interval = 30;
+    if (range === "60d") interval = 60;
     if (range === "6m") interval = 180;
     if (range === "1y") interval = 365;
     const [historyRows] = await pool.query(

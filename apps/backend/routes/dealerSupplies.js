@@ -53,8 +53,7 @@ router.get("/listings", authenticateToken, requireRole("dealer"), async (req, re
           c.name AS category_name,
           CASE WHEN lb.id IS NOT NULL THEN 1 ELSE 0 END AS is_boosted,
           lb.boost_start_at,
-          lb.boost_end_at,
-          bp.name AS boost_plan_name
+          lb.boost_end_at
         FROM user_supply_listings usl
         JOIN users u ON u.id = usl.user_id
         JOIN products p ON p.id = usl.product_id
@@ -63,7 +62,6 @@ router.get("/listings", authenticateToken, requireRole("dealer"), async (req, re
           ON lb.listing_id = usl.id
           AND lb.status = 'active'
           AND lb.boost_end_at > NOW()
-        LEFT JOIN boost_plans bp ON bp.id = lb.plan_id
         ${whereSql}
         ORDER BY is_boosted DESC, lb.boost_end_at DESC, usl.updated_at DESC, usl.created_at DESC, usl.id DESC
         LIMIT 50

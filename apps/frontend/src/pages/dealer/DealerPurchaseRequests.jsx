@@ -21,8 +21,8 @@ const STATUS_CLASS = {
 }
 
 const FEE_LABEL = {
-  unpaid: "Chưa ghi phí 30k",
-  recorded: "Đã ghi phí 30k",
+  unpaid: "Chưa thanh toán phí",
+  recorded: "Đã thanh toán phí",
 }
 
 const FEE_CLASS = {
@@ -48,18 +48,7 @@ export default function PurchaseRequests() {
     }
   }
 
-  const handleConfirmDeal = async (requestId) => {
-    try {
-      setActioningId(requestId)
-      const res = await api.patch(`/purchase-requests/${requestId}/dealer-confirm`)
-      setRequests((prev) => prev.map((item) => (item.id === requestId ? { ...item, ...res.data } : item)))
-      alert("Đã ghi nhận phí đại lý 30k cho giao dịch này")
-    } catch (error) {
-      alert(error.response?.data?.error || "Không thể ghi nhận phí")
-    } finally {
-      setActioningId(null)
-    }
-  }
+  // handleConfirmDeal đã được gỡ bỏ vì chuyển sang luồng ví tập trung (Negotiation)
 
   const handleReport = async (requestId) => {
     const reason = window.prompt("Nhập lý do báo cáo user:")
@@ -118,7 +107,9 @@ export default function PurchaseRequests() {
 
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       <span className={`inline-flex w-fit px-3 py-1 border rounded-full font-semibold ${FEE_CLASS[item.dealer_fee_status || "unpaid"]}`}>
-                        {FEE_LABEL[item.dealer_fee_status || "unpaid"]}
+                        {item.dealer_fee_status === 'recorded' 
+                          ? `Đã thanh toán phí ${Number(item.dealer_fee_amount || 0).toLocaleString("vi-VN")} đ` 
+                          : "Chưa thanh toán phí"}
                       </span>
                       {item.dealer_action_at ? (
                         <span className="inline-flex w-fit px-3 py-1 border rounded-full font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -152,15 +143,6 @@ export default function PurchaseRequests() {
                       <Link to={`/negotiation?requestId=${item.id}`} className="ml-auto">
                         <Button size="sm" variant="ghost">Vào thương lượng</Button>
                       </Link>
-                      {item.status === "closed" && item.dealer_fee_status !== "recorded" && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleConfirmDeal(item.id)}
-                          disabled={actioningId === item.id}
-                        >
-                          {actioningId === item.id ? "Đang ghi phí..." : "Đã mua / ghi phí 30k"}
-                        </Button>
-                      )}
                       {item.status === "closed" && (
                         <Button
                           size="sm"

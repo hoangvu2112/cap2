@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Navbar from "@/components/Navbar"
 import Footer from "@/components/Footer"
 import api from "@/lib/api"
+import { formatYield } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -13,7 +14,6 @@ import { Loader2, Search, Sprout, Pin } from "lucide-react"
 const STATUS_META = {
     available: { label: "Đang có hàng", color: "#16a34a", bg: "bg-emerald-50", text: "text-emerald-700" },
     soon: { label: "Sắp thu hoạch", color: "#ca8a04", bg: "bg-amber-50", text: "text-amber-700" },
-    partial: { label: "Bán một phần", color: "#0284c7", bg: "bg-sky-50", text: "text-sky-700" },
     sold: { label: "Đã bán gần hết", color: "#dc2626", bg: "bg-red-50", text: "text-red-700" },
 }
 
@@ -121,7 +121,7 @@ export default function DealerSupplyHub() {
                         </div>
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
                             <div className="text-sm text-muted-foreground">Tổng sản lượng</div>
-                            <div className="mt-1 text-2xl font-bold text-emerald-700">{totalQuantity.toLocaleString("vi-VN")} kg</div>
+                            <div className="mt-1 text-2xl font-bold text-emerald-700">{formatYield(totalQuantity)}</div>
                         </div>
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
                             <div className="text-sm text-muted-foreground">Khu vực hiển thị</div>
@@ -165,7 +165,6 @@ export default function DealerSupplyHub() {
                                 <option value="all">Tất cả trạng thái</option>
                                 <option value="available">Đang có hàng</option>
                                 <option value="soon">Sắp thu hoạch</option>
-                                <option value="partial">Bán một phần</option>
                                 <option value="sold">Đã bán gần hết</option>
                             </select>
                             <select
@@ -208,7 +207,7 @@ export default function DealerSupplyHub() {
                                                 <div>
                                                     <div className="text-sm font-semibold text-emerald-700">{item.product_name}</div>
                                                     <div className="text-xl font-bold text-foreground">
-                                                        {Number(item.quantity_available).toLocaleString("vi-VN")} {item.product_unit || "kg"}
+                                                        {formatYield(item.quantity_available)}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground mt-1">
                                                         Giá đề xuất: {Number(item.current_price || 0).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}

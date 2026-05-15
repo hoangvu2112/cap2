@@ -1,6 +1,34 @@
 # 📝 Ghi Chép Thay Đổi - Cap2 Quoc Branch Update
 
-**Ngày cập nhật:** 03/05/2026  
+**Ngày cập nhật:** 15/05/2026  
+**Nội dung:** Cập nhật hệ thống Ví (Wallet), Quản lý nguồn cung (Supply Management), và tối ưu hóa Database.
+**Người cập nhật:** Quoc
+
+---
+
+## 🚀 Cập Nhật Mới Nhất (15/05/2026)
+
+### 📂 Backend (apps/backend)
+- **Hệ thống Ví (Wallet):** Cập nhật logic giao dịch, nạp tiền và thanh toán phí dịch vụ trong `routes/wallet.js`.
+- **Quản lý Nguồn cung:** Cải tiến `routes/dealerSupplies.js` và `routes/purchaseRequests.js` để xử lý đơn hàng và nguồn cung tốt hơn.
+- **Database:** 
+    - Tối ưu hóa connection trong `db.js`.
+    - Thêm các script bảo trì: `db-reset-clean.js`, `db-selective-clear.js`, `patch-db.js`.
+    - Thêm script mô phỏng thị trường: `scripts/simulate_market.js`.
+- **Server:** Cập nhật `server.js` để hỗ trợ các route mới và middleware tối ưu.
+- **Auth:** Cập nhật logic đăng ký và kiểm tra user trong `routes/auth.js` và `test-register.js`.
+
+### 📂 Frontend (apps/frontend)
+- **Trang Ví (Wallet):** Hoàn thiện giao diện quản lý số dư và lịch sử giao dịch (`pages/user/Wallet.jsx`).
+- **Quản lý Nguồn cung (Dealer & User):**
+    - Cập nhật `DealerSupplyHub.jsx` và `MySupply.jsx` cho giao diện quản lý kho và nguồn cung.
+    - Cải thiện `DealerPurchaseRequests.jsx` để xử lý các yêu cầu mua hàng.
+- **Trang chi tiết sản phẩm:** Cập nhật `ProductDetail.jsx` và `DealerProductDetail.jsx`.
+- **Tiện ích:** Thêm `src/lib/format.js` để xử lý định dạng tiền tệ và ngày tháng thống nhất.
+
+---
+
+**Ngày cập nhật cũ:** 03/05/2026  
 **Merge:** Master code + Quoc branch updates  
 **Commit:** `31171dc` - Merge Quoc: keep current code as priority
 

@@ -56,7 +56,7 @@ router.get("/partners", authenticateToken, async (req, res) => {
     )
 
     const isDealer = currentRoleRow?.role === 'dealer'
-    const targetRoles = isDealer ? "('user', 'dealer')" : "('dealer')"
+    const targetRoles = isDealer ? "('user', 'farmer', 'dealer')" : "('dealer')"
 
     // 4. Truy vấn với 3 cấp ưu tiên:
     //    priority 1 = cùng tỉnh, priority 2 = cùng miền, priority 3 = miền khác
@@ -259,84 +259,8 @@ router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req
   }
 })
 
-router.patch("/:id/dealer-confirm", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
-  try {
-    const requestId = Number(req.params.id)
-    if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
-    }
-
-    const [[request]] = await pool.query(
-      `
-        SELECT id, buyer_id, farmer_id, status, dealer_fee_status, dealer_fee_amount, dealer_action_at
-        FROM purchase_requests
-        WHERE id = ?
-      `,
-      [requestId]
-    )
-
-    if (!request) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
-    }
-
-    if (request.buyer_id !== req.user.id) {
-      return res.status(403).json({ error: "Bạn không có quyền thực hiện thao tác này" })
-    }
-
-    if (request.status !== "closed") {
-      return res.status(400).json({ error: "Chỉ có thể xác nhận khi user đã chốt giao dịch" })
-    }
-
-    if (request.dealer_fee_status === "recorded") {
-      return res.status(409).json({ error: "Phí đại lý của yêu cầu này đã được ghi nhận" })
-    }
-
-    await pool.query(
-      `
-        UPDATE purchase_requests
-        SET
-          dealer_fee_status = 'recorded',
-          dealer_action_at = NOW(),
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `,
-      [requestId]
-    )
-
-    const [[updated]] = await pool.query(
-      `
-        SELECT
-          pr.id,
-          pr.product_id,
-          pr.quantity,
-          pr.proposed_price,
-          pr.note,
-          pr.status,
-          pr.dealer_fee_status,
-          pr.dealer_fee_amount,
-          pr.dealer_action_at,
-          pr.created_at,
-          pr.updated_at,
-          p.name AS product_name,
-          p.unit AS product_unit,
-          p.region AS product_region,
-          farmer.id AS farmer_id,
-          farmer.name AS farmer_name,
-          farmer.avatar_url AS farmer_avatar
-        FROM purchase_requests pr
-        JOIN products p ON p.id = pr.product_id
-        JOIN users farmer ON farmer.id = pr.farmer_id
-        WHERE pr.id = ?
-      `,
-      [requestId]
-    )
-
-    res.json(updated)
-  } catch (error) {
-    console.error("PATCH /purchase-requests/:id/dealer-confirm error:", error)
-    res.status(500).json({ error: "Không thể ghi nhận phí đại lý" })
-  }
-})
+// Route confirm cũ đã được chuyển sang luồng thanh toán ví tập trung
+// (Xem logic tại wallet.js -> /pay-commission)
 
 router.post("/:id/report", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
   try {

@@ -9,7 +9,7 @@ import { authenticateToken } from "../middleware/auth.js"
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim()
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase()
 
@@ -23,10 +23,12 @@ const verifyGoogleCredential = async (credential) => {
   })
 
   if (GOOGLE_CLIENT_ID && data.aud !== GOOGLE_CLIENT_ID) {
+    console.error("❌ Google Client ID mismatch:", { env: GOOGLE_CLIENT_ID, aud: data.aud })
     throw new Error("Google client ID mismatch")
   }
 
-  if (data.email_verified !== "true") {
+  // Chấp nhận cả boolean true và string "true"
+  if (data.email_verified !== "true" && data.email_verified !== true) {
     throw new Error("Google email is not verified")
   }
 
@@ -398,8 +400,12 @@ router.post("/google-login", async (req, res) => {
       loginType: "google",
     })
   } catch (error) {
-    console.error("Google login failed:", error.response?.data || error.message || error)
-    res.status(401).json({ error: "Đăng nhập Google thất bại" })
+    console.error("❌ Google login failed:", {
+      message: error.message,
+      data: error.response?.data,
+      stack: error.stack
+    })
+    res.status(401).json({ error: error.message || "Đăng nhập Google thất bại" })
   }
 })
 

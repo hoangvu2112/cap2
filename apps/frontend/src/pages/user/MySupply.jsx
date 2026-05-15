@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import api from "../../lib/api"
 import { useAuth } from "../../context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
+import { formatYield, parseYield } from "../../lib/format"
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ function SupplyManager() {
   const [editingId, setEditingId] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState("")
   const [quantityAvailable, setQuantityAvailable] = useState("")
+  const [quantityUnit, setQuantityUnit] = useState("tấn") // Mặc định là Tấn
   const [harvestStart, setHarvestStart] = useState("")
   const [harvestEnd, setHarvestEnd] = useState("")
   const [supplyStatus, setSupplyStatus] = useState("available")
@@ -63,8 +65,8 @@ function SupplyManager() {
         continue
       }
 
-      const currentPrice = Number(current.price || 0)
-      const nextPrice = Number(plan.price || 0)
+      const currentPrice = Number(current.price_vnd || current.price || 0)
+      const nextPrice = Number(plan.price_vnd || plan.price || 0)
       const currentIsFree = currentPrice === 0
       const nextIsFree = nextPrice === 0
 
@@ -122,7 +124,11 @@ function SupplyManager() {
   const handleEditListing = (item) => {
     setEditingId(item.id)
     setSelectedProduct(String(item.product_id))
-    setQuantityAvailable(String(item.quantity_available))
+    
+    // Tính toán lại giá trị và đơn vị phù hợp
+    const { value, unit } = parseYield(item.quantity_available)
+    setQuantityAvailable(String(value))
+    setQuantityUnit(unit)
     
     setHarvestStart(item.harvest_start ? new Date(item.harvest_start).toISOString().split('T')[0] : "")
     setHarvestEnd(item.harvest_end ? new Date(item.harvest_end).toISOString().split('T')[0] : "")
@@ -135,6 +141,7 @@ function SupplyManager() {
   const handleCancelEdit = () => {
     setEditingId(null)
     setQuantityAvailable("")
+    setQuantityUnit("tấn")
     setHarvestStart("")
     setHarvestEnd("")
     setSupplyStatus("available")
@@ -145,9 +152,15 @@ function SupplyManager() {
     e.preventDefault()
     try {
       setSaving(true)
+
+      // Quy đổi về Kg chuẩn
+      let finalQuantity = Number(quantityAvailable)
+      if (quantityUnit === "tấn") finalQuantity *= 1000
+      else if (quantityUnit === "tạ") finalQuantity *= 100
+
       const payload = {
         product_id: Number(selectedProduct),
-        quantity_available: Number(quantityAvailable),
+        quantity_available: finalQuantity,
         harvest_start: harvestStart || null,
         harvest_end: harvestEnd || null,
         supply_status: supplyStatus,
@@ -219,7 +232,7 @@ function SupplyManager() {
       setBoostingId(boostItem.id)
       const paymentRes = await api.post("/listing-boosts/create-payment", {
         listing_id: boostItem.id,
-        plan_id: Number(selectedPlanId),
+        plan_id: selectedPlanId,
       })
       
       toast({
@@ -252,7 +265,7 @@ function SupplyManager() {
   }
 
 
-  const statusLabel = { available: "Đang có hàng", soon: "Sắp thu hoạch", partial: "Bán một phần", sold: "Đã bán gần hết" }
+  const statusLabel = { available: "Đang có hàng", soon: "Sắp thu hoạch", sold: "Đã bán gần hết" }
 
   const availableProducts = allProducts.filter((p) => {
     if (editingId && selectedProduct === String(p.id)) return true
@@ -280,7 +293,6 @@ function SupplyManager() {
               <select value={supplyStatus} onChange={(e) => setSupplyStatus(e.target.value)} className="flex h-10 w-full items-center rounded-md border bg-background px-3 py-2 text-sm">
                 <option value="available">Đang có hàng</option>
                 <option value="soon">Sắp thu hoạch</option>
-                <option value="partial">Bán một phần</option>
                 <option value="sold">Đã bán gần hết</option>
               </select>
             </div>
@@ -288,8 +300,26 @@ function SupplyManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Sản lượng (kg)</label>
-              <Input type="number" value={quantityAvailable} onChange={(e) => setQuantityAvailable(e.target.value)} placeholder="VD: 5000" required />
+              <label className="mb-1 block text-sm font-medium">Sản lượng</label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  value={quantityAvailable}
+                  onChange={(e) => setQuantityAvailable(e.target.value)}
+                  placeholder="Nhập số..."
+                  required
+                  className="flex-grow"
+                />
+                <select
+                  value={quantityUnit}
+                  onChange={(e) => setQuantityUnit(e.target.value)}
+                  className="h-10 w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="tấn">Tấn</option>
+                  <option value="tạ">Tạ</option>
+                  <option value="kg">Kg</option>
+                </select>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Ghi chú</label>
@@ -332,7 +362,7 @@ function SupplyManager() {
                 <div key={item.id} className={`flex justify-between items-start p-4 rounded-md border transition-colors ${editingId === item.id ? "border-emerald-500 bg-emerald-50/50" : "bg-muted/50"}`}>
                   <div className="flex-grow space-y-1">
                     <p className="font-bold text-foreground text-lg">{item.product_name}</p>
-                    <p className="text-sm">📦 Sản lượng: <span className="font-medium">{item.quantity_available.toLocaleString()} kg</span></p>
+                    <p className="text-sm">📦 Sản lượng: <span className="font-medium">{formatYield(item.quantity_available)}</span></p>
                     <p className="text-sm flex items-center gap-2">
                       🏷️ Trạng thái:
                       <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-none">
@@ -395,7 +425,7 @@ function SupplyManager() {
             >
               {normalizeBoostPlans(boostPlans).map((plan) => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} - {Number(plan.price).toLocaleString("vi-VN")}đ ({plan.duration_days} ngày)
+                  {plan.name} - {Number(plan.price_vnd || plan.price || 0).toLocaleString("vi-VN")}đ ({plan.duration_days} ngày)
                 </option>
               ))}
             </select>

@@ -428,7 +428,7 @@ export default function ProductDetail() {
                   Biến động giá thị trường
                 </CardTitle>
                 <div className="flex gap-1">
-                  {["30d", "6m", "1y"].map((r) => (
+                  {["30d", "60d", "1y"].map((r) => (
                     <Button
                       key={r}
                       size="sm"
@@ -436,7 +436,7 @@ export default function ProductDetail() {
                       className={cn("h-8 px-3 text-xs font-bold rounded-lg transition-all", range === r ? "bg-emerald-600 shadow-md" : "hover:bg-emerald-50")}
                       onClick={() => setRange(r)}
                     >
-                      {r === "30d" ? "30 Ngày" : r === "6m" ? "6 Tháng" : "1 Năm"}
+                      {r === "30d" ? "30 Ngày" : r === "60d" ? "60 Ngày" : "1 Năm"}
                     </Button>
                   ))}
                 </div>

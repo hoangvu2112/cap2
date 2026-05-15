@@ -11,6 +11,9 @@ import * as cron from "node-cron";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 
+// Load environment variables BEFORE importing routes
+dotenv.config();
+
 // Import routes
 import authRoutes from "./routes/auth.js";
 import productRoutes, { ioRef } from "./routes/products.js";
@@ -21,7 +24,7 @@ import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js"
 import favoritesRouter from "./routes/favorites.js";
 import costRoutes from "./routes/costs.js";
 import chatbotRoutes from "./routes/chatbot.js";
-import statsRoutes from "./routes/stats.js";
+import statsRoutes from "./routes/stats.js"; 
 import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
 import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
@@ -30,6 +33,7 @@ import dealerSuppliesRoutes from "./routes/dealerSupplies.js";
 import ordersRoutes from "./routes/orders.js";
 import walletRoutes from "./routes/wallet.js";
 import pool from "./db.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -38,8 +42,6 @@ import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
 import { scrapePdfReports } from "./scraped/scrapePdf.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);

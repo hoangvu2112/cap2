@@ -210,28 +210,14 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   const loadData = async () => {
     try {
       setLoading(true)
-      // Lấy danh sách gói
-      try {
-        const resPlans = await api.get("/dealer-upgrade/plans")
-        const loadedPlans = resPlans.data.plans || []
-        setPlans(loadedPlans)
-        if (loadedPlans.length > 0 && !selectedPlanId) {
-          setSelectedPlanId(loadedPlans[0].id)
-        }
-      } catch (err) {
-        console.error("Lỗi tải danh sách gói:", err)
+      const res = await api.get("/dealer-upgrade/packages")
+      const loadedPackages = res.data.packages || []
+      setPlans(loadedPackages)
+      if (loadedPackages.length > 0 && !selectedPlanId) {
+        setSelectedPlanId(loadedPackages[0].id)
       }
-
-      // Lấy yêu cầu của tôi
-      try {
-        const resMe = await api.get("/dealer-upgrade/me")
-        const loadedRequests = resMe.data.requests || []
-        setRequests(loadedRequests)
-        const open = loadedRequests.find(r => ["pending_payment", "pending_review"].includes(r.status))
-        setOpenRequest(open || null)
-      } catch (err) {
-        console.error("Lỗi tải lịch sử yêu cầu:", err)
-      }
+    } catch (err) {
+      console.error("Lỗi tải danh sách gói:", err)
     } finally {
       setLoading(false)
     }
@@ -261,110 +247,33 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     try {
       setSubmitting(true)
       setError("")
+      
       const res = await api.post("/dealer-upgrade/apply", {
-        plan_id: selectedPlanId,
+        packageId: selectedPlanId,
         ...businessData
       })
 
-      // Nếu Backend trả về checkoutUrl (PayOS), chuyển hướng người dùng
-      if (res.data.request.checkoutUrl) {
-        window.location.href = res.data.request.checkoutUrl
-        return
-      }
-
-      localStorage.removeItem("dealer_upgrade_draft") // Xóa bản nháp sau khi thành công
-      setOpenRequest(res.data.request)
-      setStep(3)
-    } catch (err) {
-      setError(err.response?.data?.error || "Không thể gửi yêu cầu")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // Xử lý các tham số trả về từ PayOS (status=success/cancel)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const status = urlParams.get("status")
-    const id = urlParams.get("id")
-
-    if (status === "success") {
-      setMessage("Thanh toán thành công! Tài khoản của bạn đang được nâng cấp.")
-      // Xóa query params để không hiện lại message khi F5
-      window.history.replaceState({}, document.title, window.location.pathname)
-      // Tải lại dữ liệu sau 1.5s để cập nhật role mới
-      setTimeout(() => {
-        loadData()
-        refreshMyProfile()
-      }, 1500)
-    } else if (status === "cancel") {
-      setError("Bạn đã hủy thanh toán. Bạn có thể thử lại bất cứ lúc nào.")
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-  }, [])
-
-  const markPaid = async (id) => {
-    try {
-      setSubmitting(true)
-      const res = await api.post(`/dealer-upgrade/${id}/mark-paid`)
-      setOpenRequest(res.data.request)
-      alert("Đã gửi xác nhận thanh toán. Vui lòng chờ Admin duyệt hồ sơ.")
-      loadData()
-    } catch (err) {
-      alert(err.response?.data?.error || "Lỗi xác nhận thanh toán")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const cancelRequest = async (id) => {
-    if (!confirm("Bạn có muốn hủy yêu cầu này để nhập lại thông tin hoặc chọn gói khác không?")) return
-    try {
-      setSubmitting(true)
-      await api.delete(`/dealer-upgrade/${id}`)
-      setOpenRequest(null)
-      setStep(1)
-      loadData()
-    } catch (err) {
-      alert(err.response?.data?.error || "Không thể hủy yêu cầu")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const [refreshing, setRefreshing] = useState(false)
-  const refreshMyProfile = async () => {
-    try {
-      setRefreshing(true)
-      // Đợi 1 chút để tạo cảm giác thực tế và đợi Backend
-      await new Promise(resolve => setTimeout(resolve, 800))
-      const res = await api.get("/users/me")
-
-      // Tải lại cả lịch sử yêu cầu để đồng bộ UI card
-      await loadData()
-
+      localStorage.removeItem("dealer_upgrade_draft")
+      alert(res.data.message || "Nâng cấp đại lý thành công!")
+      
+      // Refresh user data
       if (onRoleUpdated) {
-        onRoleUpdated(res.data)
+        const resMe = await api.get("/users/me")
+        onRoleUpdated(resMe.data)
       }
-      setMessage("Dữ liệu tài khoản đã được làm mới!")
-      setTimeout(() => setMessage(""), 3000)
+      
+      setStep(1)
     } catch (err) {
-      console.error("Lỗi khi làm mới profile:", err)
+      setError(err.response?.data?.error || "Không thể thực hiện nâng cấp. Vui lòng kiểm tra số dư ví.")
     } finally {
-      setRefreshing(false)
+      setSubmitting(false)
     }
   }
 
   if (user?.role === "admin") return null
 
-  // Tìm yêu cầu đã được duyệt hoặc đang chờ xử lý
-  const activeReq = requests.find(r => r.status === "approved" && new Date(r.expires_at) > new Date())
-  // Loại trừ trường hợp role bị revoke: chỉ hiển thị giao diện đại lý nếu role thực sự là 'dealer'
-
-  // Nếu đã là đại lý VÀ có yêu cầu đã duyệt còn hạn (không bị revoke)
-  if (user?.role === "dealer" && activeReq) {
-    localStorage.removeItem("dealer_upgrade_draft") // Xóa bản nháp khi đã là đại lý
-    const displayReq = activeReq || requests.find(r => r.status === "approved")
+  // Giao diện nếu đã là Đại lý
+  if (user?.role === "dealer") {
     return (
       <Card className="border-emerald-200 bg-emerald-50/30 rounded-3xl overflow-hidden shadow-lg">
         <CardHeader className="bg-emerald-600 text-white p-6">
@@ -376,165 +285,25 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
         <CardContent className="p-6">
           <div className="space-y-4">
             <div className="p-4 bg-white rounded-2xl border border-emerald-100 shadow-sm">
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Thông tin gói hiện tại</p>
-              <h4 className="text-xl font-black text-emerald-700 mt-1">{displayReq?.plan_name || "Gói Đại lý"}</h4>
-              {displayReq?.expires_at && (
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Trạng thái tài khoản</p>
+              <h4 className="text-xl font-black text-emerald-700 mt-1">Đại lý nguồn hàng</h4>
+              {user?.dealer_expires_at && (
                 <div className="flex flex-col gap-1 mt-2">
                   <p className="text-sm font-medium text-gray-600">
-                    Ngày hết hạn: <span className="text-emerald-600 font-bold">{new Date(displayReq.expires_at).toLocaleDateString("vi-VN")}</span>
+                    Ngày hết hạn: <span className="text-emerald-600 font-bold">{new Date(user.dealer_expires_at).toLocaleDateString("vi-VN")}</span>
                   </p>
                   <p className="text-sm font-medium text-gray-600">
                     Thời gian còn lại: <span className="text-emerald-600 font-bold">
-                      {Math.max(0, Math.ceil((new Date(displayReq.expires_at) - new Date()) / (1000 * 60 * 60 * 24)))} ngày
+                      {Math.max(0, Math.ceil((new Date(user.dealer_expires_at) - new Date()) / (1000 * 60 * 60 * 24)))} ngày
                     </span>
                   </p>
                 </div>
               )}
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 rounded-xl font-bold h-11" onClick={refreshMyProfile} disabled={refreshing}>
-                {refreshing ? "Đang làm mới..." : "Làm mới trạng thái"}
+              <Button className="flex-1 rounded-xl font-bold h-11 bg-emerald-600" onClick={() => window.location.href = '/dealer-supplies'}>
+                Vào kho hàng đại lý
               </Button>
-              <Button className="flex-1 rounded-xl font-bold h-11 bg-emerald-600" onClick={() => window.location.href = '/manage-products'}>
-                Quản lý hàng hóa
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Nếu đang có yêu cầu đang xử lý (chờ thanh toán hoặc chờ duyệt)
-  if (openRequest) {
-    const selectedPlan = plans.find(p => p.id === openRequest.plan_id) || { price_vnd: openRequest.price_vnd, name: openRequest.plan_name }
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Yêu cầu nâng cấp Đại lý</CardTitle>
-          <CardDescription>Bạn có một yêu cầu đang được xử lý.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/50 p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h4 className="font-black text-amber-800 text-lg">{selectedPlan.name}</h4>
-                <p className="text-sm text-amber-700 font-medium">Trạng thái:
-                  <span className="ml-2 px-2 py-0.5 bg-amber-200 rounded-full text-[11px] font-bold uppercase">
-                    {openRequest.status === "pending_payment" ? "Chờ thanh toán" : "Đang chờ duyệt"}
-                  </span>
-                </p>
-              </div>
-              <span className="text-xl font-black text-amber-900">{Number(selectedPlan.price_vnd).toLocaleString()}đ</span>
-            </div>
-
-            {openRequest.status === "pending_payment" && (
-              <div className="space-y-6 animate-in fade-in zoom-in duration-500">
-                {/* MoMo Test QR */}
-                <div className="flex flex-col items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-rose-100">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-[#ae2070] flex items-center justify-center text-white font-black text-sm">M</div>
-                    <p className="text-sm font-bold text-gray-700">Quét mã MoMo để thanh toán</p>
-                  </div>
-
-                  {openRequest.payment_qr ? (
-                    // Hiển thị ảnh QR tĩnh (không click được)
-                    <img
-                      src={openRequest.payment_qr}
-                      alt="MoMo QR"
-                      className="w-56 h-56 object-contain rounded-2xl shadow-lg border-4 border-white ring-2 ring-[#ae2070]/20 opacity-90"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  ) : openRequest.payment_ref && String(openRequest.payment_ref).startsWith("http") ? (
-                    // Hiển thị QR static tạo từ link
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(openRequest.payment_ref)}&size=220x220&bgcolor=ffffff&margin=12&color=ae2070`}
-                      alt="MoMo QR Test"
-                      className="w-56 h-56 object-contain rounded-2xl shadow-lg border-4 border-white ring-2 ring-[#ae2070]/20 opacity-90"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  ) : (
-                    <div className="w-56 h-56 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400 text-sm">
-                      Không có link thanh toán
-                    </div>
-                  )}
-
-                  <div className="text-center space-y-1">
-                    <p className="text-sm font-black text-[#ae2070]">{Number(selectedPlan.price_vnd).toLocaleString()} đ</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  {/* Nút mở MoMo trực tiếp */}
-                  {openRequest.payment_ref && openRequest.payment_ref.startsWith("http") && (
-                    <Button
-                      className="w-full h-12 rounded-2xl font-black text-base shadow-xl bg-[#ae2070] hover:bg-[#9a1c63] text-white flex items-center justify-center gap-2 transition-colors"
-                      onClick={async () => {
-                        try {
-                          setSubmitting(true)
-                          // Gọi endpoint simulate-success để thay cho việc quét QR
-                          await api.post(`/dealer-upgrade/simulate-success/${openRequest.id}`)
-                          // Sau khi giả lập thành công, đăng xuất ngay và yêu cầu người dùng đăng nhập lại
-                            // (Xóa token & user trên client để đảm bảo tải role mới khi đăng nhập lại)
-                            localStorage.removeItem('token')
-                            localStorage.removeItem('user')
-                            // Thông báo ngắn rồi chuyển sang trang đăng nhập
-                            alert('Thanh toán thành công — bạn sẽ được đăng xuất để đăng nhập lại và kích hoạt vai trò Đại lý.')
-                            window.location.replace('/login')
-                        } catch (err) {
-                          setError(err.response?.data?.error || 'Không thể xác nhận thanh toán')
-                        } finally {
-                          setSubmitting(false)
-                        }
-                      }}
-                      disabled={submitting}
-                    >
-                      <span className="text-lg font-black">M</span> Xác nhận thanh toán
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    className="w-full h-11 rounded-2xl font-bold text-gray-600"
-                    onClick={() => cancelRequest(openRequest.id)}
-                    disabled={submitting}
-                  >
-                    Hủy yêu cầu &amp; Chọn lại
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {openRequest.status === "pending_review" && (
-              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
-                  <Clock className="w-6 h-6" />
-                </div>
-                <p className="text-sm text-blue-800 font-medium">Hệ thống đã ghi nhận thanh toán. Admin sẽ kiểm tra hồ sơ pháp lý và duyệt tài khoản cho bạn trong vòng 24h.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-6 border-t border-gray-100">
-            <h4 className="font-bold mb-4 text-gray-700 flex items-center gap-2">
-              <History className="w-4 h-4" /> Lịch sử yêu cầu
-            </h4>
-            <div className="space-y-3">
-              {requests.map(r => (
-                <div key={r.id} className="flex justify-between items-center p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">{r.plan_name}</p>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase">{new Date(r.created_at).toLocaleString("vi-VN")}</p>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${r.status === "approved" ? "bg-emerald-100 text-emerald-700" :
-                    r.status === "rejected" ? "bg-red-100 text-red-700" :
-                      r.status === "revoked" ? "bg-orange-100 text-orange-700" : "bg-gray-200 text-gray-600"
-                    }`}>
-                    {r.status === "revoked" ? "Đã hủy vai trò" : r.status}
-                  </span>
-                </div>
-              ))}
             </div>
           </div>
         </CardContent>
@@ -557,6 +326,11 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
       </CardHeader>
 
       <CardContent className="p-8">
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-sm font-bold text-red-600 animate-in fade-in slide-in-from-top-2 duration-300">
+            ⚠️ {error}
+          </div>
+        )}
         {step === 1 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="flex items-center gap-2 mb-2">
@@ -621,7 +395,7 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
               </div>
             </div>
 
-            {error && <p className="text-sm font-bold text-red-500 ml-3">⚠️ {error}</p>}
+
 
             <Button className="w-full h-12 rounded-2xl font-black text-lg shadow-xl" onClick={handleNextStep1}>
               Tiếp theo <ArrowRight className="ml-2 w-5 h-5" />
