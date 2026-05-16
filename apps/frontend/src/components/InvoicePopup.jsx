@@ -1,4 +1,4 @@
-﻿import { Receipt, CheckCircle, XCircle } from "lucide-react";
+import { Receipt, CheckCircle, XCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import api from "@/lib/api";
@@ -25,7 +25,7 @@ export default function InvoicePopup({
         onClose();
       }
     } catch (err) {
-      setError(err.response?.data?.error || "C├│ lß╗ùi xß║úy ra khi thanh to├ín.");
+      setError(err.response?.data?.error || "Có lỗi xảy ra khi thanh toán.");
     } finally {
       setPaying(false);
     }
@@ -44,9 +44,9 @@ export default function InvoicePopup({
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
             <Receipt className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-bold">Ho├í ─É╞ín Chß╗æt ─É╞ín</h2>
+          <h2 className="text-2xl font-bold">Hoá Đơn Chốt Đơn</h2>
           <p className="text-primary-foreground/80 text-sm mt-1">
-            Vui l├▓ng thanh to├ín hoa hß╗ông ─æß╗â ho├án tß║Ñt
+            Vui lòng thanh toán hoa hồng để hoàn tất
           </p>
         </div>
 
@@ -54,27 +54,27 @@ export default function InvoicePopup({
         <div className="p-6 sm:p-8 space-y-6">
           <div className="space-y-3 text-sm">
             <div className="flex justify-between items-center pb-3 border-b border-border/50">
-              <span className="text-muted-foreground">Sß║ún phß║⌐m</span>
+              <span className="text-muted-foreground">Sản phẩm</span>
               <span className="font-semibold text-foreground text-right">{invoiceData.product_name}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-border/50">
-              <span className="text-muted-foreground">Gi├í chß╗æt</span>
+              <span className="text-muted-foreground">Giá chốt</span>
               <span className="font-semibold text-foreground text-right">{formatCurrency(invoiceData.proposed_price)}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-border/50">
-              <span className="text-muted-foreground">Sß╗æ l╞░ß╗úng</span>
+              <span className="text-muted-foreground">Số lượng</span>
               <span className="font-semibold text-foreground text-right">{invoiceData.quantity}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-border/50">
-              <span className="text-muted-foreground">Tß╗òng gi├í trß╗ï ─æ╞ín</span>
+              <span className="text-muted-foreground">Tổng giá trị đơn</span>
               <span className="font-bold text-foreground text-right text-base">{formatCurrency(invoiceData.total_value)}</span>
             </div>
           </div>
 
           <div className="bg-muted/50 rounded-2xl p-4 flex justify-between items-center border border-border/50">
             <div>
-              <span className="block text-sm font-medium text-muted-foreground mb-1">Ph├¡ hoa hß╗ông</span>
-              <span className="text-xs text-muted-foreground">* ├üp dß╗Ñng theo thang ph├¡ hß╗ç thß╗æng</span>
+              <span className="block text-sm font-medium text-muted-foreground mb-1">Phí hoa hồng</span>
+              <span className="text-xs text-muted-foreground">* Áp dụng theo thang phí hệ thống</span>
             </div>
             <span className="text-2xl font-bold text-red-600">
               {formatCurrency(invoiceData.fee_amount)}
@@ -94,7 +94,7 @@ export default function InvoicePopup({
               disabled={paying}
               className="py-3 rounded-xl font-medium text-muted-foreground bg-muted hover:bg-muted/80 transition-colors"
             >
-              Hß╗ºy bß╗Å
+              Hủy bỏ
             </button>
             <button 
               onClick={handlePay}
@@ -106,7 +106,7 @@ export default function InvoicePopup({
               ) : (
                 <>
                   <CheckCircle className="w-5 h-5" />
-                  X├íc nhß║¡n trß║ú
+                  Xác nhận trả
                 </>
               )}
             </button>

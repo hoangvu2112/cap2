@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
@@ -89,7 +89,7 @@ function SupplyManager() {
       const res = await api.get("/users/me/source-listings")
       setListings(res.data || [])
     } catch (error) {
-      console.error("Kh├┤ng tß║úi ─æ╞░ß╗úc nguß╗ôn h├áng", error)
+      console.error("Không tải được nguồn hàng", error)
     } finally {
       setLoading(false)
     }
@@ -102,7 +102,7 @@ function SupplyManager() {
         setAllProducts(res.data)
         if (res.data.length > 0) setSelectedProduct(String(res.data[0].id))
       } catch (error) {
-        console.error("Lß╗ùi tß║úi sß║ún phß║⌐m", error)
+        console.error("Lỗi tải sản phẩm", error)
       }
     }
     const fetchBoostPlans = async () => {
@@ -110,7 +110,7 @@ function SupplyManager() {
         const res = await api.get("/listing-boosts/plans")
         setBoostPlans(normalizeBoostPlans(res.data?.plans || []))
       } catch (error) {
-        console.error("Lß╗ùi tß║úi g├│i ghim", error)
+        console.error("Lỗi tải gói ghim", error)
       }
     }
 
@@ -156,33 +156,33 @@ function SupplyManager() {
 
       if (editingId) {
         await api.put(`/users/me/source-listings/${editingId}`, payload)
-        alert("─É├ú cß║¡p nhß║¡t l├┤ h├áng!")
+        alert("Đã cập nhật lô hàng!")
       } else {
         await api.post("/users/me/source-listings", payload)
-        alert("─É├ú l╞░u l├┤ h├áng mß╗¢i!")
+        alert("Đã lưu lô hàng mới!")
       }
 
       handleCancelEdit()
       fetchListings()
     } catch (error) {
-      console.error("Lß╗ùi khi l╞░u nguß╗ôn h├áng", error)
-      alert(error.response?.data?.error || "Lß╗ùi! Kh├┤ng thß╗â l╞░u.")
+      console.error("Lỗi khi lưu nguồn hàng", error)
+      alert(error.response?.data?.error || "Lỗi! Không thể lưu.")
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteListing = async (listingId, productName) => {
-    if (!confirm(`Bß║ín c├│ chß║»c muß╗æn xo├í l├┤ h├áng "${productName}" n├áy kh├┤ng?`)) return
+    if (!confirm(`Bạn có chắc muốn xoá lô hàng "${productName}" này không?`)) return
 
     try {
       await api.delete(`/users/me/source-listings/${listingId}`)
       setListings((prev) => prev.filter((item) => item.id !== listingId))
-      alert("─É├ú xo├í nguß╗ôn h├áng.")
+      alert("Đã xoá nguồn hàng.")
       if (editingId === listingId) handleCancelEdit()
     } catch (error) {
-      console.error("Lß╗ùi khi xo├í", error)
-      alert(error.response?.data?.error || "Lß╗ùi! Kh├┤ng thß╗â xo├í.")
+      console.error("Lỗi khi xoá", error)
+      alert(error.response?.data?.error || "Lỗi! Không thể xoá.")
     }
   }
 
@@ -192,8 +192,8 @@ function SupplyManager() {
     if (item.is_boosted) {
       toast({
         variant: "destructive",
-        title: "Th├┤ng b├ío",
-        description: "Nguß╗ôn h├áng n├áy ─æang ─æ╞░ß╗úc ghim, ch╞░a cß║ºn mua th├¬m g├│i."
+        title: "Thông báo",
+        description: "Nguồn hàng này đang được ghim, chưa cần mua thêm gói."
       })
       return
     }
@@ -201,8 +201,8 @@ function SupplyManager() {
     if (availablePlans.length === 0) {
       toast({
         variant: "destructive",
-        title: "Th├┤ng b├ío",
-        description: "Ch╞░a c├│ g├│i ghim khß║ú dß╗Ñng. Vui l├▓ng thß╗¡ lß║íi sau."
+        title: "Thông báo",
+        description: "Chưa có gói ghim khả dụng. Vui lòng thử lại sau."
       })
       return
     }
@@ -223,11 +223,11 @@ function SupplyManager() {
       })
       
       toast({
-        title: "Ghim tin th├ánh c├┤ng. ─É├ú trß╗½ tiß╗ün tß╗½ V├¡ N├┤ng Xu",
+        title: "Ghim tin thành công. Đã trừ tiền từ Ví Nông Xu",
         className: "bg-emerald-500 text-white border-none",
       })
 
-      // Cß║¡p nhß║¡t profile ─æß╗â update sß╗æ d╞░
+      // Cập nhật profile để update số dư
       try {
         const profileRes = await api.get("/auth/me")
         if (profileRes.data && typeof setUser === "function") {
@@ -240,11 +240,11 @@ function SupplyManager() {
       setBoostModalOpen(false)
       fetchListings()
     } catch (error) {
-      console.error("Lß╗ùi ghim tin", error)
+      console.error("Lỗi ghim tin", error)
       toast({
         variant: "destructive",
-        title: "Lß╗ùi",
-        description: error.response?.data?.error || "Kh├┤ng thß╗â ghim nguß╗ôn h├áng",
+        title: "Lỗi",
+        description: error.response?.data?.error || "Không thể ghim nguồn hàng",
       })
     } finally {
       setBoostingId(null)
@@ -252,7 +252,7 @@ function SupplyManager() {
   }
 
 
-  const statusLabel = { available: "─Éang c├│ h├áng", soon: "Sß║»p thu hoß║ích", partial: "B├ín mß╗Öt phß║ºn", sold: "─É├ú b├ín gß║ºn hß║┐t" }
+  const statusLabel = { available: "Đang có hàng", soon: "Sắp thu hoạch", partial: "Bán một phần", sold: "Đã bán gần hết" }
 
   const availableProducts = allProducts.filter((p) => {
     if (editingId && selectedProduct === String(p.id)) return true
@@ -262,94 +262,94 @@ function SupplyManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{editingId ? "Cß║¡p nhß║¡t l├┤ h├áng" : "Th├¬m l├┤ h├áng mß╗¢i"}</CardTitle>
-        <CardDescription>Khai b├ío chi tiß║┐t c├íc l├┤ h├áng ─æang v├á sß║»p thu hoß║ích cß╗ºa bß║ín.</CardDescription>
+        <CardTitle>{editingId ? "Cập nhật lô hàng" : "Thêm lô hàng mới"}</CardTitle>
+        <CardDescription>Khai báo chi tiết các lô hàng đang và sắp thu hoạch của bạn.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         
         <form ref={formRef} onSubmit={handleSaveListing} className={`space-y-4 rounded-lg border p-4 transition-colors ${editingId ? "border-emerald-500 bg-emerald-50/20" : "border-border"}`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Sß║ún phß║⌐m</label>
+              <label className="mb-1 block text-sm font-medium">Sản phẩm</label>
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="flex h-10 w-full items-center rounded-md border bg-background px-3 py-2 text-sm">
                 {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.region})</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Trß║íng th├íi</label>
+              <label className="mb-1 block text-sm font-medium">Trạng thái</label>
               <select value={supplyStatus} onChange={(e) => setSupplyStatus(e.target.value)} className="flex h-10 w-full items-center rounded-md border bg-background px-3 py-2 text-sm">
-                <option value="available">─Éang c├│ h├áng</option>
-                <option value="soon">Sß║»p thu hoß║ích</option>
-                <option value="partial">B├ín mß╗Öt phß║ºn</option>
-                <option value="sold">─É├ú b├ín gß║ºn hß║┐t</option>
+                <option value="available">Đang có hàng</option>
+                <option value="soon">Sắp thu hoạch</option>
+                <option value="partial">Bán một phần</option>
+                <option value="sold">Đã bán gần hết</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Sß║ún l╞░ß╗úng (kg)</label>
+              <label className="mb-1 block text-sm font-medium">Sản lượng (kg)</label>
               <Input type="number" value={quantityAvailable} onChange={(e) => setQuantityAvailable(e.target.value)} placeholder="VD: 5000" required />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Ghi ch├║</label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: H├áng loß║íi 1..." />
+              <label className="mb-1 block text-sm font-medium">Ghi chú</label>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="VD: Hàng loại 1..." />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Bß║»t ─æß║ºu thu hoß║ích</label>
+              <label className="mb-1 block text-sm font-medium">Bắt đầu thu hoạch</label>
               <Input type="date" value={harvestStart} onChange={(e) => setHarvestStart(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Kß║┐t th├║c thu hoß║ích</label>
+              <label className="mb-1 block text-sm font-medium">Kết thúc thu hoạch</label>
               <Input type="date" value={harvestEnd} onChange={(e) => setHarvestEnd(e.target.value)} />
             </div>
           </div>
 
           <div className="flex gap-2">
             <Button type="submit" disabled={saving} className={editingId ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}>
-              {saving ? "─Éang l╞░u..." : (editingId ? "Cß║¡p nhß║¡t l├┤ h├áng" : "L╞░u l├┤ h├áng mß╗¢i")}
+              {saving ? "Đang lưu..." : (editingId ? "Cập nhật lô hàng" : "Lưu lô hàng mới")}
             </Button>
             {editingId && (
               <Button type="button" variant="outline" onClick={handleCancelEdit}>
-                Hß╗ºy thay ─æß╗òi
+                Hủy thay đổi
               </Button>
             )}
           </div>
         </form>
 
         <div className="space-y-3">
-          <h3 className="text-lg font-semibold border-b pb-2">Danh s├ích l├┤ h├áng cß╗ºa bß║ín</h3>
+          <h3 className="text-lg font-semibold border-b pb-2">Danh sách lô hàng của bạn</h3>
           {loading ? (
-            <p className="text-muted-foreground">─Éang tß║úi...</p>
+            <p className="text-muted-foreground">Đang tải...</p>
           ) : listings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Bß║ín ch╞░a khai b├ío l├┤ h├áng n├áo.</p>
+            <p className="text-sm text-muted-foreground">Bạn chưa khai báo lô hàng nào.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {listings.map((item) => (
                 <div key={item.id} className={`flex justify-between items-start p-4 rounded-md border transition-colors ${editingId === item.id ? "border-emerald-500 bg-emerald-50/50" : "bg-muted/50"}`}>
                   <div className="flex-grow space-y-1">
                     <p className="font-bold text-foreground text-lg">{item.product_name}</p>
-                    <p className="text-sm">≡ƒôª Sß║ún l╞░ß╗úng: <span className="font-medium">{item.quantity_available.toLocaleString()} kg</span></p>
+                    <p className="text-sm">📦 Sản lượng: <span className="font-medium">{item.quantity_available.toLocaleString()} kg</span></p>
                     <p className="text-sm flex items-center gap-2">
-                      ≡ƒÅ╖∩╕Å Trß║íng th├íi:
+                      🏷️ Trạng thái:
                       <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-none">
                         {statusLabel[item.supply_status]}
                       </Badge>
                     </p>
                     {item.is_boosted ? (
                       <p className="text-sm font-semibold text-amber-700">
-                        ≡ƒôî ─Éang ghim{item.boost_end_at ? ` ─æß║┐n ${new Date(item.boost_end_at).toLocaleDateString("vi-VN")}` : ""}
+                        📌 Đang ghim{item.boost_end_at ? ` đến ${new Date(item.boost_end_at).toLocaleDateString("vi-VN")}` : ""}
                       </p>
                     ) : (
-                      <p className="text-xs text-muted-foreground">Tin th╞░ß╗¥ng ΓÇö c├│ thß╗â mua g├│i ghim ─æß╗â hiß╗ân thß╗ï nß╗òi bß║¡t vß╗¢i ─æß║íi l├╜.</p>
+                      <p className="text-xs text-muted-foreground">Tin thường — có thể mua gói ghim để hiển thị nổi bật với đại lý.</p>
                     )}
                     {item.harvest_start && (
-                      <p className="text-sm">≡ƒùô∩╕Å Thu hoß║ích: {new Date(item.harvest_start).toLocaleDateString("vi-VN")} - {new Date(item.harvest_end).toLocaleDateString("vi-VN")}</p>
+                      <p className="text-sm">🗓️ Thu hoạch: {new Date(item.harvest_start).toLocaleDateString("vi-VN")} - {new Date(item.harvest_end).toLocaleDateString("vi-VN")}</p>
                     )}
-                    {item.note && <p className="text-sm italic text-muted-foreground">≡ƒô¥ {item.note}</p>}
+                    {item.note && <p className="text-sm italic text-muted-foreground">📝 {item.note}</p>}
                   </div>
                   
                   <div className="flex flex-col gap-2 ml-2">
@@ -359,7 +359,7 @@ function SupplyManager() {
                       className="h-8 w-8 text-amber-600 hover:text-amber-800 hover:bg-amber-50"
                       onClick={() => handleBoostListing(item)}
                       disabled={boostingId === item.id || item.is_boosted}
-                      title={item.is_boosted ? "Tin ─æang ─æ╞░ß╗úc ghim" : "Mua g├│i ghim tin"}
+                      title={item.is_boosted ? "Tin đang được ghim" : "Mua gói ghim tin"}
                     >
                       {boostingId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pin className="w-4 h-4" />}
                     </Button>
@@ -380,14 +380,14 @@ function SupplyManager() {
       <Dialog open={boostModalOpen} onOpenChange={setBoostModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>X├íc nhß║¡n thanh to├ín g├│i Ghim tin bß║▒ng V├¡ N├┤ng Xu</DialogTitle>
+            <DialogTitle>Xác nhận thanh toán gói Ghim tin bằng Ví Nông Xu</DialogTitle>
             <DialogDescription>
-              Vui l├▓ng chß╗ìn g├│i ghim cho sß║ún phß║⌐m <span className="font-bold text-foreground">{boostItem?.product_name}</span>.
+              Vui lòng chọn gói ghim cho sản phẩm <span className="font-bold text-foreground">{boostItem?.product_name}</span>.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-4">
-            <label className="mb-2 block text-sm font-medium">Chß╗ìn g├│i ghim</label>
+            <label className="mb-2 block text-sm font-medium">Chọn gói ghim</label>
             <select
               value={selectedPlanId}
               onChange={(e) => setSelectedPlanId(e.target.value)}
@@ -395,7 +395,7 @@ function SupplyManager() {
             >
               {normalizeBoostPlans(boostPlans).map((plan) => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} - {Number(plan.price).toLocaleString("vi-VN")}─æ ({plan.duration_days} ng├áy)
+                  {plan.name} - {Number(plan.price).toLocaleString("vi-VN")}đ ({plan.duration_days} ngày)
                 </option>
               ))}
             </select>
@@ -403,11 +403,11 @@ function SupplyManager() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setBoostModalOpen(false)} disabled={boostingId === boostItem?.id}>
-              Hß╗ºy
+              Hủy
             </Button>
             <Button onClick={handleConfirmBoost} disabled={boostingId === boostItem?.id} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {boostingId === boostItem?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              X├íc nhß║¡n
+              Xác nhận
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
 import api from "../lib/api"
@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const forceLogout = (message = "T├ái khoß║ún cß╗ºa bß║ín ─æ├ú bß╗ï thay ─æß╗òi. Vui l├▓ng ─æ─âng nhß║¡p lß║íi.") => {
+  const forceLogout = (message = "Tài khoản của bạn đã bị thay đổi. Vui lòng đăng nhập lại.") => {
     localStorage.removeItem("token")
     localStorage.removeItem("user")
     localStorage.removeItem("loginType")
@@ -50,8 +50,8 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem("user", JSON.stringify(freshUser))
           setUser(freshUser)
         } catch (error) {
-          console.error("Γ¥î Kh├┤ng thß╗â l├ám mß╗¢i phi├¬n ─æ─âng nhß║¡p:", error)
-          forceLogout(error.response?.data?.error || "Phi├¬n ─æ─âng nhß║¡p kh├┤ng c├▓n hß╗úp lß╗ç.")
+          console.error("❌ Không thể làm mới phiên đăng nhập:", error)
+          forceLogout(error.response?.data?.error || "Phiên đăng nhập không còn hợp lệ.")
         }
       } else {
         if (socket.connected) {
@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleForceLogout = (payload = {}) => {
-      forceLogout(payload.message || "Vai tr├▓ cß╗ºa bß║ín ─æ├ú thay ─æß╗òi. Vui l├▓ng ─æ─âng nhß║¡p lß║íi.")
+      forceLogout(payload.message || "Vai trò của bạn đã thay đổi. Vui lòng đăng nhập lại.")
     }
 
     socket.on("auth:force_logout", handleForceLogout)
@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
 
       return loggedInUser
     } catch (error) {
-      const message = error.response?.data?.error || "─É─âng nhß║¡p thß║Ñt bß║íi"
+      const message = error.response?.data?.error || "Đăng nhập thất bại"
       alert(message)
       throw error
     }
@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async (credential) => {
     try {
       if (!credential) {
-        throw new Error("Kh├┤ng lß║Ñy ─æ╞░ß╗úc credential tß╗½ Google")
+        throw new Error("Không lấy được credential từ Google")
       }
 
       const response = await api.post("/auth/google-login", { credential })

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useRef, useState } from "react"
 import { io } from "socket.io-client"
@@ -34,7 +34,7 @@ export default function Community() {
   const imageInputRef = useRef(null)
   const textareaRef = useRef(null)
 
-  const availableTags = ["Sß║ºu ri├¬ng", "L├║a gß║ío", "C├á ph├¬", "Hß╗ô ti├¬u", "Thß╗ºy sß║ún", "Kß╗╣ thuß║¡t", "Gi├í cß║ú"]
+  const availableTags = ["Sầu riêng", "Lúa gạo", "Cà phê", "Hồ tiêu", "Thủy sản", "Kỹ thuật", "Giá cả"]
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -98,7 +98,7 @@ export default function Community() {
       const res = await api.get("/community/posts", { params: { limit: 20 } })
       setPosts(res.data.data || [])
     } catch (error) {
-      console.error("Lß╗ùi lß║Ñy posts:", error)
+      console.error("Lỗi lấy posts:", error)
     } finally {
       setLoadingPosts(false)
     }
@@ -109,7 +109,7 @@ export default function Community() {
       const res = await api.get("/community/posts/featured", { params: { limit: 5 } })
       setFeaturedPosts(res.data?.data || [])
     } catch (error) {
-      console.error("Lß╗ùi lß║Ñy b├ái viß║┐t nß╗òi bß║¡t:", error)
+      console.error("Lỗi lấy bài viết nổi bật:", error)
     }
   }
 
@@ -118,7 +118,7 @@ export default function Community() {
       const res = await api.get("/users/dealers")
       setDealers(res.data || [])
     } catch (error) {
-      console.error("Lß╗ùi lß║Ñy ─æß║íi l├╜:", error)
+      console.error("Lỗi lấy đại lý:", error)
     }
   }
 
@@ -130,7 +130,7 @@ export default function Community() {
     const allowedFiles = files.slice(0, remainingSlots)
 
     if (allowedFiles.length < files.length) {
-      alert("Mß╗ùi b├ái viß║┐t chß╗ë ─æ╞░ß╗úc ─æ├¡nh k├¿m tß╗æi ─æa 5 ß║únh.")
+      alert("Mỗi bài viết chỉ được đính kèm tối đa 5 ảnh.")
     }
 
     setImages((prev) => [
@@ -175,8 +175,8 @@ export default function Community() {
       setSelectedTags([])
       setShowTagSelector(false)
     } catch (error) {
-      console.error("Lß╗ùi ─æ─âng b├ái:", error)
-      alert("Kh├┤ng thß╗â ─æ─âng b├ái l├║c n├áy. Vui l├▓ng thß╗¡ lß║íi.")
+      console.error("Lỗi đăng bài:", error)
+      alert("Không thể đăng bài lúc này. Vui lòng thử lại.")
     } finally {
       setIsSubmitting(false)
     }
@@ -202,7 +202,7 @@ export default function Community() {
                   <div className="flex-1">
                     <Textarea
                       ref={textareaRef}
-                      placeholder={`Bß║ín ─æang ngh─⌐ g├¼, ${user?.name?.split(" ").pop()}?`}
+                      placeholder={`Bạn đang nghĩ gì, ${user?.name?.split(" ").pop()}?`}
                       value={newPost}
                       onChange={(e) => setNewPost(e.target.value)}
                       className="w-full min-h-[60px] bg-transparent border-none p-0 text-base focus-visible:ring-0 placeholder:text-gray-400 resize-none scrollbar-hide"
@@ -245,7 +245,7 @@ export default function Community() {
                       className="flex items-center gap-2.5 px-4 py-2 rounded-2xl text-gray-600 bg-gray-50/80 hover:bg-green-50 hover:text-green-600 transition-all active:scale-95 border border-transparent hover:border-green-100"
                     >
                       <ImageIcon className="h-5 w-5" />
-                      <span className="text-[13px] font-black hidden sm:inline">ß║ónh</span>
+                      <span className="text-[13px] font-black hidden sm:inline">Ảnh</span>
                     </button>
 
                     <div className="relative">
@@ -258,7 +258,7 @@ export default function Community() {
                         }`}
                       >
                         <Tag className="h-5 w-5" />
-                        <span className="text-[13px] font-black hidden sm:inline">Thß║╗</span>
+                        <span className="text-[13px] font-black hidden sm:inline">Thẻ</span>
                       </button>
 
                       {showTagSelector && (
@@ -268,13 +268,13 @@ export default function Community() {
                             <div className="absolute -top-2 left-6 w-4 h-4 bg-white border-l border-t border-gray-100 rotate-45 shadow-[-2px_-2px_2px_rgba(0,0,0,0.01)]" />
 
                             <div className="relative z-10">
-                              <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] mb-3 px-1">Chß╗ìn chß╗º ─æß╗ü</p>
+                              <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] mb-3 px-1">Chọn chủ đề</p>
 
                               <div className="flex items-center gap-2 mb-4 bg-gray-50/80 border border-gray-100 rounded-2xl px-4 py-2.5 transition-all focus-within:border-orange-200 focus-within:bg-white focus-within:shadow-sm">
                                 <Search className="h-4 w-4 text-gray-400" />
                                 <input
                                   type="text"
-                                  placeholder="T├¼m hoß║╖c th├¬m thß║╗ mß╗¢i..."
+                                  placeholder="Tìm hoặc thêm thẻ mới..."
                                   className="bg-transparent border-none focus:ring-0 text-[13px] font-medium w-full p-0 placeholder:text-gray-400"
                                   value={tagSearch}
                                   onChange={(e) => setTagSearch(e.target.value)}
@@ -290,7 +290,7 @@ export default function Community() {
                                     }}
                                     className="w-full text-left px-4 py-3 rounded-xl text-sm font-black text-orange-600 bg-orange-50/50 hover:bg-orange-50 transition-all border border-dashed border-orange-200 mb-2"
                                   >
-                                    + Tß║ío thß║╗ "#{tagSearch}"
+                                    + Tạo thẻ "#{tagSearch}"
                                   </button>
                                 )}
 
@@ -321,7 +321,7 @@ export default function Community() {
                               {availableTags.filter((tag) => tag.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && !tagSearch.trim() && (
                                 <div className="py-8 text-center">
                                   <Tag className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-                                  <p className="text-xs text-gray-400 font-bold italic">Ch╞░a c├│ thß║╗ n├áo</p>
+                                  <p className="text-xs text-gray-400 font-bold italic">Chưa có thẻ nào</p>
                                 </div>
                               )}
                             </div>
@@ -336,7 +336,7 @@ export default function Community() {
                     disabled={isSubmitting || (!newPost.trim() && images.length === 0)}
                     className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-6 h-10 font-bold transition-all active:scale-95 disabled:opacity-50"
                   >
-                    {isSubmitting ? "─Éang ─æ─âng..." : "─É─âng b├ái"}
+                    {isSubmitting ? "Đang đăng..." : "Đăng bài"}
                   </Button>
                 </div>
               </CardContent>
@@ -346,11 +346,11 @@ export default function Community() {
               {loadingPosts ? (
                 <div className="flex flex-col items-center justify-center py-20 space-y-4">
                   <div className="h-10 w-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                  <p className="text-sm font-medium text-gray-400">─Éang cß║¡p nhß║¡t bß║ún tin...</p>
+                  <p className="text-sm font-medium text-gray-400">Đang cập nhật bản tin...</p>
                 </div>
               ) : posts.length === 0 ? (
                 <div className="py-20 text-center bg-gray-50/50 rounded-3xl border border-dashed">
-                  <p className="text-gray-400 font-medium">Ch╞░a c├│ b├ái viß║┐t n├áo mß╗¢i</p>
+                  <p className="text-gray-400 font-medium">Chưa có bài viết nào mới</p>
                 </div>
               ) : (
                 posts.map((post) => (
@@ -371,13 +371,13 @@ export default function Community() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-black text-gray-900 flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-orange-500" />
-                    B├ái viß║┐t nß╗òi bß║¡t
+                    Bài viết nổi bật
                   </CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-6">
                 {featuredPosts.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Ch╞░a c├│ b├ái viß║┐t nß╗òi bß║¡t.</p>
+                  <p className="text-sm text-muted-foreground">Chưa có bài viết nổi bật.</p>
                 ) : (
                   featuredPosts.map((item, idx) => (
                     <div key={item.id} className="group cursor-pointer">
@@ -407,12 +407,12 @@ export default function Community() {
               <CardHeader className="pb-3 px-5 pt-5">
                 <CardTitle className="text-sm font-black text-gray-900 flex items-center gap-2">
                   <Users className="h-4 w-4 text-primary" />
-                  Danh s├ích ─Éß║íi l├╜
+                  Danh sách Đại lý
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-5">
                 {dealers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Ch╞░a c├│ ─æß║íi l├╜ n├áo.</p>
+                  <p className="text-sm text-muted-foreground">Chưa có đại lý nào.</p>
                 ) : (
                   dealers.slice(0, 5).map((dealer) => (
                     <div key={dealer.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 p-3">
@@ -426,11 +426,11 @@ export default function Community() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-black text-gray-900 truncate">{dealer.name}</p>
-                          <p className="text-[10px] font-medium text-gray-400 truncate">{dealer.region || "Ch╞░a c├│ khu vß╗▒c"}</p>
+                          <p className="text-[10px] font-medium text-gray-400 truncate">{dealer.region || "Chưa có khu vực"}</p>
                         </div>
                       </div>
                       <Badge variant="secondary" className="rounded-full bg-emerald-50 text-emerald-700 border-none shrink-0">
-                        {dealer.status === "active" ? "─Éang hoß║ít ─æß╗Öng" : dealer.status || "Ch╞░a r├╡"}
+                        {dealer.status === "active" ? "Đang hoạt động" : dealer.status || "Chưa rõ"}
                       </Badge>
                     </div>
                   ))

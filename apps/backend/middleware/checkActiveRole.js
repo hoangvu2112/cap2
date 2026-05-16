@@ -1,6 +1,6 @@
-﻿import pool from "../db.js"
+import pool from "../db.js"
 
-const buildRoleChangedError = (message = "Vai tr├▓ ─æ├ú thay ─æß╗òi. Vui l├▓ng ─æ─âng nhß║¡p lß║íi.") => ({
+const buildRoleChangedError = (message = "Vai trò đã thay đổi. Vui lòng đăng nhập lại.") => ({
   error: message,
   code: "ROLE_CHANGED",
 })
@@ -9,7 +9,7 @@ export const checkActiveRole = (...allowedRoles) => {
   return async (req, res, next) => {
     try {
       if (!req.user?.id) {
-        return res.status(401).json({ error: "Ch╞░a ─æ─âng nhß║¡p" })
+        return res.status(401).json({ error: "Chưa đăng nhập" })
       }
 
       const [rows] = await pool.query(
@@ -24,11 +24,11 @@ export const checkActiveRole = (...allowedRoles) => {
 
       const currentUser = rows[0]
       if (!currentUser) {
-        return res.status(403).json({ error: "T├ái khoß║ún kh├┤ng tß╗ôn tß║íi", code: "USER_NOT_FOUND" })
+        return res.status(403).json({ error: "Tài khoản không tồn tại", code: "USER_NOT_FOUND" })
       }
 
       if (currentUser.status !== "active") {
-        return res.status(403).json({ error: "T├ái khoß║ún kh├┤ng c├▓n hoß║ít ─æß╗Öng", code: "ACCOUNT_INACTIVE" })
+        return res.status(403).json({ error: "Tài khoản không còn hoạt động", code: "ACCOUNT_INACTIVE" })
       }
 
       const currentRole = currentUser.role
@@ -39,7 +39,7 @@ export const checkActiveRole = (...allowedRoles) => {
           return res.status(403).json(buildRoleChangedError())
         }
 
-        return res.status(403).json({ error: "Bß║ín kh├┤ng c├│ quyß╗ün truy cß║¡p t├ái nguy├¬n n├áy", code: "FORBIDDEN_ROLE" })
+        return res.status(403).json({ error: "Bạn không có quyền truy cập tài nguyên này", code: "FORBIDDEN_ROLE" })
       }
 
       req.user = {
@@ -49,8 +49,8 @@ export const checkActiveRole = (...allowedRoles) => {
 
       next()
     } catch (error) {
-      console.error("Γ¥î Lß╗ùi checkActiveRole:", error)
-      return res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
+      console.error("❌ Lỗi checkActiveRole:", error)
+      return res.status(500).json({ error: "Lỗi máy chủ" })
     }
   }
 }

@@ -1,4 +1,4 @@
-﻿import express from "express"
+import express from "express"
 import pool from "../db.js"
 import { authenticateToken, requireRole } from "../middleware/auth.js"
 
@@ -83,7 +83,7 @@ router.get("/listings", authenticateToken, requireRole("dealer"), async (req, re
     res.json({ success: true, listings: rows, stats })
   } catch (error) {
     console.error("GET /dealer-supplies/listings error:", error)
-    res.status(500).json({ error: "Kh├┤ng thß╗â lß║Ñy danh s├ích nguß╗ôn h├áng" })
+    res.status(500).json({ error: "Không thể lấy danh sách nguồn hàng" })
   }
 })
 

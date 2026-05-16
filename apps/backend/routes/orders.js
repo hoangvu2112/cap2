@@ -1,11 +1,11 @@
-﻿import express from "express";
+import express from "express";
 import db from "../db.js";
 import { calculateTotalFee, splitFee } from "../utils/calculateFee.js";
 
 const router = express.Router();
 
 
-// ≡ƒö╣ CREATE ORDER
+// 🔹 CREATE ORDER
 router.post("/create", async (req, res) => {
   try {
     const { product_id, farmer_id, dealer_id, quantity, price_per_unit } = req.body;
@@ -40,7 +40,7 @@ router.post("/create", async (req, res) => {
 });
 
 
-// ≡ƒö╣ PAY ORDER
+// 🔹 PAY ORDER
 router.post("/:id/pay", async (req, res) => {
   try {
     const orderId = req.params.id;
@@ -59,7 +59,7 @@ router.post("/:id/pay", async (req, res) => {
 });
 
 
-// ≡ƒö╣ GET MY ORDERS
+// 🔹 GET MY ORDERS
 router.get("/my/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;

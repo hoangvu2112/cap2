@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Wallet as WalletIcon, CreditCard, ArrowDownRight, ArrowUpRight, History, Gift, PlusCircle } from "lucide-react";
 import api from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
@@ -16,7 +16,7 @@ export default function Wallet() {
       setWallet(res.data.wallet);
       setTransactions(res.data.transactions);
     } catch (error) {
-      console.error("Lß╗ùi lß║Ñy th├┤ng tin v├¡", error);
+      console.error("Lỗi lấy thông tin ví", error);
     } finally {
       setLoading(false);
     }
@@ -36,11 +36,11 @@ export default function Wallet() {
         fetchWallet(); // Refresh data
       }
     } catch (error) {
-      console.error("Lß╗ùi nß║íp tiß╗ün ß║úo", error);
+      console.error("Lỗi nạp tiền ảo", error);
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground">─Éang tß║úi V├¡ N├┤ng Xu...</div>;
+  if (loading) return <div className="p-8 text-center text-muted-foreground">Đang tải Ví Nông Xu...</div>;
 
   const totalBalance = Number(wallet?.balance || 0) + Number(wallet?.bonus_balance || 0);
 
@@ -52,16 +52,16 @@ export default function Wallet() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <WalletIcon className="w-8 h-8 text-primary" />
-            V├¡ N├┤ng Xu
+            Ví Nông Xu
           </h1>
-          <p className="text-muted-foreground mt-1">Quß║ún l├╜ sß╗æ d╞░ v├á giao dß╗ïch cß╗ºa bß║ín dß╗à d├áng.</p>
+          <p className="text-muted-foreground mt-1">Quản lý số dư và giao dịch của bạn dễ dàng.</p>
         </div>
         <button 
           onClick={() => setShowDepositModal(true)}
           className="bg-primary text-white hover:bg-primary/90 px-6 py-2.5 rounded-xl font-medium shadow-sm hover:shadow transition-all flex items-center gap-2 w-full md:w-auto justify-center"
         >
           <PlusCircle className="w-5 h-5" />
-          Nß║íp tiß╗ün ß║úo
+          Nạp tiền ảo
         </button>
       </div>
 
@@ -74,7 +74,7 @@ export default function Wallet() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-green-50 mb-2">
               <WalletIcon className="w-5 h-5" />
-              <span className="font-medium">Tß╗òng t├ái sß║ún</span>
+              <span className="font-medium">Tổng tài sản</span>
             </div>
             <div className="text-4xl font-bold tracking-tight">
               {formatCurrency(totalBalance)}
@@ -88,7 +88,7 @@ export default function Wallet() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-muted-foreground mb-2">
               <CreditCard className="w-5 h-5 text-blue-500" />
-              <span className="font-medium">Tiß╗ün Nß║íp (Balance)</span>
+              <span className="font-medium">Tiền Nạp (Balance)</span>
             </div>
             <div className="text-3xl font-bold text-foreground">
               {formatCurrency(wallet?.balance || 0)}
@@ -102,7 +102,7 @@ export default function Wallet() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-muted-foreground mb-2">
               <Gift className="w-5 h-5 text-orange-500" />
-              <span className="font-medium">Tiß╗ün Tß║╖ng (Bonus)</span>
+              <span className="font-medium">Tiền Tặng (Bonus)</span>
             </div>
             <div className="text-3xl font-bold text-foreground">
               {formatCurrency(wallet?.bonus_balance || 0)}
@@ -117,13 +117,13 @@ export default function Wallet() {
         <div className="p-6 border-b border-border/50 flex items-center justify-between">
           <h2 className="text-lg font-bold flex items-center gap-2">
             <History className="w-5 h-5 text-primary" />
-            Lß╗ïch sß╗¡ giao dß╗ïch
+            Lịch sử giao dịch
           </h2>
         </div>
         
         <div className="divide-y divide-border/50">
           {transactions.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">Ch╞░a c├│ giao dß╗ïch n├áo.</div>
+            <div className="p-8 text-center text-muted-foreground">Chưa có giao dịch nào.</div>
           ) : (
             transactions.map((tx) => (
               <div key={tx.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
@@ -135,10 +135,10 @@ export default function Wallet() {
                   </div>
                   <div>
                     <p className="font-semibold text-foreground text-sm sm:text-base">
-                      {tx.note || (tx.type === 'deposit' ? 'Nß║íp tiß╗ün' : 'Trß╗½ tiß╗ün')}
+                      {tx.note || (tx.type === 'deposit' ? 'Nạp tiền' : 'Trừ tiền')}
                     </p>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                      {new Date(tx.created_at).toLocaleString('vi-VN')} ΓÇó Nguß╗ôn: {tx.source === 'bonus_balance' ? 'Tiß╗ün Tß║╖ng' : 'Tiß╗ün Nß║íp'}
+                      {new Date(tx.created_at).toLocaleString('vi-VN')} • Nguồn: {tx.source === 'bonus_balance' ? 'Tiền Tặng' : 'Tiền Nạp'}
                     </p>
                   </div>
                 </div>
@@ -153,7 +153,7 @@ export default function Wallet() {
         </div>
       </div>
 
-      {/* Modal Nß║íp tiß╗ün ß║úo */}
+      {/* Modal Nạp tiền ảo */}
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-card w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl relative">
@@ -161,19 +161,19 @@ export default function Wallet() {
               onClick={() => setShowDepositModal(false)}
               className="absolute top-4 right-4 p-2 text-muted-foreground hover:bg-muted rounded-full"
             >
-              Γ£ò
+              ✕
             </button>
-            <h3 className="text-2xl font-bold mb-2">Nß║íp tiß╗ün ß║úo</h3>
-            <p className="text-muted-foreground text-sm mb-6">Nhß║¡p sß╗æ tiß╗ün muß╗æn nß║íp ─æß╗â demo c├íc t├¡nh n─âng t├¡nh ph├¡.</p>
+            <h3 className="text-2xl font-bold mb-2">Nạp tiền ảo</h3>
+            <p className="text-muted-foreground text-sm mb-6">Nhập số tiền muốn nạp để demo các tính năng tính phí.</p>
             
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Sß╗æ tiß╗ün (VN─É)</label>
+                <label className="text-sm font-medium mb-1 block">Số tiền (VNĐ)</label>
                 <input 
                   type="number" 
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder="V├¡ dß╗Ñ: 1000000"
+                  placeholder="Ví dụ: 1000000"
                   className="w-full bg-background border border-input rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/50 transition-all text-lg"
                 />
               </div>
@@ -193,7 +193,7 @@ export default function Wallet() {
                 disabled={!depositAmount || Number(depositAmount) <= 0}
                 className="w-full bg-primary text-white py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-4"
               >
-                X├íc nhß║¡n nß║íp
+                Xác nhận nạp
               </button>
             </div>
           </div>

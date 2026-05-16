@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useState } from "react"
 import Navbar from "@/components/Navbar"
@@ -11,10 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Loader2, Search, Sprout, Pin } from "lucide-react"
 
 const STATUS_META = {
-    available: { label: "─Éang c├│ h├áng", color: "#16a34a", bg: "bg-emerald-50", text: "text-emerald-700" },
-    soon: { label: "Sß║»p thu hoß║ích", color: "#ca8a04", bg: "bg-amber-50", text: "text-amber-700" },
-    partial: { label: "B├ín mß╗Öt phß║ºn", color: "#0284c7", bg: "bg-sky-50", text: "text-sky-700" },
-    sold: { label: "─É├ú b├ín gß║ºn hß║┐t", color: "#dc2626", bg: "bg-red-50", text: "text-red-700" },
+    available: { label: "Đang có hàng", color: "#16a34a", bg: "bg-emerald-50", text: "text-emerald-700" },
+    soon: { label: "Sắp thu hoạch", color: "#ca8a04", bg: "bg-amber-50", text: "text-amber-700" },
+    partial: { label: "Bán một phần", color: "#0284c7", bg: "bg-sky-50", text: "text-sky-700" },
+    sold: { label: "Đã bán gần hết", color: "#dc2626", bg: "bg-red-50", text: "text-red-700" },
 }
 
 export default function DealerSupplyHub() {
@@ -36,7 +36,7 @@ export default function DealerSupplyHub() {
                 const res = await api.get("/dealer-supplies/listings")
                 setListings(res.data?.listings || [])
             } catch (error) {
-                console.error("Lß╗ùi tß║úi nguß╗ôn h├áng dealer:", error)
+                console.error("Lỗi tải nguồn hàng dealer:", error)
             } finally {
                 setLoading(false)
             }
@@ -62,7 +62,7 @@ export default function DealerSupplyHub() {
 
     const totalQuantity = filteredListings.reduce((sum, item) => sum + Number(item.quantity_available || 0), 0)
 
-    // ─Éß║┐m sß╗æ l╞░ß╗úng khu vß╗▒c thß╗▒c tß║┐ ─æang c├│ h├áng (trß╗½ ─æi option "all")
+    // Đếm số lượng khu vực thực tế đang có hàng (trừ đi option "all")
     const totalRegions = regions.length > 1 ? regions.length - 1 : 0;
 
     const openRequestDialog = (item) => {
@@ -70,14 +70,14 @@ export default function DealerSupplyHub() {
         setRequestQuantity(String(Number(item.quantity_available || 0)))
         const suggestedPrice = Number(item.current_price || 0)
         setRequestPrice(suggestedPrice > 0 ? String(suggestedPrice) : "")
-        setRequestNote(`Quan t├óm ${item.product_name} tß║íi ${item.product_region || "khu vß╗▒c n├áy"}`)
+        setRequestNote(`Quan tâm ${item.product_name} tại ${item.product_region || "khu vực này"}`)
     }
 
     const handleCreateRequest = async () => {
         if (!selectedListing) return
 
         if (!requestQuantity || !requestPrice) {
-            alert("Vui l├▓ng nhß║¡p sß╗æ l╞░ß╗úng v├á gi├í ─æß╗ü xuß║Ñt")
+            alert("Vui lòng nhập số lượng và giá đề xuất")
             return
         }
 
@@ -90,10 +90,10 @@ export default function DealerSupplyHub() {
                 proposed_price: Number(requestPrice),
                 note: requestNote,
             })
-            alert("─É├ú gß╗¡i y├¬u cß║ºu mua tß╗½ nguß╗ôn h├áng n├áy")
+            alert("Đã gửi yêu cầu mua từ nguồn hàng này")
             setSelectedListing(null)
         } catch (error) {
-            alert(error.response?.data?.error || "Kh├┤ng thß╗â gß╗¡i y├¬u cß║ºu mua")
+            alert(error.response?.data?.error || "Không thể gửi yêu cầu mua")
         } finally {
             setRequestSaving(false)
         }
@@ -104,37 +104,37 @@ export default function DealerSupplyHub() {
             <Navbar />
             <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
                 <div className="flex flex-col gap-2">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Nguß╗ôn h├áng dealer</p>
-                    <h1 className="text-3xl font-bold text-foreground">Danh s├ích nguß╗ôn h├áng v├á c╞í hß╗Öi mua</h1>
+                    <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Nguồn hàng dealer</p>
+                    <h1 className="text-3xl font-bold text-foreground">Danh sách nguồn hàng và cơ hội mua</h1>
                     <p className="text-muted-foreground max-w-3xl">
-                        ─É├óy l├á lß╗¢p dß╗» liß╗çu t├ích ri├¬ng khß╗Åi bß║úng gi├í thß╗ï tr╞░ß╗¥ng. Dealer d├╣ng m├án h├¼nh n├áy ─æß╗â nh├¼n nhanh n╞íi n├áo ─æang c├│ h├áng,
-                        n╞íi n├áo sß║»p thu hoß║ích, v├á ─æ├óu l├á c╞í hß╗Öi mua ─æ├íng ch├║ ├╜.
+                        Đây là lớp dữ liệu tách riêng khỏi bảng giá thị trường. Dealer dùng màn hình này để nhìn nhanh nơi nào đang có hàng,
+                        nơi nào sắp thu hoạch, và đâu là cơ hội mua đáng chú ý.
                     </p>
                 </div>
 
-                {/* THß╗ÉNG K├è */}
+                {/* THỐNG KÊ */}
                 <Card className="border-emerald-200 bg-emerald-50/30">
                     <CardContent className="pt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
-                            <div className="text-sm text-muted-foreground">Tß╗òng nguß╗ôn h├áng</div>
+                            <div className="text-sm text-muted-foreground">Tổng nguồn hàng</div>
                             <div className="mt-1 text-2xl font-bold text-emerald-700">{filteredListings.length}</div>
                         </div>
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
-                            <div className="text-sm text-muted-foreground">Tß╗òng sß║ún l╞░ß╗úng</div>
+                            <div className="text-sm text-muted-foreground">Tổng sản lượng</div>
                             <div className="mt-1 text-2xl font-bold text-emerald-700">{totalQuantity.toLocaleString("vi-VN")} kg</div>
                         </div>
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
-                            <div className="text-sm text-muted-foreground">Khu vß╗▒c hiß╗ân thß╗ï</div>
+                            <div className="text-sm text-muted-foreground">Khu vực hiển thị</div>
                             <div className="mt-1 text-2xl font-bold text-emerald-700">{totalRegions}</div>
                         </div>
                         <div className="rounded-xl bg-white border border-emerald-100 p-4">
-                            <div className="text-sm text-muted-foreground">Nguß╗ôn h├áng mß╗¢i</div>
+                            <div className="text-sm text-muted-foreground">Nguồn hàng mới</div>
                             <div className="mt-1 text-2xl font-bold text-emerald-700">{listings.length}</div>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* DANH S├üCH NGUß╗ÆN H├ÇNG */}
+                {/* DANH SÁCH NGUỒN HÀNG */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -142,18 +142,18 @@ export default function DealerSupplyHub() {
                             Opportunity List
                         </CardTitle>
                         <CardDescription>
-                            Danh s├ích nguß╗ôn h├áng c├│ thß╗â khai th├íc ngay. D├╣ng bß╗Ö lß╗ìc ─æß╗â t├¼m kiß║┐m c╞í hß╗Öi mua ph├╣ hß╗úp.
+                            Danh sách nguồn hàng có thể khai thác ngay. Dùng bộ lọc để tìm kiếm cơ hội mua phù hợp.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {/* Bß╗ÿ Lß╗îC */}
+                        {/* BỘ LỌC */}
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                             <div className="relative md:col-span-2">
                                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="T├¼m theo sß║ún phß║⌐m, ng╞░ß╗¥i khai b├ío, khu vß╗▒c, ghi ch├║..."
+                                    placeholder="Tìm theo sản phẩm, người khai báo, khu vực, ghi chú..."
                                     className="pl-10"
                                 />
                             </div>
@@ -162,18 +162,18 @@ export default function DealerSupplyHub() {
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             >
-                                <option value="all">Tß║Ñt cß║ú trß║íng th├íi</option>
-                                <option value="available">─Éang c├│ h├áng</option>
-                                <option value="soon">Sß║»p thu hoß║ích</option>
-                                <option value="partial">B├ín mß╗Öt phß║ºn</option>
-                                <option value="sold">─É├ú b├ín gß║ºn hß║┐t</option>
+                                <option value="all">Tất cả trạng thái</option>
+                                <option value="available">Đang có hàng</option>
+                                <option value="soon">Sắp thu hoạch</option>
+                                <option value="partial">Bán một phần</option>
+                                <option value="sold">Đã bán gần hết</option>
                             </select>
                             <select
                                 value={regionFilter}
                                 onChange={(e) => setRegionFilter(e.target.value)}
                                 className="h-10 rounded-md border border-input bg-background px-3 text-sm md:col-span-1"
                             >
-                                <option value="all">Tß║Ñt cß║ú khu vß╗▒c</option>
+                                <option value="all">Tất cả khu vực</option>
                                 {regions.slice(1).map((region) => (
                                     <option key={region} value={region}>{region}</option>
                                 ))}
@@ -188,15 +188,15 @@ export default function DealerSupplyHub() {
                             ))}
                         </div>
 
-                        {/* HIß╗éN THß╗è DANH S├üCH HOß║╢C LOADING */}
+                        {/* HIỂN THỊ DANH SÁCH HOẶC LOADING */}
                         {loading ? (
                             <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-dashed border-muted-foreground/20">
                                 <Loader2 className="h-6 w-6 animate-spin text-emerald-700" />
-                                <span className="ml-3 text-sm text-muted-foreground">─Éang tß║úi nguß╗ôn h├áng...</span>
+                                <span className="ml-3 text-sm text-muted-foreground">Đang tải nguồn hàng...</span>
                             </div>
                         ) : filteredListings.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-muted-foreground/20 p-8 text-center text-sm text-muted-foreground">
-                                Kh├┤ng t├¼m thß║Ñy nguß╗ôn h├áng ph├╣ hß╗úp vß╗¢i bß╗Ö lß╗ìc hiß╗çn tß║íi.
+                                Không tìm thấy nguồn hàng phù hợp với bộ lọc hiện tại.
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -211,7 +211,7 @@ export default function DealerSupplyHub() {
                                                         {Number(item.quantity_available).toLocaleString("vi-VN")} {item.product_unit || "kg"}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground mt-1">
-                                                        Gi├í ─æß╗ü xuß║Ñt: {Number(item.current_price || 0).toLocaleString("vi-VN")} ─æ/{item.product_unit || "kg"}
+                                                        Giá đề xuất: {Number(item.current_price || 0).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2">
@@ -227,24 +227,24 @@ export default function DealerSupplyHub() {
                                             </div>
 
                                             <div className="mt-3 grid grid-cols-1 gap-1 text-sm text-muted-foreground">
-                                                <div>Ng╞░ß╗¥i b├ín: <span className="font-medium text-foreground">{item.user_name}</span></div>
-                                                <div>Khu vß╗▒c: {item.product_region || "Ch╞░a x├íc ─æß╗ïnh"}</div>
+                                                <div>Người bán: <span className="font-medium text-foreground">{item.user_name}</span></div>
+                                                <div>Khu vực: {item.product_region || "Chưa xác định"}</div>
                                                 {(item.harvest_start || item.harvest_end) && (
                                                     <div>
-                                                        Thu hoß║ích: {item.harvest_start ? new Date(item.harvest_start).toLocaleDateString("vi-VN") : "?"} ─æß║┐n {item.harvest_end ? new Date(item.harvest_end).toLocaleDateString("vi-VN") : "?"}
+                                                        Thu hoạch: {item.harvest_start ? new Date(item.harvest_start).toLocaleDateString("vi-VN") : "?"} đến {item.harvest_end ? new Date(item.harvest_end).toLocaleDateString("vi-VN") : "?"}
                                                     </div>
                                                 )}
-                                                {item.note && <div className="italic">Ghi ch├║: {item.note}</div>}
+                                                {item.note && <div className="italic">Ghi chú: {item.note}</div>}
                                             </div>
 
                                             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                                                 <span>
                                                     {item.is_boosted && item.boost_end_at
-                                                        ? `Ghim ─æß║┐n: ${new Date(item.boost_end_at).toLocaleDateString("vi-VN")}`
-                                                        : `Cß║¡p nhß║¡t: ${new Date(item.updated_at || Date.now()).toLocaleDateString("vi-VN")}`}
+                                                        ? `Ghim đến: ${new Date(item.boost_end_at).toLocaleDateString("vi-VN")}`
+                                                        : `Cập nhật: ${new Date(item.updated_at || Date.now()).toLocaleDateString("vi-VN")}`}
                                                 </span>
                                                 <Button size="sm" variant="outline" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => openRequestDialog(item)}>
-                                                    Tß║ío y├¬u cß║ºu mua
+                                                    Tạo yêu cầu mua
                                                 </Button>
                                             </div>
                                         </div>
@@ -256,19 +256,19 @@ export default function DealerSupplyHub() {
                 </Card>
             </div>
 
-            {/* DIALOG Y├èU Cß║ªU MUA - Giß╗» nguy├¬n kh├┤ng ─æß╗òi */}
+            {/* DIALOG YÊU CẦU MUA - Giữ nguyên không đổi */}
             <Dialog open={!!selectedListing} onOpenChange={(open) => !open && setSelectedListing(null)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            Tß║ío y├¬u cß║ºu mua cho {selectedListing?.product_name || "nguß╗ôn h├áng"}
+                            Tạo yêu cầu mua cho {selectedListing?.product_name || "nguồn hàng"}
                         </DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                                <label className="mb-1 block text-sm font-medium">Sß╗æ l╞░ß╗úng</label>
+                                <label className="mb-1 block text-sm font-medium">Số lượng</label>
                                 <Input
                                     type="number"
                                     value={requestQuantity}
@@ -277,7 +277,7 @@ export default function DealerSupplyHub() {
                                 />
                             </div>
                             <div>
-                                <label className="mb-1 block text-sm font-medium">Gi├í ─æß╗ü xuß║Ñt</label>
+                                <label className="mb-1 block text-sm font-medium">Giá đề xuất</label>
                                 <Input
                                     type="number"
                                     value={requestPrice}
@@ -287,17 +287,17 @@ export default function DealerSupplyHub() {
                             </div>
                         </div>
                         <div>
-                            <label className="mb-1 block text-sm font-medium">Ghi ch├║</label>
-                            <Input value={requestNote} onChange={(e) => setRequestNote(e.target.value)} placeholder="Nhß║¡p th├┤ng ─æiß╗çp gß╗¡i ─æß║┐n ng╞░ß╗¥i b├ín..." />
+                            <label className="mb-1 block text-sm font-medium">Ghi chú</label>
+                            <Input value={requestNote} onChange={(e) => setRequestNote(e.target.value)} placeholder="Nhập thông điệp gửi đến người bán..." />
                         </div>
                     </div>
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setSelectedListing(null)}>
-                            Hß╗ºy
+                            Hủy
                         </Button>
                         <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateRequest} disabled={requestSaving}>
-                            {requestSaving ? "─Éang gß╗¡i..." : "Gß╗¡i y├¬u cß║ºu"}
+                            {requestSaving ? "Đang gửi..." : "Gửi yêu cầu"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

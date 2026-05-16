@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -13,10 +13,10 @@ import InvoicePopup from "@/components/InvoicePopup"
 import { socket } from "@/socket"
 
 const STATUS_LABEL = {
-  pending: "Chß╗¥ phß║ún hß╗ôi",
-  responded: "─É├ú phß║ún hß╗ôi",
-  closed: "─Éang chß╗æt ─æ╞ín",
-  completed: "Ho├án th├ánh",
+  pending: "Chờ phản hồi",
+  responded: "Đã phản hồi",
+  closed: "Đang chốt đơn",
+  completed: "Hoàn thành",
 }
 
 const STATUS_CLASS = {
@@ -46,13 +46,13 @@ export default function Negotiation() {
   const fetchRequests = async () => {
     setLoading(true)
     try {
-      // Gß╗ìi API /all ─æß╗â lß║Ñy to├án bß╗Ö ─æ╞ín li├¬n quan ─æß║┐n m├¼nh
+      // Gọi API /all để lấy toàn bộ đơn liên quan đến mình
       const res = await api.get("/purchase-requests/all")
       const list = res.data || []
       
       setRequests(list)
       
-      // Nß║┐u c├│ requestId tß╗½ URL, ╞░u ti├¬n chß╗ìn n├│
+      // Nếu có requestId từ URL, ưu tiên chọn nó
       const rid = Number(searchParams.get("requestId"))
       if (rid && list.some(i => i.id === rid)) {
         setSelectedId(rid)
@@ -60,7 +60,7 @@ export default function Negotiation() {
         setSelectedId(list[0].id)
       }
     } catch (error) {
-      console.error("Lß╗ùi tß║úi danh s├ích th╞░╞íng l╞░ß╗úng:", error)
+      console.error("Lỗi tải danh sách thương lượng:", error)
       setRequests([])
     } finally {
       setLoading(false)
@@ -91,7 +91,7 @@ export default function Negotiation() {
         )
       }
     } catch (error) {
-      console.error("Lß╗ùi tß║úi tin nhß║»n th╞░╞íng l╞░ß╗úng:", error)
+      console.error("Lỗi tải tin nhắn thương lượng:", error)
       setMessages([])
     }
   }
@@ -109,7 +109,7 @@ export default function Negotiation() {
         prev.map((item) => (item.id === selected.id ? { ...item, status: res.data.request.status, updated_at: res.data.request.updated_at } : item))
       )
     } catch (error) {
-      alert(error.response?.data?.error || "Kh├┤ng gß╗¡i ─æ╞░ß╗úc tin nhß║»n")
+      alert(error.response?.data?.error || "Không gửi được tin nhắn")
     }
   }
 
@@ -122,20 +122,20 @@ export default function Negotiation() {
         setShowInvoice(true)
       }
     } catch (error) {
-      alert(error.response?.data?.error || "Kh├┤ng thß╗â lß║Ñy th├┤ng tin ho├í ─æ╞ín")
+      alert(error.response?.data?.error || "Không thể lấy thông tin hoá đơn")
     }
   }
 
   const handlePaymentSuccess = () => {
-    alert("Thanh to├ín th├ánh c├┤ng!")
+    alert("Thanh toán thành công!")
     fetchMessages(selectedId) // refresh data
   }
 
   const handleDealerReport = async () => {
     if (!selected) return
-    const reason = window.prompt("Nhß║¡p l├╜ do b├ío c├ío user:")
+    const reason = window.prompt("Nhập lý do báo cáo user:")
     if (!reason?.trim()) return
-    const note = window.prompt("Ghi ch├║ th├¬m (tuß╗│ chß╗ìn):", "") || ""
+    const note = window.prompt("Ghi chú thêm (tuỳ chọn):", "") || ""
 
     try {
       setActioningId(selected.id)
@@ -144,9 +144,9 @@ export default function Negotiation() {
         note: note.trim(),
       })
       setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, dealer_report_status: "reported" } : item)))
-      alert("─É├ú gß╗¡i b├ío c├ío cho admin")
+      alert("Đã gửi báo cáo cho admin")
     } catch (error) {
-      alert(error.response?.data?.error || "Kh├┤ng thß╗â gß╗¡i b├ío c├ío")
+      alert(error.response?.data?.error || "Không thể gửi báo cáo")
     } finally {
       setActioningId(null)
     }
@@ -174,15 +174,15 @@ export default function Negotiation() {
       if (data.request_id === selectedId) {
         fetchMessages(selectedId)
       }
-      fetchRequests() // Cß║¡p nhß║¡t danh s├ích b├¬n tr├íi
+      fetchRequests() // Cập nhật danh sách bên trái
     })
 
     socket.on("order_completed", (data) => {
       if (data.request_id === selectedId) {
         fetchMessages(selectedId)
-        alert("─É╞ín h├áng ─æ├ú ho├án th├ánh! Cß║ú hai b├¬n ─æ├ú thanh to├ín hoa hß╗ông.")
+        alert("Đơn hàng đã hoàn thành! Cả hai bên đã thanh toán hoa hồng.")
       }
-      fetchRequests() // Cß║¡p nhß║¡t danh s├ích b├¬n tr├íi
+      fetchRequests() // Cập nhật danh sách bên trái
     })
 
     return () => {
@@ -198,13 +198,13 @@ export default function Negotiation() {
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
           <Card>
             <CardHeader>
-              <CardTitle>Th╞░╞íng l╞░ß╗úng mua b├ín</CardTitle>
+              <CardTitle>Thương lượng mua bán</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-muted-foreground">─Éang tß║úi...</p>
+                <p className="text-muted-foreground">Đang tải...</p>
               ) : requests.length === 0 ? (
-                <p className="text-muted-foreground">Ch╞░a c├│ y├¬u cß║ºu n├áo ─æß╗â th╞░╞íng l╞░ß╗úng.</p>
+                <p className="text-muted-foreground">Chưa có yêu cầu nào để thương lượng.</p>
               ) : (
                 <div className="space-y-2">
                   {requests.map((item) => (
@@ -217,11 +217,11 @@ export default function Negotiation() {
                       <p className="font-semibold text-sm">{item.product_name}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {item.buyer_id === user?.id 
-                          ? `─Éß╗æi t├íc (Ng╞░ß╗¥i b├ín): ${item.farmer_name}` 
-                          : `─Éß╗æi t├íc (Ng╞░ß╗¥i mua): ${item.buyer_name}`}
+                          ? `Đối tác (Người bán): ${item.farmer_name}` 
+                          : `Đối tác (Người mua): ${item.buyer_name}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        ─Éß╗ü xuß║Ñt: {Number(item.proposed_price).toLocaleString("vi-VN")} ─æ/{item.product_unit || "kg"}
+                        Đề xuất: {Number(item.proposed_price).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}
                       </p>
                       <div className="flex flex-wrap gap-1 mt-2">
                         <span className={`inline-flex px-2 py-1 border rounded-full text-[11px] font-semibold ${STATUS_CLASS[item.status] || STATUS_CLASS.pending}`}>
@@ -231,12 +231,12 @@ export default function Negotiation() {
                           <>
                             {(item.farmer_id !== user?.id && item.farmer_status === 'paid') && (
                               <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
-                                ─Éß╗æi t├íc ─æ├ú thanh to├ín
+                                Đối tác đã thanh toán
                               </span>
                             )}
                             {(item.buyer_id !== user?.id && item.buyer_status === 'paid') && (
                               <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
-                                ─Éß╗æi t├íc ─æ├ú thanh to├ín
+                                Đối tác đã thanh toán
                               </span>
                             )}
                           </>
@@ -253,8 +253,8 @@ export default function Negotiation() {
             <CardHeader>
               <CardTitle>
                 {selected
-                  ? `Y├¬u cß║ºu #${selected.id} - ${selected.product_name}`
-                  : "Chß╗ìn mß╗Öt y├¬u cß║ºu ─æß╗â bß║»t ─æß║ºu th╞░╞íng l╞░ß╗úng"}
+                  ? `Yêu cầu #${selected.id} - ${selected.product_name}`
+                  : "Chọn một yêu cầu để bắt đầu thương lượng"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -262,21 +262,21 @@ export default function Negotiation() {
                 <>
                   <div className="rounded-lg border p-3 text-sm bg-muted/20">
                     <p>
-                      <span className="text-muted-foreground">Sß╗æ l╞░ß╗úng:</span> {Number(selected.quantity).toLocaleString("vi-VN")} {selected.product_unit || "kg"}
+                      <span className="text-muted-foreground">Số lượng:</span> {Number(selected.quantity).toLocaleString("vi-VN")} {selected.product_unit || "kg"}
                     </p>
                     <p>
-                      <span className="text-muted-foreground">Gi├í ─æß╗ü xuß║Ñt:</span> {Number(selected.proposed_price).toLocaleString("vi-VN")} ─æ/{selected.product_unit || "kg"}
+                      <span className="text-muted-foreground">Giá đề xuất:</span> {Number(selected.proposed_price).toLocaleString("vi-VN")} đ/{selected.product_unit || "kg"}
                     </p>
                     {selected.note && (
                       <p>
-                        <span className="text-muted-foreground">Ghi ch├║:</span> {selected.note}
+                        <span className="text-muted-foreground">Ghi chú:</span> {selected.note}
                       </p>
                     )}
                   </div>
 
                   <div className="rounded-lg border p-3 h-[360px] overflow-y-auto space-y-2 bg-white">
                     {messages.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Ch╞░a c├│ tin nhß║»n, h├úy bß║»t ─æß║ºu th╞░╞íng l╞░ß╗úng.</p>
+                      <p className="text-muted-foreground text-sm">Chưa có tin nhắn, hãy bắt đầu thương lượng.</p>
                     ) : (
                       messages.map((msg) => {
                         const mine = msg.sender_id === user?.id
@@ -285,7 +285,7 @@ export default function Negotiation() {
                             <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                               <p>{msg.content}</p>
                               <p className={`text-[11px] mt-1 ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                                {msg.sender_name} ΓÇó {new Date(msg.created_at).toLocaleString("vi-VN")}
+                                {msg.sender_name} • {new Date(msg.created_at).toLocaleString("vi-VN")}
                               </p>
                             </div>
                           </div>
@@ -298,13 +298,13 @@ export default function Negotiation() {
                     <Textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder="Nhß║¡p nß╗Öi dung th╞░╞íng l╞░ß╗úng..."
+                      placeholder="Nhập nội dung thương lượng..."
                       className="min-h-[88px]"
                       disabled={selected.status === "closed"}
                     />
                     <div className="flex gap-2">
                       <Button onClick={handleSendMessage} disabled={selected.status === "completed" || !draft.trim()}>
-                        Gß╗¡i tin nhß║»n
+                        Gửi tin nhắn
                       </Button>
                       {selected.status !== "completed" && (
                         <Button 
@@ -315,8 +315,8 @@ export default function Negotiation() {
                         >
                           {(selected.farmer_id === user?.id && selected.farmer_status === "paid") || 
                            (selected.buyer_id === user?.id && selected.buyer_status === "paid")
-                            ? "─É├ú thanh to├ín (Chß╗¥ ─æß╗æi t├íc)" 
-                            : (selected.status === "closed" ? "Thanh to├ín Hoa hß╗ông" : "Chß╗æt ─æ╞ín")}
+                            ? "Đã thanh toán (Chờ đối tác)" 
+                            : (selected.status === "closed" ? "Thanh toán Hoa hồng" : "Chốt đơn")}
                         </Button>
                       )}
                     </div>
@@ -324,17 +324,17 @@ export default function Negotiation() {
 
                   {selected.status === "completed" && (
                     <div className="rounded-lg border p-3 bg-emerald-50/60 space-y-2">
-                      <p className="text-sm font-medium text-emerald-800">─É╞ín h├áng ─æ├ú ho├án th├ánh. Cß║ú hai b├¬n ─æ├ú thanh to├ín hoa hß╗ông.</p>
+                      <p className="text-sm font-medium text-emerald-800">Đơn hàng đã hoàn thành. Cả hai bên đã thanh toán hoa hồng.</p>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={handleDealerReport} disabled={actioningId === selected.id || selected.dealer_report_status === "reported"}>
-                          {selected.dealer_report_status === "reported" ? "─É├ú b├ío c├ío" : "B├ío c├ío ng╞░ß╗¥i d├╣ng"}
+                          {selected.dealer_report_status === "reported" ? "Đã báo cáo" : "Báo cáo người dùng"}
                         </Button>
                       </div>
                     </div>
                   )}
                 </>
               ) : (
-                <p className="text-muted-foreground">Chß╗ìn mß╗Öt y├¬u cß║ºu ─æß╗â xem nß╗Öi dung th╞░╞íng l╞░ß╗úng.</p>
+                <p className="text-muted-foreground">Chọn một yêu cầu để xem nội dung thương lượng.</p>
               )}
             </CardContent>
           </Card>

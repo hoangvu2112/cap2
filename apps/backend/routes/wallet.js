@@ -1,22 +1,22 @@
-﻿import express from "express";
+import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { calculateTotalFee, splitFee } from "../utils/calculateFee.js";
 
 const router = express.Router();
 
-// Lß║Ñy th├┤ng tin v├¡ v├á lß╗ïch sß╗¡ giao dß╗ïch
+// Lấy thông tin ví và lịch sử giao dịch
 router.get("/my-wallet", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Lß║Ñy th├┤ng tin v├¡
+    // Lấy thông tin ví
     let [[wallet]] = await pool.query(
       "SELECT * FROM wallets WHERE user_id = ?",
       [userId]
     );
 
-    // Nß║┐u ch╞░a c├│ v├¡ th├¼ tß║ío mß╗¢i
+    // Nếu chưa có ví thì tạo mới
     if (!wallet) {
       await pool.query(
         "INSERT INTO wallets (user_id, balance, bonus_balance) VALUES (?, 0, 0)",
@@ -25,7 +25,7 @@ router.get("/my-wallet", authenticateToken, async (req, res) => {
       wallet = { user_id: userId, balance: 0, bonus_balance: 0 };
     }
 
-    // Lß║Ñy lß╗ïch sß╗¡ giao dß╗ïch
+    // Lấy lịch sử giao dịch
     const [transactions] = await pool.query(
       "SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC",
       [userId]
@@ -34,11 +34,11 @@ router.get("/my-wallet", authenticateToken, async (req, res) => {
     res.json({ success: true, wallet, transactions });
   } catch (error) {
     console.error("GET /wallet/my-wallet error:", error);
-    res.status(500).json({ error: "Lß╗ùi khi lß║Ñy th├┤ng tin v├¡" });
+    res.status(500).json({ error: "Lỗi khi lấy thông tin ví" });
   }
 });
 
-// Nß║íp tiß╗ün ß║úo (Mock Deposit)
+// Nạp tiền ảo (Mock Deposit)
 router.post("/mock-deposit", authenticateToken, async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -46,12 +46,12 @@ router.post("/mock-deposit", authenticateToken, async (req, res) => {
     const amount = Number(req.body.amount);
 
     if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "Sß╗æ tiß╗ün kh├┤ng hß╗úp lß╗ç" });
+      return res.status(400).json({ error: "Số tiền không hợp lệ" });
     }
 
     await connection.beginTransaction();
 
-    // Lß║Ñy hoß║╖c tß║ío v├¡
+    // Lấy hoặc tạo ví
     let [[wallet]] = await connection.query(
       "SELECT * FROM wallets WHERE user_id = ? FOR UPDATE",
       [userId]
@@ -65,31 +65,31 @@ router.post("/mock-deposit", authenticateToken, async (req, res) => {
       wallet = { user_id: userId, balance: 0, bonus_balance: 0 };
     }
 
-    // Cß╗Öng tiß╗ün v├áo balance
+    // Cộng tiền vào balance
     await connection.query(
       "UPDATE wallets SET balance = balance + ? WHERE user_id = ?",
       [amount, userId]
     );
 
-    // Ghi log giao dß╗ïch
+    // Ghi log giao dịch
     await connection.query(
       `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
-       VALUES (?, ?, 'deposit', 'mock_deposit', 'balance', 'Nß║íp tiß╗ün ß║úo')`,
+       VALUES (?, ?, 'deposit', 'mock_deposit', 'balance', 'Nạp tiền ảo')`,
       [userId, amount]
     );
 
     await connection.commit();
-    res.json({ success: true, message: "Nß║íp tiß╗ün th├ánh c├┤ng", new_balance: Number(wallet.balance) + amount });
+    res.json({ success: true, message: "Nạp tiền thành công", new_balance: Number(wallet.balance) + amount });
   } catch (error) {
     await connection.rollback();
     console.error("POST /wallet/mock-deposit error:", error);
-    res.status(500).json({ error: "Lß╗ùi nß║íp tiß╗ün" });
+    res.status(500).json({ error: "Lỗi nạp tiền" });
   } finally {
     connection.release();
   }
 });
 
-// Thanh to├ín hoa hß╗ông chß╗æt ─æ╞ín
+// Thanh toán hoa hồng chốt đơn
 router.post("/pay-commission", authenticateToken, async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -97,12 +97,12 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
     const requestId = Number(req.body.request_id);
 
     if (!requestId) {
-      return res.status(400).json({ error: "Thiß║┐u m├ú y├¬u cß║ºu" });
+      return res.status(400).json({ error: "Thiếu mã yêu cầu" });
     }
 
     await connection.beginTransaction();
 
-    // 1. Lß║Ñy th├┤ng tin ─æ╞ín h├áng
+    // 1. Lấy thông tin đơn hàng
     const [[request]] = await connection.query(
       "SELECT id, buyer_id, farmer_id, proposed_price, quantity, status FROM purchase_requests WHERE id = ?",
       [requestId]
@@ -110,15 +110,15 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
 
     if (!request) {
       await connection.rollback();
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" });
+      return res.status(404).json({ error: "Không tìm thấy yêu cầu" });
     }
 
     if (userId !== request.buyer_id && userId !== request.farmer_id) {
       await connection.rollback();
-      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün thanh to├ín" });
+      return res.status(403).json({ error: "Không có quyền thanh toán" });
     }
 
-    // 2. T├¡nh ph├¡
+    // 2. Tính phí
     const totalValue = Number(request.proposed_price) * Number(request.quantity);
     const totalFee = calculateTotalFee(totalValue);
     const { farmerFee, dealerFee } = splitFee(totalFee);
@@ -126,7 +126,7 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
     const isFarmer = userId === request.farmer_id;
     const feeAmountToPay = isFarmer ? farmerFee : dealerFee;
 
-    // 3. Kiß╗âm tra sß╗æ d╞░ v├¡
+    // 3. Kiểm tra số dư ví
     let [[wallet]] = await connection.query(
       "SELECT * FROM wallets WHERE user_id = ? FOR UPDATE",
       [userId]
@@ -134,10 +134,10 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
 
     if (!wallet || Number(wallet.balance) < feeAmountToPay) {
       await connection.rollback();
-      return res.status(400).json({ error: "Sß╗æ d╞░ V├¡ N├┤ng Xu kh├┤ng ─æß╗º ─æß╗â thanh to├ín hoa hß╗ông" });
+      return res.status(400).json({ error: "Số dư Ví Nông Xu không đủ để thanh toán hoa hồng" });
     }
 
-    // 4. Trß╗½ tiß╗ün (Hoa hß╗ông chß╗ë ─æ╞░ß╗úc trß╗½ tß╗½ balance)
+    // 4. Trừ tiền (Hoa hồng chỉ được trừ từ balance)
     await connection.query(
       "UPDATE wallets SET balance = balance - ? WHERE user_id = ?",
       [feeAmountToPay, userId]
@@ -147,10 +147,10 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
     await connection.query(
       `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note)
        VALUES (?, ?, 'deduct', 'commission', 'balance', ?)`,
-      [userId, feeAmountToPay, `Thanh to├ín hoa hß╗ông cho ─æ╞ín #${requestId}`]
+      [userId, feeAmountToPay, `Thanh toán hoa hồng cho đơn #${requestId}`]
     );
 
-    // 6. Cß║¡p nhß║¡t bß║úng commissions
+    // 6. Cập nhật bảng commissions
     let [[commission]] = await connection.query(
       "SELECT id, farmer_status, buyer_status FROM commissions WHERE request_id = ?",
       [requestId]
@@ -172,7 +172,7 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
       );
     }
 
-    // 7. Kiß╗âm tra nß║┐u cß║ú 2 ─æ├ú thanh to├ín th├¼ chuyß╗ân ─æ╞ín h├áng sang Ho├án th├ánh
+    // 7. Kiểm tra nếu cả 2 đã thanh toán thì chuyển đơn hàng sang Hoàn thành
     let orderCompleted = false;
     if (newFarmerStatus === 'paid' && newBuyerStatus === 'paid') {
       await connection.query(
@@ -184,10 +184,10 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
 
     await connection.commit();
 
-    // 8. Bß║»n sß╗▒ kiß╗çn realtime qua Socket.io
+    // 8. Bắn sự kiện realtime qua Socket.io
     const io = req.app.get("io");
     if (io) {
-      // Th├┤ng b├ío cho ph├¡a ─æß╗æi t├íc biß║┐t m├¼nh ─æ├ú thanh to├ín
+      // Thông báo cho phía đối tác biết mình đã thanh toán
       const partnerId = isFarmer ? request.buyer_id : request.farmer_id;
       io.to(`user:${partnerId}`).emit("commission_paid", {
         request_id: requestId,
@@ -195,24 +195,24 @@ router.post("/pay-commission", authenticateToken, async (req, res) => {
         role: isFarmer ? 'farmer' : 'buyer'
       });
 
-      // Nß║┐u ─æ╞ín h├áng ho├án th├ánh, th├┤ng b├ío cho cß║ú 2
+      // Nếu đơn hàng hoàn thành, thông báo cho cả 2
       if (orderCompleted) {
         io.to(`user:${request.farmer_id}`).emit("order_completed", { request_id: requestId });
         io.to(`user:${request.buyer_id}`).emit("order_completed", { request_id: requestId });
       }
     }
 
-    res.json({ success: true, message: "Thanh to├ín hoa hß╗ông th├ánh c├┤ng", orderCompleted });
+    res.json({ success: true, message: "Thanh toán hoa hồng thành công", orderCompleted });
   } catch (error) {
     await connection.rollback();
     console.error("POST /wallet/pay-commission error:", error);
-    res.status(500).json({ error: "Lß╗ùi thanh to├ín hoa hß╗ông" });
+    res.status(500).json({ error: "Lỗi thanh toán hoa hồng" });
   } finally {
     connection.release();
   }
 });
 
-// Mock api lß║Ñy th├┤ng tin invoice tr╞░ß╗¢c khi chß╗æt ─æ╞ín (─æß╗â show popup)
+// Mock api lấy thông tin invoice trước khi chốt đơn (để show popup)
 router.get("/invoice-preview/:requestId", authenticateToken, async (req, res) => {
   try {
     const requestId = Number(req.params.requestId);
@@ -225,7 +225,7 @@ router.get("/invoice-preview/:requestId", authenticateToken, async (req, res) =>
       [requestId]
     );
 
-    if (!request) return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" });
+    if (!request) return res.status(404).json({ error: "Không tìm thấy yêu cầu" });
 
     const totalValue = Number(request.proposed_price) * Number(request.quantity);
     const totalFee = calculateTotalFee(totalValue);
@@ -257,7 +257,7 @@ router.get("/invoice-preview/:requestId", authenticateToken, async (req, res) =>
     });
   } catch (error) {
     console.error("GET /wallet/invoice-preview error:", error);
-    res.status(500).json({ error: "Lß╗ùi khi lß║Ñy th├┤ng tin ho├í ─æ╞ín" });
+    res.status(500).json({ error: "Lỗi khi lấy thông tin hoá đơn" });
   }
 });
 

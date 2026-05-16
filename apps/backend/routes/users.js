@@ -1,10 +1,10 @@
-﻿import express from "express"
+import express from "express"
 import { authenticateToken, isAdmin } from "../middleware/auth.js"
 import pool from "../db.js"
 
 const router = express.Router()
 
-// ≡ƒºæΓÇì≡ƒÆ╗ Lß║Ñy th├┤ng tin c├í nh├ón hiß╗çn tß║íi
+// 🧑‍💻 Lấy thông tin cá nhân hiện tại
 router.get("/me", authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -12,16 +12,16 @@ router.get("/me", authenticateToken, async (req, res) => {
       [req.user.id]
     )
     if (rows.length === 0) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i d├╣ng" })
+      return res.status(404).json({ error: "Không tìm thấy người dùng" })
     }
     res.json(rows[0])
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi lß║Ñy th├┤ng tin user:", error)
-    res.status(500).json({ error: "Lß╗ùi server khi lß║Ñy th├┤ng tin" })
+    console.error("❌ Lỗi khi lấy thông tin user:", error)
+    res.status(500).json({ error: "Lỗi server khi lấy thông tin" })
   }
 })
 
-// ≡ƒºæΓÇì≡ƒÆ╗ Lß║Ñy danh s├ích ─æß║íi l├╜ (Public)
+// 🧑‍💻 Lấy danh sách đại lý (Public)
 router.get("/dealers", async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -29,8 +29,8 @@ router.get("/dealers", async (req, res) => {
     )
     res.json(rows)
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi lß║Ñy danh s├ích ─æß║íi l├╜:", error)
-    res.status(500).json({ error: "Lß╗ùi server" })
+    console.error("❌ Lỗi khi lấy danh sách đại lý:", error)
+    res.status(500).json({ error: "Lỗi server" })
   }
 })
 
@@ -76,8 +76,8 @@ router.get("/me/source-listings", authenticateToken, async (req, res) => {
 
     res.json(rows)
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi lß║Ñy nguß╗ôn h├áng c├í nh├ón:", error)
-    res.status(500).json({ error: "Lß╗ùi server" })
+    console.error("❌ Lỗi khi lấy nguồn hàng cá nhân:", error)
+    res.status(500).json({ error: "Lỗi server" })
   }
 })
 
@@ -92,7 +92,7 @@ router.post("/me/source-listings", authenticateToken, async (req, res) => {
     const note = req.body.note?.trim() || null
 
     if (!productId || !Number.isFinite(quantityAvailable) || quantityAvailable <= 0) {
-      return res.status(400).json({ error: "Dß╗» liß╗çu nguß╗ôn h├áng kh├┤ng hß╗úp lß╗ç" })
+      return res.status(400).json({ error: "Dữ liệu nguồn hàng không hợp lệ" })
     }
 
     const [result] = await pool.query(
@@ -131,11 +131,11 @@ router.post("/me/source-listings", authenticateToken, async (req, res) => {
 
     res.status(201).json(created)
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi tß║ío nguß╗ôn h├áng:", error)
+    console.error("❌ Lỗi khi tạo nguồn hàng:", error)
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(400).json({ error: "Bß║ín ─æ├ú tß║ío nguß╗ôn h├áng cho sß║ún phß║⌐m n├áy rß╗ôi. Vui l├▓ng chß╗ënh sß╗¡a thay v├¼ tß║ío mß╗¢i." })
+      return res.status(400).json({ error: "Bạn đã tạo nguồn hàng cho sản phẩm này rồi. Vui lòng chỉnh sửa thay vì tạo mới." })
     }
-    res.status(500).json({ error: error.message || "Lß╗ùi server" })
+    res.status(500).json({ error: error.message || "Lỗi server" })
   }
 })
 
@@ -151,7 +151,7 @@ router.put("/me/source-listings/:id", authenticateToken, async (req, res) => {
     const note = req.body.note?.trim() || null
 
     if (!listingId || !productId || !Number.isFinite(quantityAvailable) || quantityAvailable <= 0) {
-      return res.status(400).json({ error: "Dß╗» liß╗çu nguß╗ôn h├áng kh├┤ng hß╗úp lß╗ç" })
+      return res.status(400).json({ error: "Dữ liệu nguồn hàng không hợp lệ" })
     }
 
     const [result] = await pool.query(
@@ -164,7 +164,7 @@ router.put("/me/source-listings/:id", authenticateToken, async (req, res) => {
     )
 
     if (!result.affectedRows) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy nguß╗ôn h├áng" })
+      return res.status(404).json({ error: "Không tìm thấy nguồn hàng" })
     }
 
     const [[updated]] = await pool.query(
@@ -194,11 +194,11 @@ router.put("/me/source-listings/:id", authenticateToken, async (req, res) => {
 
     res.json(updated)
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi cß║¡p nhß║¡t nguß╗ôn h├áng:", error)
+    console.error("❌ Lỗi khi cập nhật nguồn hàng:", error)
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(400).json({ error: "Sß║ún phß║⌐m n├áy ─æ├ú tß╗ôn tß║íi trong danh s├ích cß╗ºa bß║ín." })
+      return res.status(400).json({ error: "Sản phẩm này đã tồn tại trong danh sách của bạn." })
     }
-    res.status(500).json({ error: error.message || "Lß╗ùi server" })
+    res.status(500).json({ error: error.message || "Lỗi server" })
   }
 })
 
@@ -212,22 +212,22 @@ router.delete("/me/source-listings/:id", authenticateToken, async (req, res) => 
     )
 
     if (!result.affectedRows) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy nguß╗ôn h├áng" })
+      return res.status(404).json({ error: "Không tìm thấy nguồn hàng" })
     }
 
-    res.json({ message: "─É├ú x├│a nguß╗ôn h├áng" })
+    res.json({ message: "Đã xóa nguồn hàng" })
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi x├│a nguß╗ôn h├áng:", error)
-    res.status(500).json({ error: "Lß╗ùi server" })
+    console.error("❌ Lỗi khi xóa nguồn hàng:", error)
+    res.status(500).json({ error: "Lỗi server" })
   }
 })
 
-// ≡ƒºæΓÇì≡ƒÆ╗ Ng╞░ß╗¥i d├╣ng tß╗▒ cß║¡p nhß║¡t th├┤ng tin c├í nh├ón
-// ΓÜá∩╕Å ─Éß║╖t TR╞»ß╗ÜC c├íc route c├│ "/:id"
+// 🧑‍💻 Người dùng tự cập nhật thông tin cá nhân
+// ⚠️ Đặt TRƯỚC các route có "/:id"
 router.put("/me", authenticateToken, async (req, res) => {
   try {
-    console.log("≡ƒôÑ Dß╗» liß╗çu nhß║¡n ─æ╞░ß╗úc:", req.body)
-    console.log("≡ƒæñ User ID:", req.user.id)
+    console.log("📥 Dữ liệu nhận được:", req.body)
+    console.log("👤 User ID:", req.user.id)
 
     const { name, avatar_url, region } = req.body
     const [result] = await pool.query(
@@ -240,7 +240,7 @@ router.put("/me", authenticateToken, async (req, res) => {
     )
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i d├╣ng ─æß╗â cß║¡p nhß║¡t" })
+      return res.status(404).json({ error: "Không tìm thấy người dùng để cập nhật" })
     }
 
     const [rows] = await pool.query(
@@ -249,23 +249,23 @@ router.put("/me", authenticateToken, async (req, res) => {
     )
     res.json(rows[0])
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi cß║¡p nhß║¡t user:", error)
-    res.status(500).json({ error: "Lß╗ùi server khi cß║¡p nhß║¡t th├┤ng tin" })
+    console.error("❌ Lỗi khi cập nhật user:", error)
+    res.status(500).json({ error: "Lỗi server khi cập nhật thông tin" })
   }
 })
 
-// ≡ƒº⌐ Lß║Ñy danh s├ích tß║Ñt cß║ú ng╞░ß╗¥i d├╣ng (Admin)
+// 🧩 Lấy danh sách tất cả người dùng (Admin)
 router.get("/", authenticateToken, isAdmin, async (req, res) => {
   try {
     const [rows] = await pool.query("SELECT id, name, email, role, status, joinDate, created_at FROM users")
     res.json(rows)
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi lß║Ñy danh s├ích ng╞░ß╗¥i d├╣ng:", error)
-    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º khi lß║Ñy danh s├ích ng╞░ß╗¥i d├╣ng" })
+    console.error("❌ Lỗi khi lấy danh sách người dùng:", error)
+    res.status(500).json({ error: "Lỗi máy chủ khi lấy danh sách người dùng" })
   }
 })
 
-// Cß║¡p nhß║¡t th├┤ng tin ng╞░ß╗¥i d├╣ng (Admin)
+// Cập nhật thông tin người dùng (Admin)
 router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
   const { name, email, role, status } = req.body
   const id = parseInt(req.params.id)
@@ -282,7 +282,7 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
     )
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i d├╣ng" })
+      return res.status(404).json({ error: "Không tìm thấy người dùng" })
     }
 
     const [updatedUser] = await pool.query(
@@ -292,12 +292,12 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
 
     res.json(updatedUser[0])
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi cß║¡p nhß║¡t ng╞░ß╗¥i d├╣ng:", error)
-    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º khi cß║¡p nhß║¡t ng╞░ß╗¥i d├╣ng" })
+    console.error("❌ Lỗi khi cập nhật người dùng:", error)
+    res.status(500).json({ error: "Lỗi máy chủ khi cập nhật người dùng" })
   }
 })
 
-// X├│a ng╞░ß╗¥i d├╣ng (Admin)
+// Xóa người dùng (Admin)
 router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
   const id = parseInt(req.params.id)
 
@@ -305,13 +305,13 @@ router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
     const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id])
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i d├╣ng" })
+      return res.status(404).json({ error: "Không tìm thấy người dùng" })
     }
 
-    res.json({ message: "─É├ú x├│a ng╞░ß╗¥i d├╣ng th├ánh c├┤ng" })
+    res.json({ message: "Đã xóa người dùng thành công" })
   } catch (error) {
-    console.error("Γ¥î Lß╗ùi khi x├│a ng╞░ß╗¥i d├╣ng:", error)
-    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º khi x├│a ng╞░ß╗¥i d├╣ng" })
+    console.error("❌ Lỗi khi xóa người dùng:", error)
+    res.status(500).json({ error: "Lỗi máy chủ khi xóa người dùng" })
   }
 })
 
