@@ -829,6 +829,95 @@ const initDB = async () => {
     `)
     console.log("✅ Bảng 'chatbot_chunks' đã sẵn sàng.")
 
+    // ===== CÁC BẢNG MỚI CHO TÍNH NĂNG VÍ NÔNG XU & NGUỒN HÀNG =====
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_supply_listings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        product_id INT NOT NULL,
+        quantity_available DECIMAL(12,2) NOT NULL,
+        harvest_start DATE,
+        harvest_end DATE,
+        supply_status ENUM('available', 'soon', 'partial', 'sold') DEFAULT 'available',
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'user_supply_listings' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS listing_boosts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id INT NOT NULL,
+        user_id INT NOT NULL,
+        status ENUM('pending', 'active', 'cancelled', 'expired') DEFAULT 'pending',
+        boost_start_at DATETIME,
+        boost_end_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (listing_id) REFERENCES user_supply_listings(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'listing_boosts' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS wallets (
+        user_id INT PRIMARY KEY,
+        balance DECIMAL(20,2) NOT NULL DEFAULT 0,
+        bonus_balance DECIMAL(20,2) NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'wallets' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        amount DECIMAL(20,2) NOT NULL,
+        type ENUM('deposit', 'deduct') NOT NULL,
+        purpose ENUM('boost_pin', 'commission', 'mock_deposit', 'upgrade_dealer') NOT NULL,
+        source ENUM('balance', 'bonus_balance') NOT NULL,
+        note VARCHAR(255),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'wallet_transactions' đã sẵn sàng.")
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS commissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL,
+        farmer_id INT NOT NULL,
+        buyer_id INT NOT NULL,
+        total_amount DECIMAL(20,2) NOT NULL,
+        fee_amount DECIMAL(20,2) NOT NULL,
+        farmer_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+        buyer_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES purchase_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'commissions' đã sẵn sàng.")
+
+    // Nâng cấp enum status purchase_requests để hỗ trợ 'completed'
+    try {
+      await pool.query("ALTER TABLE purchase_requests MODIFY COLUMN status ENUM('pending','responded','closed','completed') DEFAULT 'pending'")
+      console.log("✅ Đã nâng cấp enum status cho purchase_requests.")
+    } catch { /* Bỏ qua nếu đã tồn tại */ }
+
+
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool
   } catch (error) {

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -9,17 +9,21 @@ import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import InvoicePopup from "@/components/InvoicePopup"
+import { socket } from "@/socket"
 
 const STATUS_LABEL = {
-  pending: "Chờ phản hồi",
-  responded: "Đã phản hồi",
-  closed: "Đã chốt",
+  pending: "Chß╗¥ phß║ún hß╗ôi",
+  responded: "─É├ú phß║ún hß╗ôi",
+  closed: "─Éang chß╗æt ─æ╞ín",
+  completed: "Ho├án th├ánh",
 }
 
 const STATUS_CLASS = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
   responded: "bg-blue-100 text-blue-700 border-blue-200",
-  closed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  closed: "bg-purple-100 text-purple-700 border-purple-200",
+  completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
 }
 
 export default function Negotiation() {
@@ -31,6 +35,8 @@ export default function Negotiation() {
   const [draft, setDraft] = useState("")
   const [loading, setLoading] = useState(true)
   const [actioningId, setActioningId] = useState(null)
+  const [showInvoice, setShowInvoice] = useState(false)
+  const [invoiceData, setInvoiceData] = useState(null)
 
   const selected = useMemo(
     () => requests.find((item) => item.id === selectedId) || null,
@@ -40,13 +46,13 @@ export default function Negotiation() {
   const fetchRequests = async () => {
     setLoading(true)
     try {
-      // Gọi API /all để lấy toàn bộ đơn liên quan đến mình
+      // Gß╗ìi API /all ─æß╗â lß║Ñy to├án bß╗Ö ─æ╞ín li├¬n quan ─æß║┐n m├¼nh
       const res = await api.get("/purchase-requests/all")
       const list = res.data || []
       
       setRequests(list)
       
-      // Nếu có requestId từ URL, ưu tiên chọn nó
+      // Nß║┐u c├│ requestId tß╗½ URL, ╞░u ti├¬n chß╗ìn n├│
       const rid = Number(searchParams.get("requestId"))
       if (rid && list.some(i => i.id === rid)) {
         setSelectedId(rid)
@@ -54,7 +60,7 @@ export default function Negotiation() {
         setSelectedId(list[0].id)
       }
     } catch (error) {
-      console.error("Lỗi tải danh sách thương lượng:", error)
+      console.error("Lß╗ùi tß║úi danh s├ích th╞░╞íng l╞░ß╗úng:", error)
       setRequests([])
     } finally {
       setLoading(false)
@@ -73,12 +79,19 @@ export default function Negotiation() {
       if (res.data.request) {
         setRequests((prev) =>
           prev.map((item) =>
-            item.id === requestId ? { ...item, status: res.data.request.status, updated_at: res.data.request.updated_at } : item
+            item.id === requestId ? { 
+              ...item, 
+              status: res.data.request.status, 
+              updated_at: res.data.request.updated_at,
+              farmer_status: res.data.request.farmer_status,
+              buyer_status: res.data.request.buyer_status,
+              fee_amount: res.data.request.fee_amount
+            } : item
           )
         )
       }
     } catch (error) {
-      console.error("Lỗi tải tin nhắn thương lượng:", error)
+      console.error("Lß╗ùi tß║úi tin nhß║»n th╞░╞íng l╞░ß╗úng:", error)
       setMessages([])
     }
   }
@@ -96,39 +109,33 @@ export default function Negotiation() {
         prev.map((item) => (item.id === selected.id ? { ...item, status: res.data.request.status, updated_at: res.data.request.updated_at } : item))
       )
     } catch (error) {
-      alert(error.response?.data?.error || "Không gửi được tin nhắn")
+      alert(error.response?.data?.error || "Kh├┤ng gß╗¡i ─æ╞░ß╗úc tin nhß║»n")
     }
   }
 
-  const handleCloseDeal = async () => {
+  const handleOpenInvoice = async () => {
     if (!selected) return
     try {
-      await api.patch(`/purchase-requests/${selected.id}/status`, { status: "closed" })
-      setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, status: "closed" } : item)))
+      const res = await api.get(`/wallet/invoice-preview/${selected.id}`)
+      if (res.data.success) {
+        setInvoiceData(res.data)
+        setShowInvoice(true)
+      }
     } catch (error) {
-      alert(error.response?.data?.error || "Không thể chốt giao dịch")
+      alert(error.response?.data?.error || "Kh├┤ng thß╗â lß║Ñy th├┤ng tin ho├í ─æ╞ín")
     }
   }
 
-  const handleDealerConfirm = async () => {
-    if (!selected) return
-    try {
-      setActioningId(selected.id)
-      const res = await api.patch(`/purchase-requests/${selected.id}/dealer-confirm`)
-      setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, ...res.data } : item)))
-      alert("Đã ghi nhận phí đại lý 30k")
-    } catch (error) {
-      alert(error.response?.data?.error || "Không thể ghi nhận phí")
-    } finally {
-      setActioningId(null)
-    }
+  const handlePaymentSuccess = () => {
+    alert("Thanh to├ín th├ánh c├┤ng!")
+    fetchMessages(selectedId) // refresh data
   }
 
   const handleDealerReport = async () => {
     if (!selected) return
-    const reason = window.prompt("Nhập lý do báo cáo user:")
+    const reason = window.prompt("Nhß║¡p l├╜ do b├ío c├ío user:")
     if (!reason?.trim()) return
-    const note = window.prompt("Ghi chú thêm (tuỳ chọn):", "") || ""
+    const note = window.prompt("Ghi ch├║ th├¬m (tuß╗│ chß╗ìn):", "") || ""
 
     try {
       setActioningId(selected.id)
@@ -137,9 +144,9 @@ export default function Negotiation() {
         note: note.trim(),
       })
       setRequests((prev) => prev.map((item) => (item.id === selected.id ? { ...item, dealer_report_status: "reported" } : item)))
-      alert("Đã gửi báo cáo cho admin")
+      alert("─É├ú gß╗¡i b├ío c├ío cho admin")
     } catch (error) {
-      alert(error.response?.data?.error || "Không thể gửi báo cáo")
+      alert(error.response?.data?.error || "Kh├┤ng thß╗â gß╗¡i b├ío c├ío")
     } finally {
       setActioningId(null)
     }
@@ -162,6 +169,28 @@ export default function Negotiation() {
     fetchMessages(selectedId)
   }, [selectedId])
 
+  useEffect(() => {
+    socket.on("commission_paid", (data) => {
+      if (data.request_id === selectedId) {
+        fetchMessages(selectedId)
+      }
+      fetchRequests() // Cß║¡p nhß║¡t danh s├ích b├¬n tr├íi
+    })
+
+    socket.on("order_completed", (data) => {
+      if (data.request_id === selectedId) {
+        fetchMessages(selectedId)
+        alert("─É╞ín h├áng ─æ├ú ho├án th├ánh! Cß║ú hai b├¬n ─æ├ú thanh to├ín hoa hß╗ông.")
+      }
+      fetchRequests() // Cß║¡p nhß║¡t danh s├ích b├¬n tr├íi
+    })
+
+    return () => {
+      socket.off("commission_paid")
+      socket.off("order_completed")
+    }
+  }, [selectedId])
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -169,13 +198,13 @@ export default function Negotiation() {
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
           <Card>
             <CardHeader>
-              <CardTitle>Thương lượng mua bán</CardTitle>
+              <CardTitle>Th╞░╞íng l╞░ß╗úng mua b├ín</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-muted-foreground">Đang tải...</p>
+                <p className="text-muted-foreground">─Éang tß║úi...</p>
               ) : requests.length === 0 ? (
-                <p className="text-muted-foreground">Chưa có yêu cầu nào để thương lượng.</p>
+                <p className="text-muted-foreground">Ch╞░a c├│ y├¬u cß║ºu n├áo ─æß╗â th╞░╞íng l╞░ß╗úng.</p>
               ) : (
                 <div className="space-y-2">
                   {requests.map((item) => (
@@ -188,15 +217,31 @@ export default function Negotiation() {
                       <p className="font-semibold text-sm">{item.product_name}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {item.buyer_id === user?.id 
-                          ? `Đối tác (Người bán): ${item.farmer_name}` 
-                          : `Đối tác (Người mua): ${item.buyer_name}`}
+                          ? `─Éß╗æi t├íc (Ng╞░ß╗¥i b├ín): ${item.farmer_name}` 
+                          : `─Éß╗æi t├íc (Ng╞░ß╗¥i mua): ${item.buyer_name}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Đề xuất: {Number(item.proposed_price).toLocaleString("vi-VN")} đ/{item.product_unit || "kg"}
+                        ─Éß╗ü xuß║Ñt: {Number(item.proposed_price).toLocaleString("vi-VN")} ─æ/{item.product_unit || "kg"}
                       </p>
-                      <span className={`mt-2 inline-flex px-2 py-1 border rounded-full text-[11px] font-semibold ${STATUS_CLASS[item.status] || STATUS_CLASS.pending}`}>
-                        {STATUS_LABEL[item.status] || item.status}
-                      </span>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <span className={`inline-flex px-2 py-1 border rounded-full text-[11px] font-semibold ${STATUS_CLASS[item.status] || STATUS_CLASS.pending}`}>
+                          {STATUS_LABEL[item.status] || item.status}
+                        </span>
+                        {item.status === 'closed' && (
+                          <>
+                            {(item.farmer_id !== user?.id && item.farmer_status === 'paid') && (
+                              <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
+                                ─Éß╗æi t├íc ─æ├ú thanh to├ín
+                              </span>
+                            )}
+                            {(item.buyer_id !== user?.id && item.buyer_status === 'paid') && (
+                              <span className="inline-flex px-2 py-1 border border-green-200 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold animate-pulse">
+                                ─Éß╗æi t├íc ─æ├ú thanh to├ín
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -208,8 +253,8 @@ export default function Negotiation() {
             <CardHeader>
               <CardTitle>
                 {selected
-                  ? `Yêu cầu #${selected.id} - ${selected.product_name}`
-                  : "Chọn một yêu cầu để bắt đầu thương lượng"}
+                  ? `Y├¬u cß║ºu #${selected.id} - ${selected.product_name}`
+                  : "Chß╗ìn mß╗Öt y├¬u cß║ºu ─æß╗â bß║»t ─æß║ºu th╞░╞íng l╞░ß╗úng"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -217,21 +262,21 @@ export default function Negotiation() {
                 <>
                   <div className="rounded-lg border p-3 text-sm bg-muted/20">
                     <p>
-                      <span className="text-muted-foreground">Số lượng:</span> {Number(selected.quantity).toLocaleString("vi-VN")} {selected.product_unit || "kg"}
+                      <span className="text-muted-foreground">Sß╗æ l╞░ß╗úng:</span> {Number(selected.quantity).toLocaleString("vi-VN")} {selected.product_unit || "kg"}
                     </p>
                     <p>
-                      <span className="text-muted-foreground">Giá đề xuất:</span> {Number(selected.proposed_price).toLocaleString("vi-VN")} đ/{selected.product_unit || "kg"}
+                      <span className="text-muted-foreground">Gi├í ─æß╗ü xuß║Ñt:</span> {Number(selected.proposed_price).toLocaleString("vi-VN")} ─æ/{selected.product_unit || "kg"}
                     </p>
                     {selected.note && (
                       <p>
-                        <span className="text-muted-foreground">Ghi chú:</span> {selected.note}
+                        <span className="text-muted-foreground">Ghi ch├║:</span> {selected.note}
                       </p>
                     )}
                   </div>
 
                   <div className="rounded-lg border p-3 h-[360px] overflow-y-auto space-y-2 bg-white">
                     {messages.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Chưa có tin nhắn, hãy bắt đầu thương lượng.</p>
+                      <p className="text-muted-foreground text-sm">Ch╞░a c├│ tin nhß║»n, h├úy bß║»t ─æß║ºu th╞░╞íng l╞░ß╗úng.</p>
                     ) : (
                       messages.map((msg) => {
                         const mine = msg.sender_id === user?.id
@@ -240,7 +285,7 @@ export default function Negotiation() {
                             <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                               <p>{msg.content}</p>
                               <p className={`text-[11px] mt-1 ${mine ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                                {msg.sender_name} • {new Date(msg.created_at).toLocaleString("vi-VN")}
+                                {msg.sender_name} ΓÇó {new Date(msg.created_at).toLocaleString("vi-VN")}
                               </p>
                             </div>
                           </div>
@@ -253,44 +298,59 @@ export default function Negotiation() {
                     <Textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder="Nhập nội dung thương lượng..."
+                      placeholder="Nhß║¡p nß╗Öi dung th╞░╞íng l╞░ß╗úng..."
                       className="min-h-[88px]"
                       disabled={selected.status === "closed"}
                     />
                     <div className="flex gap-2">
-                      <Button onClick={handleSendMessage} disabled={selected.status === "closed" || !draft.trim()}>
-                        Gửi tin nhắn
+                      <Button onClick={handleSendMessage} disabled={selected.status === "completed" || !draft.trim()}>
+                        Gß╗¡i tin nhß║»n
                       </Button>
-                      {user?.role === "user" && selected.status !== "closed" && (
-                        <Button variant="outline" onClick={handleCloseDeal}>
-                          Đã chốt
+                      {selected.status !== "completed" && (
+                        <Button 
+                          variant={selected.status === "closed" ? "default" : "outline"} 
+                          onClick={handleOpenInvoice}
+                          disabled={(selected.farmer_id === user?.id && selected.farmer_status === "paid") || 
+                                    (selected.buyer_id === user?.id && selected.buyer_status === "paid")}
+                        >
+                          {(selected.farmer_id === user?.id && selected.farmer_status === "paid") || 
+                           (selected.buyer_id === user?.id && selected.buyer_status === "paid")
+                            ? "─É├ú thanh to├ín (Chß╗¥ ─æß╗æi t├íc)" 
+                            : (selected.status === "closed" ? "Thanh to├ín Hoa hß╗ông" : "Chß╗æt ─æ╞ín")}
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  {user?.role === "dealer" && selected.status === "closed" && (
+                  {selected.status === "completed" && (
                     <div className="rounded-lg border p-3 bg-emerald-50/60 space-y-2">
-                      <p className="text-sm font-medium text-emerald-800">Đơn đã được user chốt. Bạn có thể xác nhận giao dịch để hệ thống ghi phí 30k.</p>
+                      <p className="text-sm font-medium text-emerald-800">─É╞ín h├áng ─æ├ú ho├án th├ánh. Cß║ú hai b├¬n ─æ├ú thanh to├ín hoa hß╗ông.</p>
                       <div className="flex flex-wrap gap-2">
-                        <Button onClick={handleDealerConfirm} disabled={actioningId === selected.id || selected.dealer_fee_status === "recorded"}>
-                          {selected.dealer_fee_status === "recorded" ? "Đã ghi phí 30k" : "Đã mua / xác nhận"}
-                        </Button>
                         <Button variant="outline" onClick={handleDealerReport} disabled={actioningId === selected.id || selected.dealer_report_status === "reported"}>
-                          {selected.dealer_report_status === "reported" ? "Đã báo cáo" : "Báo cáo user"}
+                          {selected.dealer_report_status === "reported" ? "─É├ú b├ío c├ío" : "B├ío c├ío ng╞░ß╗¥i d├╣ng"}
                         </Button>
                       </div>
                     </div>
                   )}
                 </>
               ) : (
-                <p className="text-muted-foreground">Chọn một yêu cầu để xem nội dung thương lượng.</p>
+                <p className="text-muted-foreground">Chß╗ìn mß╗Öt y├¬u cß║ºu ─æß╗â xem nß╗Öi dung th╞░╞íng l╞░ß╗úng.</p>
               )}
             </CardContent>
           </Card>
         </div>
       </main>
       <Footer />
+      
+      {showInvoice && (
+        <InvoicePopup 
+          isOpen={showInvoice}
+          onClose={() => setShowInvoice(false)}
+          requestId={selectedId}
+          invoiceData={invoiceData}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,8 @@
-// src/socket.js
-import { io } from "socket.io-client";
+﻿// src/socket.js
+import { io } from "socket.io-client"
 
 export const socket = io("http://localhost:5000", {
-    transports: ["websocket"],       // BẮT BUỘC
+    transports: ["websocket"],
     withCredentials: true,
-});
+    autoConnect: false,
+})

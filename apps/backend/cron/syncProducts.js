@@ -33,7 +33,7 @@ export async function syncProducts(io) {
         let categoryName = "Cà phê";
         const lowerName = (regionObj.name || "").toLowerCase();
         if (lowerName.includes("tiêu")) {
-            categoryName = "Hồ tiêu";
+            categoryName = "Tiêu";
         } else if (lowerName.includes("sầu riêng") || lowerName.includes("durian")) {
             categoryName = "Sầu riêng";
         }

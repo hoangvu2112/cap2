@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import api from "@/lib/api"
+import LivePriceTicker from "@/components/live-price-ticker.jsx"
 import PriceCard from "@/components/PriceCard"
 import { io } from "socket.io-client"
 // import { socket } from "@/socket"
@@ -148,6 +149,7 @@ export default function Dashboard() {
   return (
     <div>
       <Navbar />
+      <LivePriceTicker />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tiêu đề */}

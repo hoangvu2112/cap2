@@ -60,4 +60,27 @@ export async function createMomoPayment({ orderId, amount, orderInfo, redirectUr
   }
 }
 
-export default { createMomoPayment }
+export async function checkMomoPaymentStatus(orderId) {
+  const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO'
+  const accessKey = process.env.MOMO_ACCESS_KEY || ''
+  const secretKey = process.env.MOMO_SECRET_KEY || ''
+  // Hardcode test endpoint for query status as it's the standard for test env
+  const endpoint = 'https://test-payment.momo.vn/v2/gateway/api/query'
+
+  const requestId = `${partnerCode}-${Date.now()}`
+  const rawSignature = `accessKey=${accessKey}&orderId=${orderId}&partnerCode=${partnerCode}&requestId=${requestId}`
+  const signature = crypto.createHmac('sha256', secretKey).update(rawSignature).digest('hex')
+
+  const body = {
+    partnerCode,
+    requestId,
+    orderId: String(orderId),
+    signature,
+    lang: 'vi'
+  }
+
+  const { data } = await axios.post(endpoint, body, { timeout: 30000 })
+  return data
+}
+
+export default { createMomoPayment, checkMomoPaymentStatus }

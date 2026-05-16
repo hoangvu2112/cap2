@@ -1,10 +1,10 @@
-import express from "express"
+﻿import express from "express"
 import pool from "../db.js"
 import { authenticateToken, isAdmin } from "../middleware/auth.js"
 
 const router = express.Router()
 
-router.get("/trends", async (req, res) => {
+router.get("/market-trends", async (req, res) => {
   try {
     const [topGainers] = await pool.query(`
       SELECT id, name, region, currentPrice, previousPrice,
@@ -26,13 +26,12 @@ router.get("/trends", async (req, res) => {
 
     res.json({ topGainers, topLosers })
   } catch (error) {
-    console.error("❌ Lỗi lấy xu hướng:", error)
-    res.status(500).json({ error: "Lỗi server" })
+    console.error("Γ¥î Lß╗ùi lß║Ñy xu h╞░ß╗¢ng:", error)
+    res.status(500).json({ error: "Lß╗ùi server" })
   }
 })
 
-
-router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
+const buildTrendStats = async (req, res) => {
   try {
     const rangeType = req.query.range || "7d"
     let startDate = new Date()
@@ -73,7 +72,7 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
       LIMIT 3
     `)
 
-    // 2. Top Giảm giá (Top Losers)
+    // 2. Top Giß║úm gi├í (Top Losers)
     const [topLosers] = await pool.query(`
       SELECT id, name, region, currentPrice, previousPrice,
       ROUND(((currentPrice - previousPrice) / NULLIF(previousPrice, 0) * 100), 1) as percent
@@ -83,7 +82,7 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
       LIMIT 3
     `)
 
-    // 3. Phân bổ theo Khu vực
+    // 3. Ph├ón bß╗ò theo Khu vß╗▒c
     const [regions] = await pool.query(`
       SELECT region, COUNT(*) as count, AVG(currentPrice) as avgPrice
       FROM products
@@ -93,7 +92,7 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
       LIMIT 10
     `)
 
-    // 4. Cơ cấu Danh mục (Categories)
+    // 4. C╞í cß║Ñu Danh mß╗Ñc (Categories)
     const [categories] = await pool.query(`
       SELECT c.name, COUNT(p.id) as value
       FROM categories c
@@ -103,7 +102,7 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
       ORDER BY value DESC
     `)
 
-   // 5. Biến động giá (Price Volatility Data)
+   // 5. Biß║┐n ─æß╗Öng gi├í (Price Volatility Data)
     const categoryFilter = req.query.category || "";
     let keyProductsQuery = "";
     let keyProductsParams = [];
@@ -159,11 +158,11 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
             sortKey = group
           } else if (rangeType === "quarter" || rangeType === "90d" || rangeType === "last_quarter") {
             const weekIdx = Math.min(Math.floor((date.getDate() - 1) / 7) + 1, 4)
-            bucketLabel = `Tuần ${weekIdx} T${date.getMonth() + 1}`
+            bucketLabel = `Tuß║ºn ${weekIdx} T${date.getMonth() + 1}`
             sortKey = date.getMonth() * 10 + weekIdx
           } else if (rangeType === "year" || rangeType === "1y" || rangeType === "last_year") {
             const m = String(date.getMonth() + 1).padStart(2, '0')
-            bucketLabel = `Tháng ${m}`
+            bucketLabel = `Th├íng ${m}`
             sortKey = date.getMonth()
           }
 
@@ -188,9 +187,12 @@ router.get("/advanced", authenticateToken, isAdmin, async (req, res) => {
     })
 
   } catch (error) {
-    console.error("❌ Lỗi thống kê nâng cao:", error)
-    res.status(500).json({ error: "Lỗi server khi lấy thống kê" })
+    console.error("Γ¥î Lß╗ùi thß╗æng k├¬ n├óng cao:", error)
+    res.status(500).json({ error: "Lß╗ùi server khi lß║Ñy thß╗æng k├¬" })
   }
-})
+}
+
+router.get("/trends", authenticateToken, isAdmin, buildTrendStats)
+router.get("/advanced", authenticateToken, isAdmin, buildTrendStats)
 
 export default router

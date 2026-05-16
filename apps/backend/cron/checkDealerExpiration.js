@@ -1,4 +1,4 @@
-import cron from "node-cron";
+﻿import cron from "node-cron";
 import pool from "../db.js";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
@@ -26,75 +26,93 @@ async function sendDealerEmail(to, subject, htmlContent) {
   });
 }
 
-export async function checkDealerExpiration() {
-  console.log("⏱️ Cảnh báo & Hết hạn Đại Lý: Đang kiểm tra...");
+async function hideDealerProducts(userId) {
+  await pool.query(
+    `
+      UPDATE products
+      SET
+        dealer_visibility_status = 'hidden',
+        dealer_hidden_at = NOW(),
+        dealer_hidden_until = DATE_ADD(NOW(), INTERVAL 30 DAY)
+      WHERE farmer_user_id = ?
+    `,
+    [userId]
+  )
+}
+
+function forceLogoutDealer(io, userId, message) {
+  if (!io || !userId) return
+  io.to(`user:${userId}`).emit("auth:force_logout", {
+    code: "ROLE_CHANGED",
+    message,
+  })
+}
+
+export async function checkDealerExpiration(io) {
+  console.log("ΓÅ▒∩╕Å Cß║únh b├ío & Hß║┐t hß║ín ─Éß║íi L├╜: ─Éang kiß╗âm tra...");
   try {
-    // 1. Quét cảnh báo (còn <= 3 ngày)
+    // 1. Qu├⌐t cß║únh b├ío (C├▓n ─æ├║ng 3 ng├áy)
     const [warnings] = await pool.query(`
-      SELECT r.id, r.user_id, r.expires_at, u.email, u.name, p.name as plan_name
-      FROM dealer_upgrade_requests r
-      JOIN users u ON u.id = r.user_id
-      JOIN dealer_plans p ON p.id = r.plan_id
-      WHERE r.status = 'approved' 
-        AND r.warning_sent = 0
-        AND r.expires_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)
-        AND r.expires_at > NOW()
+      SELECT id, email, name, dealer_expires_at
+      FROM users
+      WHERE role = 'dealer' 
+        AND dealer_expires_at IS NOT NULL
+        AND DATE(dealer_expires_at) = DATE(DATE_ADD(NOW(), INTERVAL 3 DAY))
     `);
 
-    for (const req of warnings) {
+    for (const user of warnings) {
       try {
         const emailHtml = `
-          <h2>Cảnh báo hết hạn gói Đại lý</h2>
-          <p>Chào <b>${req.name || req.email}</b>,</p>
-          <p>Gói đại lý <b>${req.plan_name}</b> của bạn sẽ hết hạn vào <b>${new Date(req.expires_at).toLocaleString("vi-VN")}</b>.</p>
-          <p>Vui lòng đăng nhập và đăng ký gia hạn nếu bạn muốn giữ các đặc quyền hiện có nhé.</p>
+          <h2>Cß║únh b├ío hß║┐t hß║ín g├│i ─Éß║íi l├╜</h2>
+          <p>Ch├áo <b>${user.name || user.email}</b>,</p>
+          <p>G├│i ─æß║íi l├╜ cß╗ºa bß║ín sß║╜ hß║┐t hß║ín v├áo <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>.</p>
+          <p>Vui l├▓ng ─æ─âng nhß║¡p v├á thanh to├ín ph├¡ N├┤ng Xu ─æß╗â tiß║┐p tß╗Ñc giß╗» hß║íng ─æß║íi l├╜ nh├⌐.</p>
         `;
-        await sendDealerEmail(req.email, "⚠️ Gói Đại Lý sắp hết hạn", emailHtml);
-        await pool.query("UPDATE dealer_upgrade_requests SET warning_sent = 1 WHERE id = ?", [req.id]);
-        console.log(`📩 Đã gửi cảnh báo hết hạn tới ${req.email}`);
+        await sendDealerEmail(user.email, "ΓÜá∩╕Å G├│i ─Éß║íi L├╜ sß║»p hß║┐t hß║ín", emailHtml);
+        console.log(`≡ƒô⌐ ─É├ú gß╗¡i cß║únh b├ío hß║┐t hß║ín tß╗¢i ${user.email}`);
       } catch (err) {
         if (err.message === "SMTP_NOT_CONFIGURED") {
-            console.warn("⚠️ Bỏ qua gửi email cảnh báo đại lý: SMTP chưa cấu hình.");
+            console.warn("ΓÜá∩╕Å Bß╗Å qua gß╗¡i email cß║únh b├ío ─æß║íi l├╜: SMTP ch╞░a cß║Ñu h├¼nh.");
         } else {
-            console.error("❌ Lỗi gửi email cảnh báo đại lý:", err.message);
+            console.error("Γ¥î Lß╗ùi gß╗¡i email cß║únh b├ío ─æß║íi l├╜:", err.message);
         }
       }
     }
 
-    // 2. Quét hết hạn (quá hạn)
+    // 2. Qu├⌐t hß║┐t hß║ín (qu├í hß║ín)
     const [expired] = await pool.query(`
-      SELECT r.id, r.user_id, r.expires_at, u.email, u.name, p.name as plan_name
-      FROM dealer_upgrade_requests r
-      JOIN users u ON u.id = r.user_id
-      JOIN dealer_plans p ON p.id = r.plan_id
-      WHERE r.status = 'approved' 
-        AND r.expires_at <= NOW()
+      SELECT id, email, name, dealer_expires_at
+      FROM users
+      WHERE role = 'dealer' 
+        AND dealer_expires_at IS NOT NULL
+        AND dealer_expires_at <= NOW()
     `);
 
-    for (const req of expired) {
-      // Hạ cấp role của users
-      await pool.query("UPDATE users SET role = 'user' WHERE id = ?", [req.user_id]);
-      // Cập nhật trạng thái request
-      await pool.query("UPDATE dealer_upgrade_requests SET status = 'expired' WHERE id = ?", [req.id]);
+    for (const user of expired) {
+      // Hß║í cß║Ñp role cß╗ºa users v├á ß║⌐n dß╗» liß╗çu dealer
+      await pool.query("UPDATE users SET role = 'user', dealer_expires_at = NULL WHERE id = ?", [user.id]);
+      await hideDealerProducts(user.id)
+
+      forceLogoutDealer(io, user.id, "Vai tr├▓ ─æß║íi l├╜ cß╗ºa bß║ín ─æ├ú hß║┐t hß║ín. Vui l├▓ng ─æ─âng nhß║¡p lß║íi ─æß╗â cß║¡p nhß║¡t phi├¬n l├ám viß╗çc.")
       
       try {
         const emailHtml = `
-          <h2>Thông báo Gói Đại Lý Đã Hết Hạn</h2>
-          <p>Chào <b>${req.name || req.email}</b>,</p>
-          <p>Gói đại lý <b>${req.plan_name}</b> của bạn đã hết hạn vào <b>${new Date(req.expires_at).toLocaleString("vi-VN")}</b>.</p>
-          <p>Tài khoản của bạn đã được chuyển về cấp độ Người dùng cơ bản. Bạn có thể đăng ký nâng cấp lại trên hệ thống bất cứ lúc nào.</p>
+          <h2>Th├┤ng b├ío G├│i ─Éß║íi L├╜ ─É├ú Hß║┐t Hß║ín</h2>
+          <p>Ch├áo <b>${user.name || user.email}</b>,</p>
+          <p>G├│i ─æß║íi l├╜ cß╗ºa bß║ín ─æ├ú hß║┐t hß║ín v├áo <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>.</p>
+          <p>T├ái khoß║ún cß╗ºa bß║ín ─æ├ú ─æ╞░ß╗úc chuyß╗ân vß╗ü cß║Ñp ─æß╗Ö Ng╞░ß╗¥i d├╣ng c╞í bß║ún. Bß║ín c├│ thß╗â ─æ─âng k├╜ n├óng cß║Ñp lß║íi tr├¬n hß╗ç thß╗æng bß║▒ng V├¡ N├┤ng Xu bß║Ñt cß╗⌐ l├║c n├áo.</p>
         `;
-        await sendDealerEmail(req.email, "⏳ Gói Đại Lý Của Bạn Đã Hết Hạn", emailHtml);
-        console.log(`📩 Đã gửi thông báo hết hạn tới ${req.email} và hạ cấp thành user`);
+        await sendDealerEmail(user.email, "ΓÅ│ G├│i ─Éß║íi L├╜ Cß╗ºa Bß║ín ─É├ú Hß║┐t Hß║ín", emailHtml);
+        console.log(`≡ƒô⌐ ─É├ú gß╗¡i th├┤ng b├ío hß║┐t hß║ín tß╗¢i ${user.email} v├á hß║í cß║Ñp th├ánh user`);
       } catch (err) {
         if (err.message === "SMTP_NOT_CONFIGURED") {
-            console.warn("⚠️ Bỏ qua gửi email hết hạn đại lý: SMTP chưa cấu hình.");
+            console.warn("ΓÜá∩╕Å Bß╗Å qua gß╗¡i email hß║┐t hß║ín ─æß║íi l├╜: SMTP ch╞░a cß║Ñu h├¼nh.");
         } else {
-            console.error("❌ Lỗi gửi email hết hạn đại lý:", err.message);
+            console.error("Γ¥î Lß╗ùi gß╗¡i email hß║┐t hß║ín ─æß║íi l├╜:", err.message);
         }
       }
     }
   } catch (error) {
-    console.error("❌ Lỗi khi chạy cron checkDealerExpiration:", error.message);
+    console.error("Γ¥î Lß╗ùi khi chß║íy cron checkDealerExpiration:", error.message);
   }
 }

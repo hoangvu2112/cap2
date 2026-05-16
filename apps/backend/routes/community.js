@@ -1,4 +1,4 @@
-import express from "express"
+﻿import express from "express"
 import pool from "../db.js"
 import { authenticateToken } from "../middleware/auth.js"
 import multer from "multer"
@@ -13,25 +13,56 @@ const router = express.Router()
 
 export const ioRef = { io: null }
 
-// Cấu hình Multer để lưu ảnh
+const uploadDir = path.join(__dirname, "../uploads/community")
+
+const ensureUploadDir = () => {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true })
+  }
+}
+
+const parseImages = (value) => {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter(Boolean)
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed.filter(Boolean)
+      if (typeof parsed === "string" && parsed.trim()) return [parsed.trim()]
+    } catch {
+      return value.split(",").map((item) => item.trim()).filter(Boolean)
+    }
+  }
+
+  return []
+}
+
+const normalizePost = (post) => {
+  if (!post) return post
+
+  const images = parseImages(post.images ?? post.image_url)
+  post.images = images
+  post.image_url = JSON.stringify(images)
+  post.tags = parseTags(post.tags)
+  return post
+}
+
+// Cß║Ñu h├¼nh Multer ─æß╗â l╞░u ß║únh
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Trỏ vào thư mục uploads ở cùng cấp với thư mục routes hoặc apps/backend/uploads
-    const uploadPath = path.join(__dirname, "../uploads")
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true })
-    }
-    cb(null, uploadPath)
+    ensureUploadDir()
+    cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
-    cb(null, "post-" + uniqueSuffix + path.extname(file.originalname))
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`)
   },
 })
 
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 20 * 1024 * 1024 } // Giới hạn 20MB
+  limits: { fileSize: 20 * 1024 * 1024 } // Giß╗¢i hß║ín 20MB
 })
 
 const parseTags = (value) => {
@@ -156,7 +187,7 @@ router.get("/users", authenticateToken, async (req, res) => {
     res.json({ data: rows })
   } catch (error) {
     console.error("GET /community/users error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -207,7 +238,7 @@ router.get("/messages/conversations", authenticateToken, async (req, res) => {
     res.json({ data: rows })
   } catch (error) {
     console.error("GET /messages/conversations error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -218,7 +249,7 @@ router.get("/messages/conversations/:conversationId/messages", authenticateToken
 
     const conversation = await getConversationMeta(conversationId, currentUserId)
     if (!conversation) {
-      return res.status(404).json({ error: "Không tìm thấy cuộc trò chuyện" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy cuß╗Öc tr├▓ chuyß╗çn" })
     }
 
     const [rows] = await pool.query(
@@ -245,7 +276,7 @@ router.get("/messages/conversations/:conversationId/messages", authenticateToken
     res.json({ conversation, data: rows })
   } catch (error) {
     console.error("GET /messages/conversations/:conversationId/messages error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -256,11 +287,11 @@ router.post("/messages", authenticateToken, async (req, res) => {
     const content = req.body.content?.trim()
 
     if (!content) {
-      return res.status(400).json({ error: "Nội dung không được để trống" })
+      return res.status(400).json({ error: "Nß╗Öi dung kh├┤ng ─æ╞░ß╗úc ─æß╗â trß╗æng" })
     }
 
     if (!recipientId || recipientId === senderId) {
-      return res.status(400).json({ error: "Người nhận không hợp lệ" })
+      return res.status(400).json({ error: "Ng╞░ß╗¥i nhß║¡n kh├┤ng hß╗úp lß╗ç" })
     }
 
     const [[recipient]] = await pool.query(
@@ -269,12 +300,12 @@ router.post("/messages", authenticateToken, async (req, res) => {
     )
 
     if (!recipient) {
-      return res.status(404).json({ error: "Không tìm thấy người nhận" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i nhß║¡n" })
     }
 
     const conversation = await ensureConversation(senderId, recipientId)
     if (!conversation) {
-      return res.status(400).json({ error: "Không thể tạo cuộc trò chuyện" })
+      return res.status(400).json({ error: "Kh├┤ng thß╗â tß║ío cuß╗Öc tr├▓ chuyß╗çn" })
     }
 
     const [result] = await pool.query(
@@ -329,7 +360,7 @@ router.post("/messages", authenticateToken, async (req, res) => {
     })
   } catch (error) {
     console.error("POST /messages error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -340,7 +371,7 @@ router.patch("/messages/conversations/:conversationId/read", authenticateToken, 
 
     const conversation = await getConversationMeta(conversationId, currentUserId)
     if (!conversation) {
-      return res.status(404).json({ error: "Không tìm thấy cuộc trò chuyện" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy cuß╗Öc tr├▓ chuyß╗çn" })
     }
 
     await pool.query(
@@ -360,7 +391,7 @@ router.patch("/messages/conversations/:conversationId/read", authenticateToken, 
     res.json({ success: true })
   } catch (error) {
     console.error("PATCH /messages/conversations/:conversationId/read error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -397,49 +428,39 @@ router.get("/posts", async (req, res) => {
       limit,
       total: countRow.total,
       totalPages: Math.ceil(countRow.total / limit),
-      data: rows.map((post) => ({ ...post, tags: parseTags(post.tags) })),
+      data: rows.map((post) => normalizePost(post)),
     })
   } catch (error) {
     console.error("GET /posts error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
-router.post("/posts", authenticateToken, upload.array("images", 10), async (req, res) => {
+router.post("/posts", authenticateToken, upload.array("images", 5), async (req, res) => {
   try {
     const userId = req.user.id
     const { content, tags } = req.body
-    
-    const logData = `[${new Date().toISOString()}] POST /posts (Multi-Upload)\nBody: ${JSON.stringify(req.body)}\nFiles: ${JSON.stringify(req.files)}\n---\n`;
-    fs.appendFileSync(path.join(__dirname, "../logs/debug.log"), logData);
-    
-    console.log("POST /posts body:", req.body)
-    console.log("POST /posts files:", req.files)
-    
-    // Thu thập tất cả URL ảnh
+
     let imageUrls = []
     if (req.files && req.files.length > 0) {
-      imageUrls = req.files.map(file => `/uploads/${file.filename}`)
-    } else if (req.body.imageUrl) {
-      imageUrls = [req.body.imageUrl]
+      imageUrls = req.files.map((file) => `/uploads/community/${file.filename}`)
     }
 
     if (!content?.trim()) {
-      return res.status(400).json({ error: "Nội dung không được để trống" })
+      return res.status(400).json({ error: "Nß╗Öi dung kh├┤ng ─æ╞░ß╗úc ─æß╗â trß╗æng" })
     }
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
-    // Lưu danh sách ảnh dưới dạng JSON string
     const imagesToSave = JSON.stringify(imageUrls)
 
     const [result] = await pool.query(
-      "INSERT INTO community_posts (user_id, content, tags, image_url) VALUES (?, ?, ?, ?)",
+      "INSERT INTO community_posts (user_id, content, tags, images) VALUES (?, ?, ?, ?)",
       [userId, content, tagsToSave, imagesToSave]
     )
 
     const [[newPost]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -447,14 +468,39 @@ router.post("/posts", authenticateToken, upload.array("images", 10), async (req,
       [result.insertId]
     )
 
-    newPost.tags = parseTags(newPost.tags)
-    // Client side will parse image_url
+    normalizePost(newPost)
     ioRef.io?.emit("community:new_post", newPost)
 
-    res.status(201).json({ message: "Đã tạo bài viết", data: newPost })
+    res.status(201).json({ message: "─É├ú tß║ío b├ái viß║┐t", data: newPost })
   } catch (error) {
     console.error("POST /posts error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
+  }
+})
+
+router.get("/posts/featured", async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 5, 10)
+
+    const [rows] = await pool.query(
+      `
+        SELECT
+          p.*, p.images AS image_url,
+          u.name AS author_name,
+          u.avatar_url,
+          (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
+        FROM community_posts p
+        LEFT JOIN users u ON p.user_id = u.id
+        ORDER BY COALESCE(p.likes, 0) DESC, comments_count DESC, p.id DESC
+        LIMIT ?
+      `,
+      [limit]
+    )
+
+    res.json({ data: rows.map((post) => normalizePost(post)) })
+  } catch (error) {
+    console.error("GET /posts/featured error:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -464,7 +510,7 @@ router.get("/posts/:id", async (req, res) => {
 
     const [[post]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -473,10 +519,10 @@ router.get("/posts/:id", async (req, res) => {
     )
 
     if (!post) {
-      return res.status(404).json({ error: "Không tìm thấy bài" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├ái" })
     }
 
-    post.tags = parseTags(post.tags)
+    normalizePost(post)
 
     const [comments] = await pool.query(
       `
@@ -493,15 +539,15 @@ router.get("/posts/:id", async (req, res) => {
     res.json({ post, comments })
   } catch (error) {
     console.error("GET /posts/:id error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
-router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (req, res) => {
+router.put("/posts/:id", authenticateToken, upload.array("images", 5), async (req, res) => {
   try {
     const postId = req.params.id
     const userId = req.user.id
-    const { content, tags, image_url } = req.body
+    const { content, tags, image_url, images } = req.body
 
     const [[post]] = await pool.query(
       "SELECT user_id FROM community_posts WHERE id = ?",
@@ -509,40 +555,32 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (r
     )
 
     if (!post) {
-      return res.status(404).json({ error: "Không tìm thấy bài" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├ái" })
     }
 
     if (post.user_id !== userId && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Không có quyền sửa bài" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün sß╗¡a b├ái" })
     }
 
-    // 1. Lấy danh sách ảnh cũ được giữ lại
-    let finalImageUrls = []
-    if (image_url) {
-      try {
-        const parsed = JSON.parse(image_url)
-        finalImageUrls = Array.isArray(parsed) ? parsed : [parsed]
-      } catch {
-        finalImageUrls = [image_url]
-      }
-    }
+    // 1. Lß║Ñy danh s├ích ß║únh c┼⌐ ─æ╞░ß╗úc giß╗» lß║íi
+    let finalImageUrls = parseImages(images || image_url)
 
-    // 2. Thêm các ảnh mới được upload (nếu có)
+    // 2. Th├¬m c├íc ß║únh mß╗¢i ─æ╞░ß╗úc upload (nß║┐u c├│)
     if (req.files && req.files.length > 0) {
-      const newUrls = req.files.map(file => `/uploads/${file.filename}`)
+      const newUrls = req.files.map((file) => `/uploads/community/${file.filename}`)
       finalImageUrls = [...finalImageUrls, ...newUrls]
     }
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
 
     await pool.query(
-      "UPDATE community_posts SET content = ?, tags = ?, image_url = ? WHERE id = ?",
+      "UPDATE community_posts SET content = ?, tags = ?, images = ? WHERE id = ?",
       [content, tagsToSave, JSON.stringify(finalImageUrls), postId]
     )
 
     const [[updated]] = await pool.query(
       `
-        SELECT p.*, u.name AS author_name, u.avatar_url
+        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -550,13 +588,13 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 10), async (r
       [postId]
     )
 
-    updated.tags = parseTags(updated.tags)
+    normalizePost(updated)
     ioRef.io?.emit("community:post_updated", updated)
 
-    res.json({ message: "Đã cập nhật bài", data: updated })
+    res.json({ message: "─É├ú cß║¡p nhß║¡t b├ái", data: updated })
   } catch (error) {
     console.error("PUT /posts/:id error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -571,20 +609,20 @@ router.delete("/posts/:id", authenticateToken, async (req, res) => {
     )
 
     if (!post) {
-      return res.status(404).json({ error: "Không tìm thấy bài" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├ái" })
     }
 
     if (post.user_id !== userId && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Không có quyền xoá bài" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün xo├í b├ái" })
     }
 
     await pool.query("DELETE FROM community_posts WHERE id = ?", [postId])
     ioRef.io?.emit("community:post_deleted", { id: Number(postId) })
 
-    res.json({ message: "Đã xoá bài" })
+    res.json({ message: "─É├ú xo├í b├ái" })
   } catch (error) {
     console.error("DELETE /posts/:id error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -595,7 +633,7 @@ router.post("/posts/:postId/comments", authenticateToken, async (req, res) => {
     const { content } = req.body
 
     if (!content?.trim()) {
-      return res.status(400).json({ error: "Nội dung trống" })
+      return res.status(400).json({ error: "Nß╗Öi dung trß╗æng" })
     }
 
     const [result] = await pool.query(
@@ -623,10 +661,10 @@ router.post("/posts/:postId/comments", authenticateToken, async (req, res) => {
 
     ioRef.io?.emit("community:comment_added", { postId: Number(postId), comment })
 
-    res.status(201).json({ message: "Đã thêm bình luận", data: comment })
+    res.status(201).json({ message: "─É├ú th├¬m b├¼nh luß║¡n", data: comment })
   } catch (error) {
     console.error("POST comment error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -638,7 +676,7 @@ router.put("/posts/:postId/comments/:commentId", authenticateToken, async (req, 
     const content = req.body.content?.trim()
 
     if (!content) {
-      return res.status(400).json({ error: "Nội dung trống" })
+      return res.status(400).json({ error: "Nß╗Öi dung trß╗æng" })
     }
 
     const [[commentRow]] = await pool.query(
@@ -647,11 +685,11 @@ router.put("/posts/:postId/comments/:commentId", authenticateToken, async (req, 
     )
 
     if (!commentRow || Number(commentRow.post_id) !== postId) {
-      return res.status(404).json({ error: "Không tìm thấy bình luận" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├¼nh luß║¡n" })
     }
 
     if (commentRow.user_id !== userId && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Không có quyền sửa bình luận" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün sß╗¡a b├¼nh luß║¡n" })
     }
 
     await pool.query(
@@ -674,10 +712,10 @@ router.put("/posts/:postId/comments/:commentId", authenticateToken, async (req, 
       comment: updatedComment,
     })
 
-    res.json({ message: "Đã cập nhật bình luận", data: updatedComment })
+    res.json({ message: "─É├ú cß║¡p nhß║¡t b├¼nh luß║¡n", data: updatedComment })
   } catch (error) {
     console.error("PUT comment error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -693,11 +731,11 @@ router.delete("/posts/:postId/comments/:commentId", authenticateToken, async (re
     )
 
     if (!commentRow || Number(commentRow.post_id) !== postId) {
-      return res.status(404).json({ error: "Không tìm thấy bình luận" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├¼nh luß║¡n" })
     }
 
     if (commentRow.user_id !== userId && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Không có quyền xoá bình luận" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün xo├í b├¼nh luß║¡n" })
     }
 
     // 1. Soft Delete the comment
@@ -717,10 +755,10 @@ router.delete("/posts/:postId/comments/:commentId", authenticateToken, async (re
       commentId,
     })
 
-    res.json({ message: "Đã xoá bình luận", data: { id: commentId } })
+    res.json({ message: "─É├ú xo├í b├¼nh luß║¡n", data: { id: commentId } })
   } catch (error) {
     console.error("DELETE comment error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -745,7 +783,7 @@ router.get("/posts/:postId/comments", async (req, res) => {
     res.json({ data: rows })
   } catch (error) {
     console.error("GET comments error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -783,7 +821,7 @@ router.post("/posts/:id/like", authenticateToken, async (req, res) => {
     res.json({ liked: true })
   } catch (error) {
     console.error("POST like error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -805,7 +843,7 @@ router.get("/posts/:id/like-status", authenticateToken, async (req, res) => {
     res.json({ liked: !!liked, likes: Number(post?.likes || 0) })
   } catch (error) {
     console.error("GET like-status error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -862,17 +900,17 @@ router.post("/ai-generate-comment", authenticateToken, async (req, res) => {
   try {
     const { postContent } = req.body
     if (!postContent) {
-      return res.status(400).json({ error: "Thiếu nội dung bài viết" })
+      return res.status(400).json({ error: "Thiß║┐u nß╗Öi dung b├ái viß║┐t" })
     }
 
     const systemPrompt = `
-      Bạn là một nông dân Việt Nam thân thiện, am hiểu về nông nghiệp.
-      Hãy viết một bình luận ngắn gọn (dưới 30 từ), tích cực và liên quan đến nội dung bài đăng được cung cấp.
-      Ngôn ngữ: Tiếng Việt, sử dụng văn phong gần gũi của người nông dân.
-      Không sử dụng hashtag, không sử dụng icon quá đà.
+      Bß║ín l├á mß╗Öt n├┤ng d├ón Viß╗çt Nam th├ón thiß╗çn, am hiß╗âu vß╗ü n├┤ng nghiß╗çp.
+      H├úy viß║┐t mß╗Öt b├¼nh luß║¡n ngß║»n gß╗ìn (d╞░ß╗¢i 30 tß╗½), t├¡ch cß╗▒c v├á li├¬n quan ─æß║┐n nß╗Öi dung b├ái ─æ─âng ─æ╞░ß╗úc cung cß║Ñp.
+      Ng├┤n ngß╗»: Tiß║┐ng Viß╗çt, sß╗¡ dß╗Ñng v─ân phong gß║ºn g┼⌐i cß╗ºa ng╞░ß╗¥i n├┤ng d├ón.
+      Kh├┤ng sß╗¡ dß╗Ñng hashtag, kh├┤ng sß╗¡ dß╗Ñng icon qu├í ─æ├á.
     `
 
-    const userPrompt = `Nội dung bài đăng: "${postContent}"`
+    const userPrompt = `Nß╗Öi dung b├ái ─æ─âng: "${postContent}"`
 
     let reply = await callGroqChat([
       { role: "system", content: systemPrompt },
@@ -887,13 +925,13 @@ router.post("/ai-generate-comment", authenticateToken, async (req, res) => {
     }
 
     if (!reply) {
-      return res.status(503).json({ error: "Dịch vụ AI hiện không khả dụng" })
+      return res.status(503).json({ error: "Dß╗ïch vß╗Ñ AI hiß╗çn kh├┤ng khß║ú dß╗Ñng" })
     }
 
     res.json({ data: reply })
   } catch (error) {
     console.error("AI Generate Comment Error:", error)
-    res.status(500).json({ error: "Lỗi tạo bình luận AI" })
+    res.status(500).json({ error: "Lß╗ùi tß║ío b├¼nh luß║¡n AI" })
   }
 })
 

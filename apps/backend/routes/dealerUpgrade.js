@@ -199,7 +199,7 @@ router.post("/apply", authenticateToken, async (req, res) => {
         console.log(`--- [MoMo] Tạo payment link cho ID: ${orderCode} ---`)
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000/api'
         const momoData = await createMomoPayment({
-          orderId: String(orderCode),
+          orderId: `${orderCode}_${Date.now()}`,
           amount: Number(created.price_vnd || 0),
           orderInfo: `Nang cap dai ly AgriTrend #${orderCode}`,
           redirectUrl: `${frontendUrl}/profile?status=success&id=${orderCode}`,
@@ -232,11 +232,51 @@ router.post("/apply", authenticateToken, async (req, res) => {
       res.status(201).json({ success: true, request: { ...created, checkoutUrl, payment_url: checkoutUrl, payment_qr: null } })
     } catch (paymentError) {
       console.error("Payment Create Error:", paymentError)
-      res.status(201).json({ success: true, request: created })
+      res.status(500).json({ error: "MoMo API Error: " + (paymentError.response ? JSON.stringify(paymentError.response.data) : paymentError.message) })
     }
   } catch (error) {
     console.error("POST /dealer-upgrade/apply error:", error)
     res.status(500).json({ error: "Không thể tạo yêu cầu nâng cấp đại lý" })
+  }
+})
+
+// Endpoint chuyên dụng cho môi trường dev (Localhost)
+// Khi MoMo redirect về frontend với resultCode=0, frontend sẽ gọi API này để update role
+// thay cho Webhook vì Webhook của MoMo không thể gọi được vào localhost.
+router.post("/confirm-local-test/:id", authenticateToken, async (req, res) => {
+  const requestId = Number(req.params.id)
+  if (!requestId) return res.status(400).json({ error: 'Invalid ID' })
+
+  try {
+    const [[requestRow]] = await pool.query(
+      `SELECT r.*, p.duration_days FROM dealer_upgrade_requests r
+       JOIN dealer_plans p ON p.id = r.plan_id
+       WHERE r.id = ? LIMIT 1`,
+      [requestId]
+    )
+    if (!requestRow) return res.status(404).json({ error: 'Yêu cầu không tồn tại' })
+
+    // Nếu đã duyệt rồi thì bỏ qua
+    if (requestRow.status === 'approved') return res.json({ success: true })
+
+    const durationDays = Number(requestRow.duration_days) || 30
+    const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
+
+    // Duyệt yêu cầu
+    await pool.query(
+      `UPDATE dealer_upgrade_requests 
+       SET status = 'approved', payment_status = 'paid', approved_at = NOW(), expires_at = ?
+       WHERE id = ?`,
+      [expiresAt, requestId]
+    )
+
+    // Cập nhật role
+    await pool.query("UPDATE users SET role = 'dealer' WHERE id = ?", [requestRow.user_id])
+
+    res.json({ success: true, message: 'Updated role via local test confirm' })
+  } catch (err) {
+    console.error("Local Confirm Error:", err)
+    res.status(500).json({ error: "Lỗi hệ thống" })
   }
 })
 
@@ -410,7 +450,7 @@ router.post("/:id/select-plan", authenticateToken, async (req, res) => {
     } else if (provider === 'momo') {
       const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000/api'
       const momoData = await createMomoPayment({
-        orderId: String(orderCode),
+        orderId: `${orderCode}_${Date.now()}`,
         amount: Number(plan.price_vnd),
         orderInfo: `Nang cap dai ly AgriTrend #${orderCode}`,
         redirectUrl: `${frontendUrl}/profile?status=success&id=${orderCode}`,
@@ -773,7 +813,7 @@ router.post("/momo/webhook", async (req, res) => {
       return res.json({ success: true })
     }
 
-    const requestDbId = Number(orderId)
+    const requestDbId = Number(String(orderId).split('_')[0])
 
     const [[requestRow]] = await pool.query(
       `SELECT r.*, p.duration_days FROM dealer_upgrade_requests r

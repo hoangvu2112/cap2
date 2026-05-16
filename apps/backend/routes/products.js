@@ -1,11 +1,11 @@
-import express from "express"
+﻿import express from "express"
 import pool from "../db.js"
 import { authenticateToken, isAdmin } from "../middleware/auth.js"
 import { rebuildAnalysisForProduct, startAiAutomation } from "../services/aiService.js"
 const router = express.Router()
 export const ioRef = { io: null }
 
-// Khởi chạy các tác vụ automation cho AI
+// Khß╗ƒi chß║íy c├íc t├íc vß╗Ñ automation cho AI
 startAiAutomation();
 
 const calculateSMA = (data, window, key = "price") => {
@@ -39,6 +39,7 @@ router.get("/", async (req, res) => {
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE 1=1
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
     `
     const params = []
     if (ids) {
@@ -103,17 +104,17 @@ router.get("/", async (req, res) => {
     }))
     res.json({ page: Number(page), totalPages, data: products })
   } catch (error) {
-    console.error("❌ Lỗi khi lấy danh sách sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy danh s├ích sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
 // ===========================================
-// --- 🚀 ĐÃ SỬA LỖI KÝ TỰ RÁC (SPACES) ---
+// --- ≡ƒÜÇ ─É├â Sß╗¼A Lß╗ûI K├¥ Tß╗░ R├üC (SPACES) ---
 // ===========================================
 router.get("/all", async (req, res) => {
   try {
-    // Đã xóa ký tự rác khỏi câu SQL
+    // ─É├ú x├│a k├╜ tß╗▒ r├íc khß╗Åi c├óu SQL
     const [rows] = await pool.query(`
       SELECT 
         p.*, 
@@ -124,6 +125,7 @@ router.get("/all", async (req, res) => {
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN users u ON u.id = p.farmer_user_id
+      WHERE p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden'
       ORDER BY p.id DESC
     `)
     const products = rows.map(p => ({
@@ -135,8 +137,8 @@ router.get("/all", async (req, res) => {
     }))
     res.json(products)
   } catch (error) {
-    console.error("❌ Lỗi khi lấy toàn bộ sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy to├án bß╗Ö sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 // ===========================================
@@ -153,37 +155,38 @@ router.get("/map-data", async (req, res) => {
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.region IS NOT NULL 
-        AND p.region != 'Toàn quốc' 
+        AND p.region != 'To├án quß╗æc' 
         AND p.currentPrice > 0
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
     `);
 
     const mapData = rows.map(p => ({
       ...p,
       currentPrice: Number(p.currentPrice),
       regionKey: p.region.toLowerCase()
-        .replace(/tỉnh /g, "")
-        .replace(/thành phố /g, "")
+        .replace(/tß╗ënh /g, "")
+        .replace(/th├ánh phß╗æ /g, "")
         .replace(/tp. /g, "")
-        .replace(/đ/g, "d")
-        .replace(/ă/g, "a")
-        .replace(/â/g, "a")
-        .replace(/ê/g, "e")
-        .replace(/ô/g, "o")
-        .replace(/ơ/g, "o")
-        .replace(/ư/g, "u")
+        .replace(/─æ/g, "d")
+        .replace(/─â/g, "a")
+        .replace(/├ó/g, "a")
+        .replace(/├¬/g, "e")
+        .replace(/├┤/g, "o")
+        .replace(/╞í/g, "o")
+        .replace(/╞░/g, "u")
         .trim()
     }));
 
     res.json(mapData);
   } catch (error) {
-    console.error("❌ Lỗi khi lấy dữ liệu bản đồ:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy dß╗» liß╗çu bß║ún ─æß╗ô:", error);
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" });
   }
 });
 
 router.get("/categories", async (req, res) => {
   try {
-    // Sửa lỗi: Chỉ lấy các category CÓ SẢN PHẨM
+    // Sß╗¡a lß╗ùi: Chß╗ë lß║Ñy c├íc category C├ô Sß║óN PHß║¿M
     const [rows] = await pool.query(`
       SELECT DISTINCT c.id, c.name
       FROM categories c
@@ -192,35 +195,35 @@ router.get("/categories", async (req, res) => {
     `);
     res.json(rows)
   } catch (error) {
-    console.error("❌ Lỗi khi lấy danh sách loại:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy danh s├ích loß║íi:", error);
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" });
   }
 });
 
 router.get("/categorie", async (req, res) => {
   try {
-    // Sửa lỗi: Chỉ lấy các category CÓ SẢN PHẨM
+    // Sß╗¡a lß╗ùi: Chß╗ë lß║Ñy c├íc category C├ô Sß║óN PHß║¿M
     const [rows] = await pool.query(`
       SELECT DISTINCT c.id, c.name
       FROM categories c
     `);
     res.json(rows)
   } catch (error) {
-    console.error("❌ Lỗi khi lấy danh sách loại:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy danh s├ích loß║íi:", error);
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" });
   }
 });
 
-// Thêm loại sản phẩm mới (chỉ admin)
+// Th├¬m loß║íi sß║ún phß║⌐m mß╗¢i (chß╗ë admin)
 router.post("/categories", authenticateToken, isAdmin, async (req, res) => {
   try {
     const { name } = req.body
     if (!name || name.trim() === "") {
-      return res.status(400).json({ error: "Tên loại sản phẩm không được để trống" })
+      return res.status(400).json({ error: "T├¬n loß║íi sß║ún phß║⌐m kh├┤ng ─æ╞░ß╗úc ─æß╗â trß╗æng" })
     }
     const [exists] = await pool.query("SELECT id FROM categories WHERE name = ?", [name.trim()])
     if (exists.length > 0) {
-      return res.status(400).json({ error: `Loại sản phẩm '${name}' đã tồn tại` })
+      return res.status(400).json({ error: `Loß║íi sß║ún phß║⌐m '${name}' ─æ├ú tß╗ôn tß║íi` })
     }
     const [result] = await pool.query(
       "INSERT INTO categories (name) VALUES (?)",
@@ -231,68 +234,68 @@ router.post("/categories", authenticateToken, isAdmin, async (req, res) => {
       [result.insertId]
     )
     res.status(201).json({
-      message: "✅ Đã tạo loại sản phẩm mới thành công",
+      message: "Γ£à ─É├ú tß║ío loß║íi sß║ún phß║⌐m mß╗¢i th├ánh c├┤ng",
       category: newCat[0],
     })
   } catch (error) {
-    console.error("❌ Lỗi khi tạo loại sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi tß║ío loß║íi sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
-// Cập nhật loại sản phẩm (chỉ admin)
+// Cß║¡p nhß║¡t loß║íi sß║ún phß║⌐m (chß╗ë admin)
 router.put("/categories/:id", authenticateToken, isAdmin, async (req, res) => {
   try {
     const { name } = req.body
     const { id } = req.params
     if (!name || name.trim() === "") {
-      return res.status(400).json({ error: "Tên loại sản phẩm không được để trống" })
+      return res.status(400).json({ error: "T├¬n loß║íi sß║ún phß║⌐m kh├┤ng ─æ╞░ß╗úc ─æß╗â trß╗æng" })
     }
     const [exists] = await pool.query("SELECT id FROM categories WHERE id = ?", [id])
     if (exists.length === 0) {
-      return res.status(404).json({ error: "Không tìm thấy loại sản phẩm" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy loß║íi sß║ún phß║⌐m" })
     }
     const [dup] = await pool.query(
       "SELECT id FROM categories WHERE name = ? AND id != ?",
       [name.trim(), id]
     )
     if (dup.length > 0) {
-      return res.status(400).json({ error: `Tên loại '${name}' đã tồn tại` })
+      return res.status(400).json({ error: `T├¬n loß║íi '${name}' ─æ├ú tß╗ôn tß║íi` })
     }
     await pool.query("UPDATE categories SET name = ? WHERE id = ?", [name.trim(), id])
     const [updated] = await pool.query("SELECT id, name, created_at FROM categories WHERE id = ?", [id])
     res.json({
-      message: "✅ Đã cập nhật loại sản phẩm thành công",
+      message: "Γ£à ─É├ú cß║¡p nhß║¡t loß║íi sß║ún phß║⌐m th├ánh c├┤ng",
       category: updated[0],
     })
   } catch (error) {
-    console.error("❌ Lỗi khi cập nhật loại sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi cß║¡p nhß║¡t loß║íi sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
-// Xóa loại sản phẩm (chỉ admin)
+// X├│a loß║íi sß║ún phß║⌐m (chß╗ë admin)
 router.delete("/categories/:id", authenticateToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const [exists] = await pool.query("SELECT * FROM categories WHERE id = ?", [id])
     if (exists.length === 0) {
-      return res.status(404).json({ error: "Không tìm thấy loại sản phẩm" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy loß║íi sß║ún phß║⌐m" })
     }
     const [related] = await pool.query("SELECT COUNT(*) AS c FROM products WHERE category_id = ?", [id])
     if (related[0].c > 0) {
       return res.status(400).json({
-        error: "Không thể xóa loại vì vẫn còn sản phẩm thuộc loại này. Hãy xóa hoặc chuyển sản phẩm trước.",
+        error: "Kh├┤ng thß╗â x├│a loß║íi v├¼ vß║½n c├▓n sß║ún phß║⌐m thuß╗Öc loß║íi n├áy. H├úy x├│a hoß║╖c chuyß╗ân sß║ún phß║⌐m tr╞░ß╗¢c.",
       })
     }
     await pool.query("DELETE FROM categories WHERE id = ?", [id])
     res.json({
-      message: "🗑️ Đã xóa loại sản phẩm thành công",
+      message: "≡ƒùæ∩╕Å ─É├ú x├│a loß║íi sß║ún phß║⌐m th├ánh c├┤ng",
       deleted: exists[0],
     })
   } catch (error) {
-    console.error("❌ Lỗi khi xóa loại sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi x├│a loß║íi sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -301,6 +304,7 @@ router.get("/ticker", async (req, res) => {
     const [rows] = await pool.query(
       `SELECT id, name, currentPrice, previousPrice, trend 
        FROM products 
+       WHERE dealer_visibility_status IS NULL OR dealer_visibility_status <> 'hidden'
        ORDER BY lastUpdate DESC 
        LIMIT 10`
     )
@@ -318,20 +322,20 @@ router.get("/ticker", async (req, res) => {
     })
     res.json(data)
   } catch (error) {
-    console.error("❌ Lỗi khi lấy dữ liệu ticker:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy dß╗» liß╗çu ticker:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
 // ===========================================
-// --- 🚀 ROUTE GET /:id (ĐÃ NÂNG CẤP AI) ---
+// --- ≡ƒÜÇ ROUTE GET /:id (─É├â N├éNG Cß║ñP AI) ---
 // ===========================================
 router.get("/:id", async (req, res) => {
   try {
     const range = req.query.range || "30d"
     const productId = req.params.id
 
-    // 1. Lấy thông tin sản phẩm
+    // 1. Lß║Ñy th├┤ng tin sß║ún phß║⌐m
     const productPromise = pool.query(
       `
       SELECT 
@@ -346,11 +350,12 @@ router.get("/:id", async (req, res) => {
       LEFT JOIN users u ON u.id = p.farmer_user_id
       LEFT JOIN analysis_data ad ON p.id = ad.product_id
       WHERE p.id = ?
+        AND (p.dealer_visibility_status IS NULL OR p.dealer_visibility_status <> 'hidden')
       `,
       [productId]
     )
 
-    // 2. Lấy lịch sử giá cho BIỂU ĐỒ
+    // 2. Lß║Ñy lß╗ïch sß╗¡ gi├í cho BIß╗éU ─Éß╗Æ
     let historyQuery = ""
     const params = [productId]
     let interval = 30
@@ -379,7 +384,7 @@ router.get("/:id", async (req, res) => {
     }
     const historyPromise = pool.query(historyQuery, params)
 
-    // 3. Lấy THỐNG KÊ 30 NGÀY
+    // 3. Lß║Ñy THß╗ÉNG K├è 30 NG├ÇY
     const statsPromise = pool.query(
       `
       SELECT 
@@ -393,7 +398,7 @@ router.get("/:id", async (req, res) => {
       [productId]
     );
 
-    // Chạy 3 truy vấn song song
+    // Chß║íy 3 truy vß║Ñn song song
     const [[products], [historyRows], [statsRows]] = await Promise.all([
       productPromise,
       historyPromise,
@@ -401,9 +406,9 @@ router.get("/:id", async (req, res) => {
     ]);
 
     if (products.length === 0)
-      return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" })
 
-    // 4. Xử lý dữ liệu
+    // 4. Xß╗¡ l├╜ dß╗» liß╗çu
     const history = historyRows.map(h => ({ ...h, price: Number(h.price) }))
     const historyWithForecast = calculateSMA(history, 7, "price");
 
@@ -435,8 +440,8 @@ router.get("/:id", async (req, res) => {
       percentChange: Number(percentChange)
     })
   } catch (error) {
-    console.error("❌ Lỗi khi lấy chi tiết sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi lß║Ñy chi tiß║┐t sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -445,7 +450,7 @@ router.get("/:id/analysis", async (req, res) => {
     const productId = req.params.id;
     const force = req.query.force === "true";
 
-    // 1. Nếu không force, kiểm tra xem đã có dữ liệu trong DB chưa
+    // 1. Nß║┐u kh├┤ng force, kiß╗âm tra xem ─æ├ú c├│ dß╗» liß╗çu trong DB ch╞░a
     if (!force) {
       const [rows] = await pool.query(
         "SELECT analysis_json FROM analysis_data WHERE product_id = ?",
@@ -460,13 +465,13 @@ router.get("/:id/analysis", async (req, res) => {
       }
     }
 
-    // 2. Nếu chưa có hoặc force=true, thực hiện rebuild (gọi AI)
-    console.log(`🤖 [AI Rebuild] Đang phân tích mới cho sản phẩm #${productId}${force ? " (Force)" : ""}`);
+    // 2. Nß║┐u ch╞░a c├│ hoß║╖c force=true, thß╗▒c hiß╗çn rebuild (gß╗ìi AI)
+    console.log(`≡ƒñû [AI Rebuild] ─Éang ph├ón t├¡ch mß╗¢i cho sß║ún phß║⌐m #${productId}${force ? " (Force)" : ""}`);
     const analysis = await rebuildAnalysisForProduct(productId);
 
     if (!analysis) {
       return res.status(200).json({
-        summary: "Đang phân tích dữ liệu thị trường...",
+        summary: "─Éang ph├ón t├¡ch dß╗» liß╗çu thß╗ï tr╞░ß╗¥ng...",
         status: "pending"
       });
     }
@@ -474,8 +479,8 @@ router.get("/:id/analysis", async (req, res) => {
     return res.json(analysis);
 
   } catch (error) {
-    console.error("❌ Lỗi truy vấn phân tích từ DB:", error);
-    res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu" });
+    console.error("Γ¥î Lß╗ùi truy vß║Ñn ph├ón t├¡ch tß╗½ DB:", error);
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º khi lß║Ñy dß╗» liß╗çu" });
   }
 });
 
@@ -494,11 +499,11 @@ router.post("/", authenticateToken, isAdmin, async (req, res) => {
       farmer_user_id,
     } = req.body
     if (!name || !category || !currentPrice || !unit || !region) {
-      return res.status(400).json({ error: "Thiếu thông tin sản phẩm" })
+      return res.status(400).json({ error: "Thiß║┐u th├┤ng tin sß║ún phß║⌐m" })
     }
     const [catRows] = await pool.query("SELECT id FROM categories WHERE name = ?", [category])
     if (catRows.length === 0) {
-      return res.status(400).json({ error: `Loại sản phẩm '${category}' không tồn tại` })
+      return res.status(400).json({ error: `Loß║íi sß║ún phß║⌐m '${category}' kh├┤ng tß╗ôn tß║íi` })
     }
     const category_id = catRows[0].id
     const [result] = await pool.query(
@@ -542,8 +547,8 @@ router.post("/", authenticateToken, isAdmin, async (req, res) => {
     if (ioRef.io) ioRef.io.emit("productAdded", product)
     res.status(201).json(product)
   } catch (error) {
-    console.error("❌ Lỗi khi thêm sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi th├¬m sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -561,17 +566,17 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
       farmer_user_id,
     } = req.body
     if (!name || !category || !currentPrice || !unit || !region) {
-      return res.status(400).json({ error: "Thiếu thông tin sản phẩm" })
+      return res.status(400).json({ error: "Thiß║┐u th├┤ng tin sß║ún phß║⌐m" })
     }
     const [existing] = await pool.query("SELECT * FROM products WHERE id = ?", [req.params.id])
-    if (existing.length === 0) return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
+    if (existing.length === 0) return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" })
     const old = existing[0]
     const trend =
       currentPrice > old.currentPrice ? "up" :
         currentPrice < old.currentPrice ? "down" : "stable"
     const [catRows] = await pool.query("SELECT id FROM categories WHERE name = ?", [category])
     if (catRows.length === 0) {
-      return res.status(400).json({ error: "Loại sản phẩm không hợp lệ" })
+      return res.status(400).json({ error: "Loß║íi sß║ún phß║⌐m kh├┤ng hß╗úp lß╗ç" })
     }
     const category_id = catRows[0].id
     await pool.query(
@@ -620,8 +625,8 @@ router.put("/:id", authenticateToken, isAdmin, async (req, res) => {
     }
     res.json(product)
   } catch (error) {
-    console.error("❌ Lỗi khi cập nhật sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi cß║¡p nhß║¡t sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -636,12 +641,12 @@ router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
       [productId]
     )
     if (exists.length === 0) {
-      return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" })
     }
     await pool.query("DELETE FROM products WHERE id = ?", [productId])
     if (ioRef.io) ioRef.io.emit("productDeleted", { id: Number(productId) })
     res.json({
-      message: "Đã xóa sản phẩm thành công",
+      message: "─É├ú x├│a sß║ún phß║⌐m th├ánh c├┤ng",
       deleted: {
         ...exists[0],
         category: exists[0].category_name,
@@ -650,8 +655,8 @@ router.delete("/:id", authenticateToken, isAdmin, async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("❌ Lỗi khi xóa sản phẩm:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    console.error("Γ¥î Lß╗ùi khi x├│a sß║ún phß║⌐m:", error)
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -715,8 +720,8 @@ router.post("/compare", async (req, res) => {
     });
     res.json(finalChartData);
   } catch (error) {
-    console.error("❌ Lỗi API Compare:", error);
-    res.status(500).json({ error: "Lỗi máy chủ khi xử lý so sánh", details: error.message });
+    console.error("Γ¥î Lß╗ùi API Compare:", error);
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º khi xß╗¡ l├╜ so s├ính", details: error.message });
   }
 });
 

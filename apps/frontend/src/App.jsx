@@ -29,6 +29,9 @@ import DealerProductDetail from "./pages/dealer/DealerProductDetail"
 import DealerPurchaseRequests from "./pages/dealer/DealerPurchaseRequests"
 import DealerCommunity from "./pages/dealer/DealerCommunity"
 import Negotiation from "./pages/shared/Negotiation"
+import MySupply from "./pages/user/MySupply"
+import DealerSupplyHub from "./pages/dealer/DealerSupplyHub"
+import Wallet from "./pages/user/Wallet"
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard"
@@ -80,8 +83,11 @@ function AppContent() {
         <Route path="/alerts" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><Alerts /></MainLayout2></RoleRoute>} />
         <Route path="/compare" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><Compare /></MainLayout2></RoleRoute>} />
         <Route path="/news" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><News /></MainLayout2></RoleRoute>} />
+        <Route path="/my-supply" element={<RoleRoute allowedRoles={["user", "admin"]}><MainLayout2><MySupply /></MainLayout2></RoleRoute>} />
+        <Route path="/dealer-supply" element={<RoleRoute allowedRoles={["dealer", "admin"]}><MainLayout2><DealerSupplyHub /></MainLayout2></RoleRoute>} />
         <Route path="/purchase-requests" element={<RoleRoute allowedRoles={["dealer"]}><MainLayout2><DealerPurchaseRequests /></MainLayout2></RoleRoute>} />
         <Route path="/negotiation" element={<RoleRoute allowedRoles={["user", "dealer", "admin"]}><MainLayout2><Negotiation /></MainLayout2></RoleRoute>} />
+        <Route path="/wallet" element={<ProtectedRoute><MainLayout2><Wallet /></MainLayout2></ProtectedRoute>} />
         <Route path="/community" element={<ProtectedRoute><MainLayout2>{isDealer ? <DealerCommunity /> : <Community />}</MainLayout2></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><MainLayout2><Chat /></MainLayout2></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><MainLayout2><Profile /></MainLayout2></ProtectedRoute>} />

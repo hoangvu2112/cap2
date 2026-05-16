@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { io } from "socket.io-client"
-import { motion } from "framer-motion"
 import { Activity } from "lucide-react"
 import api from "../lib/api"
 // import { socket } from "@/socket"
@@ -70,11 +69,7 @@ export default function LivePriceTicker() {
                     </div>
 
                     <div className="flex-1 overflow-hidden">
-                        <motion.div 
-                            className="flex w-max gap-6"
-                            animate={{ x: ["0%", "-50%"] }}
-                            transition={{ repeat: Infinity, ease: "linear", duration: 30 }}
-                        >
+                        <div className="flex gap-6 animate-scroll">
                             {[...items, ...items].map((item, index) => (
                                 <div key={index} className="flex items-center gap-2 whitespace-nowrap text-sm">
                                     <span className="font-medium">{item.name}</span>
@@ -95,7 +90,7 @@ export default function LivePriceTicker() {
                                     </span>
                                 </div>
                             ))}
-                        </motion.div>
+                        </div>
                     </div>
                 </div>
             </div>

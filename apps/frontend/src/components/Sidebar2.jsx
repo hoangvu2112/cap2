@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
@@ -28,35 +28,40 @@ import {
   ShieldCheck,
   Handshake,
   MessageSquare,
+  Wallet,
 } from "lucide-react"
 
 const USER_NAV = [
-  { path: "/", icon: Home, label: "Trang chủ" },
-  { path: "/negotiation", icon: Handshake, label: "Thương lượng" },
-  { path: "/community", icon: Users, label: "Cộng đồng" },
-  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
-  { path: "/news", icon: Newspaper, label: "Tin tức" },
-  { path: "/favorites", icon: Heart, label: "Yêu thích" },
-  { path: "/alerts", icon: Bell, label: "Cảnh báo" },
-  { path: "/map", icon: Map, label: "Bản đồ giá" },
+  { path: "/", icon: Home, label: "Trang chß╗º" },
+  { path: "/my-supply", icon: Sprout, label: "Nguß╗ôn h├áng" },
+  { path: "/negotiation", icon: Handshake, label: "Th╞░╞íng l╞░ß╗úng" },
+  { path: "/wallet", icon: Wallet, label: "V├¡ N├┤ng Xu" },
+  { path: "/community", icon: Users, label: "Cß╗Öng ─æß╗ông" },
+  { path: "/chat", icon: MessageSquare, label: "Tr├▓ chuyß╗çn" },
+  { path: "/news", icon: Newspaper, label: "Tin tß╗⌐c" },
+  { path: "/favorites", icon: Heart, label: "Y├¬u th├¡ch" },
+  { path: "/alerts", icon: Bell, label: "Cß║únh b├ío" },
+  { path: "/map", icon: Map, label: "Bß║ún ─æß╗ô gi├í" },
 ]
 
 const DEALER_NAV = [
-  { path: "/", icon: Home, label: "Trang chủ" },
-  { path: "/negotiation", icon: Users, label: "Thương lượng" },
-  { path: "/community", icon: Users, label: "Cộng đồng" },
-  { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
-  { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
+  { path: "/", icon: Home, label: "Trang chß╗º" },
+  { path: "/dealer-supply", icon: Sprout, label: "C╞í hß╗Öi mua" },
+  { path: "/negotiation", icon: Users, label: "Th╞░╞íng l╞░ß╗úng" },
+  { path: "/wallet", icon: Wallet, label: "V├¡ N├┤ng Xu" },
+  { path: "/community", icon: Users, label: "Cß╗Öng ─æß╗ông" },
+  { path: "/chat", icon: MessageSquare, label: "Tr├▓ chuyß╗çn" },
+  { path: "/purchase-requests", icon: Package, label: "Y├¬u cß║ºu mua" },
 ]
 
 const ADMIN_NAV = [
   { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/admin/products", icon: Package, label: "Sản phẩm" },
-  { path: "/admin/users", icon: Users, label: "Người dùng" },
-  { path: "/admin/news", icon: Newspaper, label: "Tin tức" },
-  { path: "/admin/statistics", icon: BarChart3, label: "Thống kê" },
-  { path: "/admin/dealers", icon: ShieldCheck, label: "Đại lý" },
-  { path: "/admin/settings", icon: Settings, label: "Cài đặt" },
+  { path: "/admin/products", icon: Package, label: "Sß║ún phß║⌐m" },
+  { path: "/admin/users", icon: Users, label: "Ng╞░ß╗¥i d├╣ng" },
+  { path: "/admin/news", icon: Newspaper, label: "Tin tß╗⌐c" },
+  { path: "/admin/statistics", icon: BarChart3, label: "Thß╗æng k├¬" },
+  { path: "/admin/dealers", icon: ShieldCheck, label: "─Éß║íi l├╜" },
+  { path: "/admin/settings", icon: Settings, label: "C├ái ─æß║╖t" },
 ]
 
 export default function Sidebar2() {
@@ -134,7 +139,7 @@ export default function Sidebar2() {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
         {!collapsed && (
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 py-2">
-            Menu chính
+            Menu ch├¡nh
           </p>
         )}
 
@@ -168,7 +173,7 @@ export default function Sidebar2() {
             {!collapsed && (
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-5 pb-2">
                 <Shield className="w-3 h-3 inline mr-1" />
-                Quản trị
+                Quß║ún trß╗ï
               </p>
             )}
             {collapsed && <div className="border-t border-border/40 my-2 mx-2" />}
@@ -204,7 +209,7 @@ export default function Sidebar2() {
           <>
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-5 pb-2">
               <Star className="w-3 h-3 inline mr-1" />
-              Theo dõi nhanh
+              Theo d├╡i nhanh
             </p>
             <div className="space-y-1 px-1">
               {watchlist.map((item) => {
@@ -241,14 +246,14 @@ export default function Sidebar2() {
         <button
           onClick={() => setCollapsed((value) => !value)}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          title={collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+          title={collapsed ? "Mß╗ƒ rß╗Öng sidebar" : "Thu gß╗ìn sidebar"}
         >
           {collapsed ? (
             <ChevronRight className="w-4 h-4" />
           ) : (
             <>
               <ChevronLeft className="w-4 h-4" />
-              <span>Thu gọn</span>
+              <span>Thu gß╗ìn</span>
             </>
           )}
         </button>
@@ -276,10 +281,10 @@ export default function Sidebar2() {
                 </p>
                 <p className="text-[10px] text-muted-foreground capitalize">
                   {user.role === "admin"
-                    ? "Quản trị viên"
+                    ? "Quß║ún trß╗ï vi├¬n"
                     : user.role === "dealer"
-                    ? "Đại lý"
-                    : "Nông dân"}
+                    ? "─Éß║íi l├╜"
+                    : "N├┤ng d├ón"}
                 </p>
               </div>
             )}
@@ -294,10 +299,10 @@ export default function Sidebar2() {
             transition-colors
             ${collapsed ? "justify-center" : ""}
           `}
-          title="Đăng xuất"
+          title="─É─âng xuß║Ñt"
         >
           <LogOut className="w-[18px] h-[18px] shrink-0" />
-          {!collapsed && <span>Đăng xuất</span>}
+          {!collapsed && <span>─É─âng xuß║Ñt</span>}
         </button>
       </div>
     </aside>

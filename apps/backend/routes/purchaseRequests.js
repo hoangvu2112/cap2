@@ -1,24 +1,25 @@
-import express from "express"
+﻿import express from "express"
 import pool from "../db.js"
 import { authenticateToken, requireRole, isAdmin } from "../middleware/auth.js"
+import { checkActiveRole } from "../middleware/checkActiveRole.js"
 
 const router = express.Router()
 
-// Bản đồ phân vùng 34 tỉnh thành theo miền
+// Bß║ún ─æß╗ô ph├ón v├╣ng 34 tß╗ënh th├ánh theo miß╗ün
 const REGION_GROUPS = {
-  "Bắc Bộ": [
-    "Hà Nội", "Hải Phòng", "Ninh Bình", "Hưng Yên", "Bắc Ninh",
-    "Quảng Ninh", "Thái Nguyên", "Phú Thọ", "Lào Cai", "Tuyên Quang",
-    "Lạng Sơn", "Điện Biên", "Lai Châu", "Sơn La", "Cao Bằng",
+  "Bß║»c Bß╗Ö": [
+    "H├á Nß╗Öi", "Hß║úi Ph├▓ng", "Ninh B├¼nh", "H╞░ng Y├¬n", "Bß║»c Ninh",
+    "Quß║úng Ninh", "Th├íi Nguy├¬n", "Ph├║ Thß╗ì", "L├áo Cai", "Tuy├¬n Quang",
+    "Lß║íng S╞ín", "─Éiß╗çn Bi├¬n", "Lai Ch├óu", "S╞ín La", "Cao Bß║▒ng",
   ],
-  "Trung Bộ": [
-    "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Quảng Trị", "Huế",
-    "Đà Nẵng", "Quảng Ngãi", "Bình Định", "Gia Lai", "Khánh Hòa",
-    "Lâm Đồng",
+  "Trung Bß╗Ö": [
+    "Thanh H├│a", "Nghß╗ç An", "H├á T─⌐nh", "Quß║úng Trß╗ï", "Huß║┐",
+    "─É├á Nß║╡ng", "Quß║úng Ng├úi", "B├¼nh ─Éß╗ïnh", "Gia Lai", "Kh├ính H├▓a",
+    "L├óm ─Éß╗ông",
   ],
-  "Nam Bộ": [
-    "Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Đồng Tháp",
-    "An Giang", "Vĩnh Long", "Cà Mau",
+  "Nam Bß╗Ö": [
+    "Hß╗ô Ch├¡ Minh", "─Éß╗ông Nai", "T├óy Ninh", "Cß║ºn Th╞í", "─Éß╗ông Th├íp",
+    "An Giang", "V─⌐nh Long", "C├á Mau",
   ],
 }
 
@@ -33,10 +34,10 @@ router.get("/partners", authenticateToken, async (req, res) => {
   try {
     const productId = Number(req.query.productId)
     if (!productId) {
-      return res.status(400).json({ error: "Thiếu productId" })
+      return res.status(400).json({ error: "Thiß║┐u productId" })
     }
 
-    // 1. Lấy thông tin khu vực của CHÍNH NGƯỜI DÙNG HIỆN TẠI
+    // 1. Lß║Ñy th├┤ng tin khu vß╗▒c cß╗ºa CH├ìNH NG╞»ß╗£I D├ÖNG HIß╗åN Tß║áI
     const [[currentUser]] = await pool.query(
       "SELECT region FROM users WHERE id = ?",
       [req.user.id]
@@ -45,15 +46,20 @@ router.get("/partners", authenticateToken, async (req, res) => {
     const userRegion = currentUser?.region || ""
     const userGroup = getRegionGroup(userRegion)
 
-    // 2. Lấy danh sách tỉnh cùng miền để dùng trong SQL
+    // 2. Lß║Ñy danh s├ích tß╗ënh c├╣ng miß╗ün ─æß╗â d├╣ng trong SQL
     const sameGroupProvinces = userGroup ? REGION_GROUPS[userGroup] : []
 
-    // 3. Xác định vai trò cần tìm
-    const isDealer = req.user.role === 'dealer'
+    // 3. X├íc ─æß╗ïnh vai tr├▓ hiß╗çn tß║íi tß╗½ DB ─æß╗â tr├ính d├╣ng JWT c┼⌐
+    const [[currentRoleRow]] = await pool.query(
+      "SELECT role FROM users WHERE id = ? AND status = 'active'",
+      [req.user.id]
+    )
+
+    const isDealer = currentRoleRow?.role === 'dealer'
     const targetRoles = isDealer ? "('user', 'dealer')" : "('dealer')"
 
-    // 4. Truy vấn với 3 cấp ưu tiên:
-    //    priority 1 = cùng tỉnh, priority 2 = cùng miền, priority 3 = miền khác
+    // 4. Truy vß║Ñn vß╗¢i 3 cß║Ñp ╞░u ti├¬n:
+    //    priority 1 = c├╣ng tß╗ënh, priority 2 = c├╣ng miß╗ün, priority 3 = miß╗ün kh├íc
     let sql = `
       SELECT 
         u.id, 
@@ -77,17 +83,17 @@ router.get("/partners", authenticateToken, async (req, res) => {
     const params = [userRegion, ...sameGroupProvinces, req.user.id]
     const [rows] = await pool.query(sql, params)
 
-    // 5. Thêm thông tin region_group cho mỗi đối tác
+    // 5. Th├¬m th├┤ng tin region_group cho mß╗ùi ─æß╗æi t├íc
     const result = rows.map(row => ({
       ...row,
-      region_group: getRegionGroup(row.user_region) || "Khác",
-      user_group: userGroup || "Chưa xác định",
+      region_group: getRegionGroup(row.user_region) || "Kh├íc",
+      user_group: userGroup || "Ch╞░a x├íc ─æß╗ïnh",
     }))
 
     res.json(result)
   } catch (error) {
     console.error("GET /purchase-requests/partners error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -97,7 +103,7 @@ router.post("/", authenticateToken, async (req, res) => {
     const { product_id, partner_id, quantity, proposed_price, note } = req.body
 
     if (!product_id || !partner_id || !quantity || !proposed_price) {
-      return res.status(400).json({ error: "Thiếu thông tin yêu cầu" })
+      return res.status(400).json({ error: "Thiß║┐u th├┤ng tin y├¬u cß║ºu" })
     }
 
     const [[product]] = await pool.query(
@@ -106,7 +112,7 @@ router.post("/", authenticateToken, async (req, res) => {
     )
 
     if (!product) {
-      return res.status(404).json({ error: "Không tìm thấy sản phẩm" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" })
     }
 
     const [[partner]] = await pool.query(
@@ -115,17 +121,26 @@ router.post("/", authenticateToken, async (req, res) => {
     )
 
     if (!partner) {
-      return res.status(404).json({ error: "Không tìm thấy đối tác" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ─æß╗æi t├íc" })
     }
 
-    // Xác định ai là người mua, ai là nông dân dựa trên vai trò của người khởi tạo
+    const [[initiator]] = await pool.query(
+      "SELECT id, role FROM users WHERE id = ? AND status = 'active'",
+      [initiatorId]
+    )
+
+    if (!initiator) {
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy ng╞░ß╗¥i khß╗ƒi tß║ío" })
+    }
+
+    // X├íc ─æß╗ïnh ai l├á ng╞░ß╗¥i mua, ai l├á n├┤ng d├ón dß╗▒a tr├¬n vai tr├▓ cß╗ºa ng╞░ß╗¥i khß╗ƒi tß║ío
     let buyer_id, farmer_id;
-    if (req.user.role === 'dealer') {
+    if (initiator.role === 'dealer') {
       buyer_id = initiatorId;
       farmer_id = partner_id;
     } else {
-      buyer_id = partner_id; // Dealer là người mua
-      farmer_id = initiatorId; // User là nông dân
+      buyer_id = partner_id; // Dealer l├á ng╞░ß╗¥i mua
+      farmer_id = initiatorId; // User l├á n├┤ng d├ón
     }
 
     const [result] = await pool.query(
@@ -156,7 +171,7 @@ router.post("/", authenticateToken, async (req, res) => {
     res.status(201).json(created)
   } catch (error) {
     console.error("POST /purchase-requests error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -181,11 +196,14 @@ router.get("/all", authenticateToken, async (req, res) => {
           buyer.name AS buyer_name,
           buyer.avatar_url AS buyer_avatar,
           farmer.name AS farmer_name,
-          farmer.avatar_url AS farmer_avatar
+          farmer.avatar_url AS farmer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         LEFT JOIN products p ON p.id = pr.product_id
         LEFT JOIN users buyer ON buyer.id = pr.buyer_id
         LEFT JOIN users farmer ON farmer.id = pr.farmer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.buyer_id = ? OR pr.farmer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -195,7 +213,7 @@ router.get("/all", authenticateToken, async (req, res) => {
     res.json(rows)
   } catch (error) {
     console.error("GET /purchase-requests/all error:", error)
-    res.status(500).json({ error: "Lỗi hệ thống khi tải danh sách thương lượng" })
+    res.status(500).json({ error: "Lß╗ùi hß╗ç thß╗æng khi tß║úi danh s├ích th╞░╞íng l╞░ß╗úng" })
   }
 })
 
@@ -221,10 +239,13 @@ router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req
           p.region AS product_region,
           farmer.id AS farmer_id,
           farmer.name AS farmer_name,
-          farmer.avatar_url AS farmer_avatar
+          farmer.avatar_url AS farmer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
         JOIN users farmer ON farmer.id = pr.farmer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.buyer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -234,15 +255,15 @@ router.get("/sent", authenticateToken, requireRole("user", "dealer"), async (req
     res.json(rows)
   } catch (error) {
     console.error("GET /purchase-requests/sent error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
-router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.patch("/:id/dealer-confirm", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
   try {
     const requestId = Number(req.params.id)
     if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
+      return res.status(400).json({ error: "M├ú y├¬u cß║ºu kh├┤ng hß╗úp lß╗ç" })
     }
 
     const [[request]] = await pool.query(
@@ -255,19 +276,19 @@ router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), as
     )
 
     if (!request) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" })
     }
 
     if (request.buyer_id !== req.user.id) {
-      return res.status(403).json({ error: "Bạn không có quyền thực hiện thao tác này" })
+      return res.status(403).json({ error: "Bß║ín kh├┤ng c├│ quyß╗ün thß╗▒c hiß╗çn thao t├íc n├áy" })
     }
 
     if (request.status !== "closed") {
-      return res.status(400).json({ error: "Chỉ có thể xác nhận khi user đã chốt giao dịch" })
+      return res.status(400).json({ error: "Chß╗ë c├│ thß╗â x├íc nhß║¡n khi user ─æ├ú chß╗æt giao dß╗ïch" })
     }
 
     if (request.dealer_fee_status === "recorded") {
-      return res.status(409).json({ error: "Phí đại lý của yêu cầu này đã được ghi nhận" })
+      return res.status(409).json({ error: "Ph├¡ ─æß║íi l├╜ cß╗ºa y├¬u cß║ºu n├áy ─æ├ú ─æ╞░ß╗úc ghi nhß║¡n" })
     }
 
     await pool.query(
@@ -280,14 +301,6 @@ router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), as
         WHERE id = ?
       `,
       [requestId]
-    )
-
-    await pool.query(
-      `
-        INSERT INTO dealer_fee_transactions (request_id, dealer_id, amount, status, note)
-        VALUES (?, ?, ?, 'recorded', 'Ghi nhận phí đại lý khi xác nhận đơn')
-      `,
-      [requestId, req.user.id, Number(request.dealer_fee_amount || 30000)]
     )
 
     const [[updated]] = await pool.query(
@@ -321,21 +334,21 @@ router.patch("/:id/dealer-confirm", authenticateToken, requireRole("dealer"), as
     res.json(updated)
   } catch (error) {
     console.error("PATCH /purchase-requests/:id/dealer-confirm error:", error)
-    res.status(500).json({ error: "Không thể ghi nhận phí đại lý" })
+    res.status(500).json({ error: "Kh├┤ng thß╗â ghi nhß║¡n ph├¡ ─æß║íi l├╜" })
   }
 })
 
-router.post("/:id/report", authenticateToken, requireRole("dealer"), async (req, res) => {
+router.post("/:id/report", authenticateToken, checkActiveRole("dealer"), async (req, res) => {
   try {
     const requestId = Number(req.params.id)
     const reason = String(req.body?.reason || "").trim()
     const note = String(req.body?.note || "").trim()
 
     if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
+      return res.status(400).json({ error: "M├ú y├¬u cß║ºu kh├┤ng hß╗úp lß╗ç" })
     }
     if (!reason) {
-      return res.status(400).json({ error: "Vui lòng nhập lý do báo cáo" })
+      return res.status(400).json({ error: "Vui l├▓ng nhß║¡p l├╜ do b├ío c├ío" })
     }
 
     const [[request]] = await pool.query(
@@ -348,19 +361,19 @@ router.post("/:id/report", authenticateToken, requireRole("dealer"), async (req,
     )
 
     if (!request) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" })
     }
 
     if (request.buyer_id !== req.user.id) {
-      return res.status(403).json({ error: "Bạn không có quyền báo cáo yêu cầu này" })
+      return res.status(403).json({ error: "Bß║ín kh├┤ng c├│ quyß╗ün b├ío c├ío y├¬u cß║ºu n├áy" })
     }
 
     if (!["closed"].includes(request.status)) {
-      return res.status(400).json({ error: "Chỉ báo cáo được khi đơn đã chốt" })
+      return res.status(400).json({ error: "Chß╗ë b├ío c├ío ─æ╞░ß╗úc khi ─æ╞ín ─æ├ú chß╗æt" })
     }
 
     if (request.dealer_report_status === "reported") {
-      return res.status(409).json({ error: "Yêu cầu này đã được báo cáo trước đó" })
+      return res.status(409).json({ error: "Y├¬u cß║ºu n├áy ─æ├ú ─æ╞░ß╗úc b├ío c├ío tr╞░ß╗¢c ─æ├│" })
     }
 
     await pool.query(
@@ -383,7 +396,7 @@ router.post("/:id/report", authenticateToken, requireRole("dealer"), async (req,
     res.status(201).json({ success: true })
   } catch (error) {
     console.error("POST /purchase-requests/:id/report error:", error)
-    res.status(500).json({ error: "Không thể gửi báo cáo" })
+    res.status(500).json({ error: "Kh├┤ng thß╗â gß╗¡i b├ío c├ío" })
   }
 })
 
@@ -429,7 +442,7 @@ router.get("/admin/reports", authenticateToken, isAdmin, async (_req, res) => {
     res.json({ success: true, reports: rows })
   } catch (error) {
     console.error("GET /purchase-requests/admin/reports error:", error)
-    res.status(500).json({ error: "Không thể lấy danh sách báo cáo" })
+    res.status(500).json({ error: "Kh├┤ng thß╗â lß║Ñy danh s├ích b├ío c├ío" })
   }
 })
 
@@ -440,11 +453,11 @@ router.patch("/admin/reports/:id/resolve", authenticateToken, isAdmin, async (re
     const adminNote = String(req.body?.admin_note || "").trim()
 
     if (!reportId) {
-      return res.status(400).json({ error: "Mã báo cáo không hợp lệ" })
+      return res.status(400).json({ error: "M├ú b├ío c├ío kh├┤ng hß╗úp lß╗ç" })
     }
 
     if (!["resolved", "rejected"].includes(status)) {
-      return res.status(400).json({ error: "Trạng thái không hợp lệ" })
+      return res.status(400).json({ error: "Trß║íng th├íi kh├┤ng hß╗úp lß╗ç" })
     }
 
     const [[report]] = await pool.query(
@@ -457,7 +470,7 @@ router.patch("/admin/reports/:id/resolve", authenticateToken, isAdmin, async (re
     )
 
     if (!report) {
-      return res.status(404).json({ error: "Không tìm thấy báo cáo" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy b├ío c├ío" })
     }
 
     await pool.query(
@@ -500,7 +513,7 @@ router.patch("/admin/reports/:id/resolve", authenticateToken, isAdmin, async (re
     res.json({ success: true, report: updated })
   } catch (error) {
     console.error("PATCH /purchase-requests/admin/reports/:id/resolve error:", error)
-    res.status(500).json({ error: "Không thể xử lý báo cáo" })
+    res.status(500).json({ error: "Kh├┤ng thß╗â xß╗¡ l├╜ b├ío c├ío" })
   }
 })
 
@@ -522,10 +535,13 @@ router.get("/incoming", authenticateToken, requireRole("user", "dealer"), async 
           p.region AS product_region,
           buyer.id AS buyer_id,
           buyer.name AS buyer_name,
-          buyer.avatar_url AS buyer_avatar
+          buyer.avatar_url AS buyer_avatar,
+          c.farmer_status,
+          c.buyer_status
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
         JOIN users buyer ON buyer.id = pr.buyer_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.farmer_id = ?
         ORDER BY pr.created_at DESC, pr.id DESC
       `,
@@ -535,7 +551,7 @@ router.get("/incoming", authenticateToken, requireRole("user", "dealer"), async 
     res.json(rows)
   } catch (error) {
     console.error("GET /purchase-requests/incoming error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -543,7 +559,7 @@ router.get("/:id/messages", authenticateToken, requireRole("user", "dealer"), as
   try {
     const requestId = Number(req.params.id)
     if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
+      return res.status(400).json({ error: "M├ú y├¬u cß║ºu kh├┤ng hß╗úp lß╗ç" })
     }
 
     const [[request]] = await pool.query(
@@ -557,20 +573,24 @@ router.get("/:id/messages", authenticateToken, requireRole("user", "dealer"), as
           p.name AS product_name,
           p.unit AS product_unit,
           pr.quantity,
-          pr.proposed_price
+          pr.proposed_price,
+          c.farmer_status,
+          c.buyer_status,
+          c.fee_amount
         FROM purchase_requests pr
         JOIN products p ON p.id = pr.product_id
+        LEFT JOIN commissions c ON c.request_id = pr.id
         WHERE pr.id = ?
       `,
       [requestId]
     )
 
     if (!request) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" })
     }
 
     if (req.user.id !== request.buyer_id && req.user.id !== request.farmer_id) {
-      return res.status(403).json({ error: "Không có quyền truy cập" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün truy cß║¡p" })
     }
 
     const [messages] = await pool.query(
@@ -594,7 +614,7 @@ router.get("/:id/messages", authenticateToken, requireRole("user", "dealer"), as
     res.json({ request, messages })
   } catch (error) {
     console.error("GET /purchase-requests/:id/messages error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -604,10 +624,10 @@ router.post("/:id/messages", authenticateToken, requireRole("user", "dealer"), a
     const content = req.body.content?.trim()
 
     if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
+      return res.status(400).json({ error: "M├ú y├¬u cß║ºu kh├┤ng hß╗úp lß╗ç" })
     }
     if (!content) {
-      return res.status(400).json({ error: "Nội dung không được để trống" })
+      return res.status(400).json({ error: "Nß╗Öi dung kh├┤ng ─æ╞░ß╗úc ─æß╗â trß╗æng" })
     }
 
     const [[request]] = await pool.query(
@@ -616,13 +636,13 @@ router.post("/:id/messages", authenticateToken, requireRole("user", "dealer"), a
     )
 
     if (!request) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" })
     }
     if (request.status === "closed") {
-      return res.status(400).json({ error: "Yêu cầu đã chốt, không thể nhắn thêm" })
+      return res.status(400).json({ error: "Y├¬u cß║ºu ─æ├ú chß╗æt, kh├┤ng thß╗â nhß║»n th├¬m" })
     }
     if (req.user.id !== request.buyer_id && req.user.id !== request.farmer_id) {
-      return res.status(403).json({ error: "Không có quyền nhắn trong yêu cầu này" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün nhß║»n trong y├¬u cß║ºu n├áy" })
     }
 
     const [result] = await pool.query(
@@ -633,7 +653,7 @@ router.post("/:id/messages", authenticateToken, requireRole("user", "dealer"), a
       [requestId, req.user.id, content]
     )
 
-    // Khi nông dân phản hồi bằng tin nhắn đầu tiên/tiếp theo thì yêu cầu chuyển sang responded
+    // Khi n├┤ng d├ón phß║ún hß╗ôi bß║▒ng tin nhß║»n ─æß║ºu ti├¬n/tiß║┐p theo th├¼ y├¬u cß║ºu chuyß╗ân sang responded
     if (req.user.id === request.farmer_id && request.status === "pending") {
       await pool.query(
         "UPDATE purchase_requests SET status = 'responded' WHERE id = ?",
@@ -666,7 +686,7 @@ router.post("/:id/messages", authenticateToken, requireRole("user", "dealer"), a
     res.status(201).json({ message, request: updatedRequest })
   } catch (error) {
     console.error("POST /purchase-requests/:id/messages error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
@@ -676,11 +696,11 @@ router.patch("/:id/status", authenticateToken, requireRole("user", "dealer"), as
     const { status } = req.body
 
     if (!requestId) {
-      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" })
+      return res.status(400).json({ error: "M├ú y├¬u cß║ºu kh├┤ng hß╗úp lß╗ç" })
     }
 
     if (!["pending", "responded", "closed"].includes(status)) {
-      return res.status(400).json({ error: "Trạng thái không hợp lệ" })
+      return res.status(400).json({ error: "Trß║íng th├íi kh├┤ng hß╗úp lß╗ç" })
     }
 
     const [[row]] = await pool.query(
@@ -689,21 +709,21 @@ router.patch("/:id/status", authenticateToken, requireRole("user", "dealer"), as
     )
 
     if (!row) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu" })
+      return res.status(404).json({ error: "Kh├┤ng t├¼m thß║Ñy y├¬u cß║ºu" })
     }
 
     if (row.buyer_id !== req.user.id && row.farmer_id !== req.user.id) {
-      return res.status(403).json({ error: "Không có quyền cập nhật yêu cầu này" })
+      return res.status(403).json({ error: "Kh├┤ng c├│ quyß╗ün cß║¡p nhß║¡t y├¬u cß║ºu n├áy" })
     }
 
     if (status === "pending" || status === "responded") {
       return res.status(400).json({
-        error: "Trạng thái pending/responded được cập nhật tự động theo luồng thương lượng",
+        error: "Trß║íng th├íi pending/responded ─æ╞░ß╗úc cß║¡p nhß║¡t tß╗▒ ─æß╗Öng theo luß╗ông th╞░╞íng l╞░ß╗úng",
       })
     }
 
     if (status === "closed" && row.farmer_id !== req.user.id) {
-      return res.status(403).json({ error: "Chỉ nông dân mới có quyền chốt giao dịch" })
+      return res.status(403).json({ error: "Chß╗ë n├┤ng d├ón mß╗¢i c├│ quyß╗ün chß╗æt giao dß╗ïch" })
     }
 
     await pool.query(
@@ -711,10 +731,10 @@ router.patch("/:id/status", authenticateToken, requireRole("user", "dealer"), as
       [status, requestId]
     )
 
-    res.json({ message: "Đã cập nhật trạng thái", status })
+    res.json({ message: "─É├ú cß║¡p nhß║¡t trß║íng th├íi", status })
   } catch (error) {
     console.error("PATCH /purchase-requests/:id/status error:", error)
-    res.status(500).json({ error: "Lỗi máy chủ" })
+    res.status(500).json({ error: "Lß╗ùi m├íy chß╗º" })
   }
 })
 
