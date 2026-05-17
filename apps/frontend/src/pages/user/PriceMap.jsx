@@ -14,79 +14,91 @@ import api from "@/lib/api"
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Popup, useMap } from "react-leaflet"
 
 const PROVINCE_COORDS = {
-  // --- Tây Nguyên ---
+  // --- 6 Thành phố trực thuộc Trung ương ---
+  "ha noi": [21.028511, 105.804817],
+  "ho chi minh": [10.823099, 106.629664],
+  "hai phong": [20.844912, 106.688084],
+  "da nang": [16.047079, 108.206230],
+  "can tho": [10.045162, 105.746857],
+  "hue": [16.463713, 107.590866],
+
+  // --- Miền Bắc (12 tỉnh) ---
+  "quang ninh": [21.006382, 107.292514],
+  "cao bang": [22.665600, 106.257900],
+  "lang son": [21.853708, 106.761519],
+  "lai chau": [22.386389, 103.470833],
+  "dien bien": [21.383333, 103.016667],
+  "son la": [21.316667, 103.900000],
+  "tuyen quang": [21.823611, 105.218056],
+  "lao cai": [22.338333, 103.975000],
+  "thai nguyen": [21.594444, 105.848333],
+  "phu tho": [21.400000, 105.166667],
+  "bac ninh": [21.186111, 106.076111],
+  "hung yen": [20.646667, 106.051667],
+
+  // --- Miền Trung & Tây Nguyên (8 tỉnh) ---
+  "thanh hoa": [19.800000, 105.766667],
+  "nghe an": [19.250000, 104.883333],
+  "ha tinh": [18.342222, 105.905833],
+  "ninh binh": [20.250000, 105.975000],
+  "quang tri": [16.750000, 107.000000],
+  "quang ngai": [15.120000, 108.800000],
+  "gia lai": [13.983333, 108.250000],
+  "khanh hoa": [12.250000, 109.183333],
+
+  // --- Nam Trung Bộ & Nam Bộ (8 tỉnh) ---
   "lam dong": [11.575278, 107.809583],
   "dak lak": [12.666667, 108.050000],
-  "dak nong": [12.000000, 107.666667],
-  "gia lai": [13.983333, 108.250000],
-  "kon tum": [14.350000, 108.000000],
-
-  // --- Đông Nam Bộ ---
   "dong nai": [11.000000, 107.166667],
-  "binh phuoc": [11.750000, 106.916667],
-  "ba ria - vung tau": [10.550000, 107.283333],
   "tay ninh": [11.366667, 106.116667],
-  "binh duong": [11.133333, 106.683333],
-
-  // --- Đồng Bằng Sông Cửu Long ---
-  "long an": [10.695833, 106.241667],
-  "tien giang": [10.416667, 106.166667],
-  "ben tre": [10.233333, 106.383333],
-  "tra vinh": [9.933333, 106.333333],
   "vinh long": [10.250000, 105.966667],
   "dong thap": [10.533333, 105.683333],
   "an giang": [10.500000, 105.116667],
-  "kien giang": [10.016667, 105.083333],
-  "can tho": [10.033333, 105.783333],
-  "hau giang": [9.783333, 105.466667],
-  "soc trang": [9.600000, 105.966667],
-  "bac lieu": [9.283333, 105.716667],
   "ca mau": [9.183333, 105.150000],
-
-  // --- Khu vực khác ---
-  "khanh hoa": [12.250000, 109.183333],
-  "binh thuan": [11.100000, 108.183333],
-  "ninh thuan": [11.566667, 108.983333],
-  "nghe an": [19.250000, 104.883333],
-  "thanh hoa": [19.800000, 105.766667],
 };
 
 const PROVINCE_SPECIALTIES = {
-  // --- Tây Nguyên ---
-  "lam dong": ["Cà phê Arabica", "Chè (Trà)", "Rau củ", "Hoa", "Sầu riêng"],
-  "dak lak": ["Cà phê Robusta", "Hồ tiêu", "Bơ sáp", "Sầu riêng", "Ca cao"],
-  "dak nong": ["Hồ tiêu", "Cà phê", "Bơ", "Sầu riêng", "Khoai lang"],
+  // --- 6 Thành phố trực thuộc Trung ương ---
+  "ha noi": ["Gạo nếp cái hoa vàng", "Bưởi Diễn", "Nhãn lồng", "Rau an toàn"],
+  "ho chi minh": ["Hồ tiêu", "Điều", "Cao su", "Trái cây nhiệt đới"],
+  "hai phong": ["Lúa gạo", "Vải thiều", "Thủy sản", "Rau màu"],
+  "da nang": ["Thủy sản", "Rau sạch", "Quế", "Tiêu"],
+  "can tho": ["Lúa gạo ST25", "Cá tra", "Trái cây", "Tôm"],
+  "hue": ["Thanh trà", "Bưởi", "Sen", "Quế"],
+
+  // --- Miền Bắc (12 tỉnh) ---
+  "quang ninh": ["Thủy sản", "Chè", "Na dai", "Gạo nếp cái hoa vàng"],
+  "cao bang": ["Hạt dẻ", "Lê", "Thạch đen", "Miến dong"],
+  "lang son": ["Na Chi Lăng", "Hồi", "Quế", "Thạch đen"],
+  "lai chau": ["Chè Shan tuyết", "Gạo Séng Cù", "Thảo quả", "Mật ong"],
+  "dien bien": ["Gạo Điện Biên", "Cà phê", "Chè", "Mắc ca"],
+  "son la": ["Xoài", "Nhãn", "Cà phê", "Mận hậu", "Chè Shan tuyết"],
+  "tuyen quang": ["Cam sành", "Chè", "Bưởi", "Mía"],
+  "lao cai": ["Thảo quả", "Chè Shan tuyết", "Quế", "Mận"],
+  "thai nguyen": ["Chè Thái Nguyên", "Lúa gạo", "Na", "Bưởi"],
+  "phu tho": ["Chè", "Bưởi Đoan Hùng", "Hồng không hạt", "Chuối"],
+  "bac ninh": ["Vải thiều", "Lúa gạo", "Rau màu", "Khoai tây"],
+  "hung yen": ["Nhãn lồng", "Lúa gạo", "Chuối", "Vải"],
+
+  // --- Miền Trung & Tây Nguyên (8 tỉnh) ---
+  "thanh hoa": ["Mía đường", "Lúa gạo", "Bưởi Luận Văn", "Cam"],
+  "nghe an": ["Cam Vinh", "Lạc (Đậu phộng)", "Chè", "Mía"],
+  "ha tinh": ["Bưởi Phúc Trạch", "Cam", "Chè", "Lạc"],
+  "ninh binh": ["Lúa gạo", "Dứa", "Cói", "Rau màu"],
+  "quang tri": ["Hồ tiêu", "Cà phê", "Cao su", "Lúa gạo"],
+  "quang ngai": ["Quế Trà Bồng", "Sâm Ngọc Linh", "Mì (Sắn)", "Lúa gạo"],
   "gia lai": ["Cà phê", "Hồ tiêu", "Cao su", "Chuối", "Chanh dây"],
-  "kon tum": ["Sâm Ngọc Linh", "Cà phê xứ lạnh", "Cao su", "Mì (Sắn)"],
+  "khanh hoa": ["Xoài Cam Lâm", "Sầu riêng Khánh Sơn", "Yến sào", "Nho"],
 
-  // --- Đông Nam Bộ ---
-  "dong nai": ["Bưởi Tân Triều", "Chôm chôm", "Sầu riêng", "Tiêu", "Điều"],
-  "binh phuoc": ["Hạt điều", "Hồ tiêu", "Cao su", "Sầu riêng"],
-  "ba ria - vung tau": ["Hồ tiêu", "Nhãn xuồng", "Mãng cầu"],
-  "tay ninh": ["Mãng cầu Bà Đen", "Mía đường", "Cao su", "Mì (Sắn)"],
-  "binh duong": ["Măng cụt Lái Thiêu", "Bưởi", "Cao su"],
-
-  // --- Đồng Bằng Sông Cửu Long ---
-  "long an": ["Lúa gạo", "Thanh long", "Chanh không hạt", "Dưa hấu"],
-  "tien giang": ["Vú sữa Lò Rèn", "Xoài Cát Hòa Lộc", "Sầu riêng", "Mít"],
-  "ben tre": ["Dừa", "Bưởi da xanh", "Chôm chôm", "Sầu riêng"],
-  "tra vinh": ["Dừa sáp", "Lúa gạo", "Trái cây"],
-  "vinh long": ["Bưởi Năm Roi", "Cam sành", "Khoai lang tím"],
+  // --- Nam Trung Bộ & Nam Bộ (8 tỉnh) ---
+  "lam dong": ["Cà phê Arabica", "Chè", "Rau củ", "Hoa", "Sầu riêng", "Thanh long"],
+  "dak lak": ["Cà phê Robusta", "Hồ tiêu", "Bơ sáp", "Sầu riêng", "Ca cao"],
+  "dong nai": ["Bưởi Tân Triều", "Chôm chôm", "Sầu riêng", "Tiêu", "Điều", "Cao su"],
+  "tay ninh": ["Mãng cầu Bà Đen", "Mía đường", "Cao su", "Thanh long", "Lúa gạo"],
+  "vinh long": ["Bưởi Năm Roi", "Cam sành", "Khoai lang tím", "Dừa", "Chôm chôm"],
   "dong thap": ["Xoài Cao Lãnh", "Sen", "Quýt hồng Lai Vung", "Lúa gạo"],
-  "an giang": ["Lúa gạo", "Xoài", "Thốt nốt"],
-  "kien giang": ["Hồ tiêu (Phú Quốc)", "Lúa gạo", "Khóm (Dứa)"],
-  "can tho": ["Lúa gạo", "Dâu Hạ Châu", "Vú sữa"],
-  "hau giang": ["Khóm Cầu Đúc", "Bưởi Năm Roi", "Lúa gạo", "Mía"],
-  "soc trang": ["Hành tím Vĩnh Châu", "Lúa ST25", "Vú sữa"],
-  "bac lieu": ["Lúa gạo", "Muối", "Nhãn"],
-  "ca mau": ["Lúa gạo", "Mật ong rừng", "Cua (Thủy sản)"],
-
-  // --- Khu vực khác ---
-  "khanh hoa": ["Xoài Cam Lâm", "Sầu riêng Khánh Sơn", "Yến sào"],
-  "binh thuan": ["Thanh long", "Nho", "Mủ trôm"],
-  "ninh thuan": ["Nho", "Táo xanh", "Tỏi", "Hành tím"],
-  "nghe an": ["Cam Vinh", "Lạc (Đậu phộng)", "Chè"],
-  "thanh hoa": ["Mía đường", "Lúa gạo", "Bưởi Luận Văn"],
+  "an giang": ["Lúa gạo", "Xoài", "Thốt nốt", "Hồ tiêu Phú Quốc"],
+  "ca mau": ["Lúa gạo", "Mật ong rừng", "Tôm", "Cua"],
 };
 
 // Hàm chuẩn hóa tên vùng
@@ -100,20 +112,60 @@ const normalizeRegionKey = (regionName) => {
     .trim();
 };
 
+// Mapping tỉnh cũ → tỉnh mới (sau sáp nhập 2025)
+const OLD_TO_NEW_PROVINCE = {
+  "ha giang": "tuyen quang",
+  "yen bai": "lao cai",
+  "bac kan": "thai nguyen",
+  "vinh phuc": "phu tho",
+  "hoa binh": "phu tho",
+  "bac giang": "bac ninh",
+  "thai binh": "hung yen",
+  "hai duong": "hai phong",
+  "ha nam": "ninh binh",
+  "nam dinh": "ninh binh",
+  "quang binh": "quang tri",
+  "quang nam": "da nang",
+  "kon tum": "quang ngai",
+  "binh dinh": "gia lai",
+  "ninh thuan": "khanh hoa",
+  "phu yen": "dak lak",
+  "dak nong": "lam dong",
+  "binh thuan": "lam dong",
+  "binh phuoc": "dong nai",
+  "binh duong": "ho chi minh",
+  "ba ria - vung tau": "ho chi minh",
+  "long an": "tay ninh",
+  "tien giang": "dong thap",
+  "ben tre": "vinh long",
+  "tra vinh": "vinh long",
+  "soc trang": "can tho",
+  "hau giang": "can tho",
+  "kien giang": "an giang",
+  "bac lieu": "ca mau",
+};
+
 const getCoords = (regionName) => {
   const key = normalizeRegionKey(regionName);
   if (!key) return null;
-  // Mapping thêm vài trường hợp đặc biệt
-  if (key.includes("vung tau")) return PROVINCE_COORDS["ba ria - vung tau"];
-  if (key.includes("hcm") || key.includes("ho chi minh")) return PROVINCE_COORDS["tp ho chi minh"];
-  return PROVINCE_COORDS[key];
+  // Thử tìm trực tiếp
+  if (PROVINCE_COORDS[key]) return PROVINCE_COORDS[key];
+  // Mapping tên cũ → tên mới
+  const mappedKey = OLD_TO_NEW_PROVINCE[key];
+  if (mappedKey && PROVINCE_COORDS[mappedKey]) return PROVINCE_COORDS[mappedKey];
+  // Fallback đặc biệt
+  if (key.includes("vung tau")) return PROVINCE_COORDS["ho chi minh"];
+  if (key.includes("hcm") || key.includes("ho chi minh")) return PROVINCE_COORDS["ho chi minh"];
+  return null;
 };
 
 const getSpecialties = (regionName) => {
   const key = normalizeRegionKey(regionName);
   if (!key) return [];
-  if (key.includes("vung tau")) return PROVINCE_SPECIALTIES["ba ria - vung tau"] || [];
-  return PROVINCE_SPECIALTIES[key] || [];
+  if (PROVINCE_SPECIALTIES[key]) return PROVINCE_SPECIALTIES[key];
+  const mappedKey = OLD_TO_NEW_PROVINCE[key];
+  if (mappedKey && PROVINCE_SPECIALTIES[mappedKey]) return PROVINCE_SPECIALTIES[mappedKey];
+  return [];
 };
 
 function MapFocus({ selectedCategory, allProducts }) {

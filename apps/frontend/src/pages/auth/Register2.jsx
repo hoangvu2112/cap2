@@ -6,10 +6,52 @@ import { useAuth } from "../../context/AuthContext"
 import AuthLayout from "@/components/AuthLayout"
 import { Sprout } from "lucide-react"
 
+const PROVINCES = [
+  // 6 Thành phố trực thuộc Trung ương
+  "Hà Nội",
+  "Hồ Chí Minh",
+  "Hải Phòng",
+  "Đà Nẵng",
+  "Cần Thơ",
+  "Huế",
+  // Miền Bắc (12 tỉnh)
+  "Quảng Ninh",
+  "Cao Bằng",
+  "Lạng Sơn",
+  "Lai Châu",
+  "Điện Biên",
+  "Sơn La",
+  "Tuyên Quang",
+  "Lào Cai",
+  "Thái Nguyên",
+  "Phú Thọ",
+  "Bắc Ninh",
+  "Hưng Yên",
+  // Miền Trung & Tây Nguyên (8 tỉnh)
+  "Thanh Hóa",
+  "Nghệ An",
+  "Hà Tĩnh",
+  "Ninh Bình",
+  "Quảng Trị",
+  "Quảng Ngãi",
+  "Gia Lai",
+  "Khánh Hòa",
+  // Nam Trung Bộ & Nam Bộ (8 tỉnh)
+  "Lâm Đồng",
+  "Đắk Lắk",
+  "Đồng Nai",
+  "Tây Ninh",
+  "Vĩnh Long",
+  "Đồng Tháp",
+  "An Giang",
+  "Cà Mau",
+]
+
 export default function Register2() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [region, setRegion] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const { register } = useAuth()
@@ -18,10 +60,16 @@ export default function Register2() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError("")
+
+    if (!region) {
+      setError("Vui lòng chọn Tỉnh/Thành phố")
+      return
+    }
+
     setLoading(true)
 
     try {
-      await register(email, password, name)
+      await register(email, password, name, region)
       navigate("/")
     } catch (err) {
       setError(err.response?.data?.error || "Đăng ký thất bại")
@@ -40,7 +88,7 @@ export default function Register2() {
         <span className="font-bold text-xl text-[hsl(148,60%,55%)]">AgroInsight</span>
       </div>
 
-      {/* Heading — chữ xanh */}
+      {/* Heading */}
       <div className="mb-5">
         <h1 className="text-xl font-bold text-[hsl(148,60%,55%)] mb-1">Tạo tài khoản mới</h1>
         <p className="text-[hsl(148,50%,55%)]/60 text-sm">Bắt đầu theo dõi giá nông sản ngay hôm nay</p>
@@ -88,11 +136,27 @@ export default function Register2() {
           />
         </div>
 
+        <div>
+          <label className="block text-xs font-medium text-[hsl(148,60%,55%)]/80 mb-1">
+            Tỉnh/Thành phố <span className="text-red-400">*</span>
+          </label>
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            className="w-full px-3.5 py-2 text-sm border border-white/20 rounded-xl bg-white/10 backdrop-blur-sm text-white focus:ring-2 focus:ring-[hsl(38,85%,55%)]/50 focus:border-transparent transition-all outline-none appearance-none cursor-pointer"
+            required
+          >
+            <option value="" className="bg-gray-800 text-white">-- Chọn Tỉnh/Thành phố --</option>
+            {PROVINCES.map((p) => (
+              <option key={p} value={p} className="bg-gray-800 text-white">{p}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-xs text-[hsl(148,60%,85%)]">
           Tài khoản mới sẽ bắt đầu ở vai trò <span className="font-semibold">Nông dân</span>. Bạn có thể nâng cấp lên <span className="font-semibold">Đại lý</span> sau khi đăng nhập.
         </div>
 
-        {/* Nút đăng ký — màu vàng mật ong */}
         <button
           type="submit"
           disabled={loading}

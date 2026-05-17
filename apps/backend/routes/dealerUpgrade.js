@@ -130,6 +130,7 @@ router.post("/apply", authenticateToken, async (req, res) => {
       representative_name,
       phone_contact,
       business_items,
+      category_ids,
       note
     } = req.body
 
@@ -140,6 +141,12 @@ router.post("/apply", authenticateToken, async (req, res) => {
     // Validation các trường bắt buộc theo quy định
     if (!business_name || !tax_code || !business_address || !representative_name || !phone_contact) {
       return res.status(400).json({ error: "Vui lòng cung cấp đầy đủ thông tin pháp lý đại lý" })
+    }
+
+    // Validation danh mục thu mua bắt buộc
+    const parsedCategoryIds = Array.isArray(category_ids) ? category_ids.map(Number).filter(Boolean) : []
+    if (parsedCategoryIds.length === 0) {
+      return res.status(400).json({ error: "Vui lòng chọn ít nhất 1 danh mục nông sản thu mua" })
     }
 
     const openRequest = await getOpenRequestForUser(req.user.id)
@@ -182,6 +189,17 @@ router.post("/apply", authenticateToken, async (req, res) => {
       `,
       [result.insertId]
     )
+
+    // Lưu danh mục thu mua vào bảng dealer_categories
+    if (parsedCategoryIds.length > 0) {
+      // Xóa danh mục cũ (nếu có) rồi insert mới
+      await pool.query("DELETE FROM dealer_categories WHERE user_id = ?", [req.user.id])
+      const categoryValues = parsedCategoryIds.map(catId => [req.user.id, catId])
+      await pool.query(
+        "INSERT IGNORE INTO dealer_categories (user_id, category_id) VALUES ?",
+        [categoryValues]
+      )
+    }
 
     // Tạo link thanh toán: MoMo / PayOS / Giả lập
     try {
@@ -914,6 +932,68 @@ router.delete("/momo/cancel-return/:id", authenticateToken, async (req, res) => 
   } catch (err) {
     console.error("[MoMo Cancel Return] Lỗi:", err.message)
     res.status(500).json({ error: "Lỗi hệ thống" })
+  }
+})
+
+// ============================================================
+// API quản lý danh mục thu mua của đại lý (dealer_categories)
+// ============================================================
+
+// Lấy danh mục thu mua hiện tại của đại lý
+router.get("/my-categories", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `
+        SELECT dc.category_id, c.name AS category_name
+        FROM dealer_categories dc
+        JOIN categories c ON c.id = dc.category_id
+        WHERE dc.user_id = ?
+        ORDER BY c.name ASC
+      `,
+      [req.user.id]
+    )
+    res.json({ success: true, categories: rows })
+  } catch (error) {
+    console.error("GET /dealer-upgrade/my-categories error:", error)
+    res.status(500).json({ error: "Lỗi máy chủ" })
+  }
+})
+
+// Cập nhật danh mục thu mua (chỉ dealer mới được)
+router.put("/my-categories", authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== "dealer") {
+      return res.status(403).json({ error: "Chỉ đại lý mới có thể cập nhật danh mục thu mua" })
+    }
+
+    const { category_ids } = req.body
+    const parsedIds = Array.isArray(category_ids) ? category_ids.map(Number).filter(Boolean) : []
+
+    if (parsedIds.length === 0) {
+      return res.status(400).json({ error: "Vui lòng chọn ít nhất 1 danh mục" })
+    }
+
+    // Xóa cũ, insert mới
+    await pool.query("DELETE FROM dealer_categories WHERE user_id = ?", [req.user.id])
+    const values = parsedIds.map(catId => [req.user.id, catId])
+    await pool.query("INSERT IGNORE INTO dealer_categories (user_id, category_id) VALUES ?", [values])
+
+    // Trả về danh sách mới
+    const [rows] = await pool.query(
+      `
+        SELECT dc.category_id, c.name AS category_name
+        FROM dealer_categories dc
+        JOIN categories c ON c.id = dc.category_id
+        WHERE dc.user_id = ?
+        ORDER BY c.name ASC
+      `,
+      [req.user.id]
+    )
+
+    res.json({ success: true, categories: rows })
+  } catch (error) {
+    console.error("PUT /dealer-upgrade/my-categories error:", error)
+    res.status(500).json({ error: "Lỗi máy chủ" })
   }
 })
 

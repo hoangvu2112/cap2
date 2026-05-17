@@ -119,7 +119,7 @@ export default function Header2() {
             <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-white/20">
               {user.avatar_url ? (
                 <img
-                  src={user.avatar_url}
+                  src={user.avatar_url.startsWith("http") ? user.avatar_url : `${(import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "")}${user.avatar_url}`}
                   alt={user.name}
                   className="w-8 h-8 rounded-full object-cover border-2 border-white/30"
                 />

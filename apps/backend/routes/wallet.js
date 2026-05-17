@@ -2,6 +2,8 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { calculateTotalFee, splitFee } from "../utils/calculateFee.js";
+import { createMomoPayment } from "../services/momoService.js";
+import crypto from "crypto";
 
 const router = express.Router();
 
@@ -258,6 +260,270 @@ router.get("/invoice-preview/:requestId", authenticateToken, async (req, res) =>
   } catch (error) {
     console.error("GET /wallet/invoice-preview error:", error);
     res.status(500).json({ error: "Lỗi khi lấy thông tin hoá đơn" });
+  }
+});
+
+// ============================================================
+// Nạp tiền qua MoMo
+// ============================================================
+router.post("/deposit", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const amount = Number(req.body.amount);
+
+    if (!amount || amount < 10000) {
+      return res.status(400).json({ error: "Số tiền tối thiểu là 10,000đ" });
+    }
+
+    if (amount > 50000000) {
+      return res.status(400).json({ error: "Số tiền tối đa là 50,000,000đ" });
+    }
+
+    const isSimulate = process.env.PAYMENT_SIMULATE === 'true';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000/api';
+
+    // Tạo orderId unique
+    const orderId = `DEPOSIT_${userId}_${Date.now()}`;
+
+    if (isSimulate) {
+      // Simulate mode: cộng tiền trực tiếp
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        let [[wallet]] = await connection.query(
+          "SELECT * FROM wallets WHERE user_id = ? FOR UPDATE",
+          [userId]
+        );
+
+        if (!wallet) {
+          await connection.query(
+            "INSERT INTO wallets (user_id, balance, bonus_balance) VALUES (?, 0, 0)",
+            [userId]
+          );
+        }
+
+        await connection.query(
+          "UPDATE wallets SET balance = balance + ? WHERE user_id = ?",
+          [amount, userId]
+        );
+
+        await connection.query(
+          `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
+           VALUES (?, ?, 'deposit', 'mock_deposit', 'balance', ?)`,
+          [userId, amount, `Nạp tiền (giả lập) - ${orderId}`]
+        );
+
+        await connection.commit();
+
+        const [[updatedWallet]] = await pool.query("SELECT * FROM wallets WHERE user_id = ?", [userId]);
+        res.json({ 
+          success: true, 
+          message: "Nạp tiền thành công (giả lập)", 
+          new_balance: Number(updatedWallet.balance),
+          simulated: true
+        });
+      } catch (err) {
+        await connection.rollback();
+        throw err;
+      } finally {
+        connection.release();
+      }
+      return;
+    }
+
+    // MoMo thật
+    const momoData = await createMomoPayment({
+      orderId,
+      amount,
+      orderInfo: `Nap tien vi Nong Xu - ${amount.toLocaleString()}d`,
+      redirectUrl: `${frontendUrl}/wallet?momo-deposit=1&amount=${amount}&orderId=${orderId}`,
+      cancelUrl: `${frontendUrl}/wallet?momo-deposit=1&status=cancel`,
+      ipnUrl: `${backendUrl}/wallet/momo/webhook`,
+    });
+
+    const payUrl = momoData.payUrl || momoData.deeplink || momoData.qrCodeUrl || '';
+    const qrCodeUrl = momoData.qrCodeUrl || null;
+
+    res.json({
+      success: true,
+      payUrl,
+      qrCodeUrl,
+      orderId,
+      amount
+    });
+  } catch (error) {
+    console.error("POST /wallet/deposit error:", error);
+    res.status(500).json({ error: "Lỗi tạo giao dịch nạp tiền: " + (error.message || "Unknown") });
+  }
+});
+
+// MoMo Webhook cho nạp tiền ví
+router.post("/momo/webhook", async (req, res) => {
+  try {
+    const {
+      partnerCode, orderId, amount, resultCode, transId,
+      message, signature, requestId, orderInfo, orderType,
+      payType, responseTime, extraData
+    } = req.body;
+
+    // Xác thực chữ ký
+    const secretKey = process.env.MOMO_SECRET_KEY || "K951B6PE1waDMi640xX08PD3vg6EkVlz";
+    const accessKey = process.env.MOMO_ACCESS_KEY || "F8BBA842ECF85";
+
+    const rawSignature =
+      `accessKey=${accessKey}` +
+      `&amount=${amount}` +
+      `&extraData=${extraData}` +
+      `&message=${message}` +
+      `&orderId=${orderId}` +
+      `&orderInfo=${orderInfo}` +
+      `&orderType=${orderType}` +
+      `&partnerCode=${partnerCode}` +
+      `&payType=${payType}` +
+      `&requestId=${requestId}` +
+      `&responseTime=${responseTime}` +
+      `&resultCode=${resultCode}` +
+      `&transId=${transId}`;
+
+    const expectedSig = crypto
+      .createHmac("sha256", secretKey)
+      .update(rawSignature)
+      .digest("hex");
+
+    if (expectedSig !== signature) {
+      console.error("[Wallet MoMo Webhook] Chữ ký không hợp lệ!");
+      return res.status(400).json({ success: false, error: "Invalid signature" });
+    }
+
+    // Chỉ xử lý khi thanh toán thành công
+    if (resultCode !== 0) {
+      console.log(`[Wallet MoMo Webhook] Thanh toán thất bại (resultCode=${resultCode})`);
+      return res.json({ success: true });
+    }
+
+    // Parse userId từ orderId: DEPOSIT_{userId}_{timestamp}
+    const parts = String(orderId).split("_");
+    const userId = Number(parts[1]);
+    const depositAmount = Number(amount);
+
+    if (!userId || !depositAmount) {
+      console.error("[Wallet MoMo Webhook] Không parse được userId/amount từ orderId:", orderId);
+      return res.json({ success: true });
+    }
+
+    // Cộng tiền vào ví
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      let [[wallet]] = await connection.query(
+        "SELECT * FROM wallets WHERE user_id = ? FOR UPDATE",
+        [userId]
+      );
+
+      if (!wallet) {
+        await connection.query(
+          "INSERT INTO wallets (user_id, balance, bonus_balance) VALUES (?, 0, 0)",
+          [userId]
+        );
+      }
+
+      await connection.query(
+        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?",
+        [depositAmount, userId]
+      );
+
+      await connection.query(
+        `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
+         VALUES (?, ?, 'deposit', 'mock_deposit', 'balance', ?)`,
+        [userId, depositAmount, `Nạp tiền MoMo - ${transId}`]
+      );
+
+      await connection.commit();
+      console.log(`✅ [Wallet MoMo Webhook] Đã nạp ${depositAmount}đ cho user ${userId}`);
+    } catch (dbErr) {
+      await connection.rollback();
+      throw dbErr;
+    } finally {
+      connection.release();
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Wallet MoMo Webhook] Lỗi:", error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+// Confirm nạp tiền cho localhost (MoMo redirect về nhưng webhook không gọi được)
+router.post("/deposit/confirm", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { orderId, amount } = req.body;
+    const depositAmount = Number(amount);
+
+    if (!orderId || !depositAmount || depositAmount <= 0) {
+      return res.status(400).json({ error: "Thiếu thông tin giao dịch" });
+    }
+
+    // Kiểm tra orderId có đúng format và thuộc user này không
+    const expectedPrefix = `DEPOSIT_${userId}_`;
+    if (!String(orderId).startsWith(expectedPrefix)) {
+      return res.status(403).json({ error: "Giao dịch không hợp lệ" });
+    }
+
+    // Kiểm tra đã xử lý chưa (tránh duplicate)
+    const [existing] = await pool.query(
+      "SELECT id FROM wallet_transactions WHERE user_id = ? AND note LIKE ?",
+      [userId, `%${orderId}%`]
+    );
+    if (existing.length > 0) {
+      return res.json({ success: true, message: "Giao dịch đã được xử lý trước đó" });
+    }
+
+    // Cộng tiền
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      let [[wallet]] = await connection.query(
+        "SELECT * FROM wallets WHERE user_id = ? FOR UPDATE",
+        [userId]
+      );
+
+      if (!wallet) {
+        await connection.query(
+          "INSERT INTO wallets (user_id, balance, bonus_balance) VALUES (?, 0, 0)",
+          [userId]
+        );
+      }
+
+      await connection.query(
+        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?",
+        [depositAmount, userId]
+      );
+
+      await connection.query(
+        `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
+         VALUES (?, ?, 'deposit', 'mock_deposit', 'balance', ?)`,
+        [userId, depositAmount, `Nạp tiền MoMo - ${orderId}`]
+      );
+
+      await connection.commit();
+    } catch (dbErr) {
+      await connection.rollback();
+      throw dbErr;
+    } finally {
+      connection.release();
+    }
+
+    const [[updatedWallet]] = await pool.query("SELECT * FROM wallets WHERE user_id = ?", [userId]);
+    res.json({ success: true, message: "Nạp tiền thành công", new_balance: Number(updatedWallet.balance) });
+  } catch (error) {
+    console.error("POST /wallet/deposit/confirm error:", error);
+    res.status(500).json({ error: "Lỗi xác nhận nạp tiền" });
   }
 });
 

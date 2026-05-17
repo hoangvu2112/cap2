@@ -245,10 +245,14 @@ router.get("/otp-status", async (req, res) => {
 router.post("/register", async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email)
-    const { password, name } = req.body
+    const { password, name, region } = req.body
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: "Thiếu thông tin đăng ký" })
+    }
+
+    if (!region) {
+      return res.status(400).json({ error: "Vui lòng chọn Tỉnh/Thành phố" })
     }
 
     const normalizedRole = "user"
@@ -262,16 +266,17 @@ router.post("/register", async (req, res) => {
     // Mã hóa mật khẩu
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Thêm user mới
+    // Thêm user mới (bao gồm region)
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, password, avatar_url, role, status, joinDate) VALUES (?, ?, ?, ?, ?, 'active', CURDATE())",
-      [name, email, hashedPassword, "", normalizedRole]
+      "INSERT INTO users (name, email, password, avatar_url, role, region, status, joinDate) VALUES (?, ?, ?, ?, ?, ?, 'active', CURDATE())",
+      [name, email, hashedPassword, "", normalizedRole, region]
     )
 
     const newUser = {
       id: result.insertId,
       email,
       name,
+      region,
       role: normalizedRole,
     }
 
@@ -408,7 +413,7 @@ router.post("/google-login", async (req, res) => {
 router.get("/me", authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT id, name, email, avatar_url, role, status, joinDate FROM users WHERE id = ?",
+      "SELECT id, name, email, avatar_url, region, role, status, joinDate, name_changed_at, name_change_count FROM users WHERE id = ?",
       [req.user.id]
     )
 

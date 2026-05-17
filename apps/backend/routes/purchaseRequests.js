@@ -5,21 +5,21 @@ import { checkActiveRole } from "../middleware/checkActiveRole.js"
 
 const router = express.Router()
 
-// Bản đồ phân vùng 34 tỉnh thành theo miền
+// Bản đồ phân vùng 34 tỉnh thành theo miền (sau sáp nhập 2025)
 const REGION_GROUPS = {
   "Bắc Bộ": [
-    "Hà Nội", "Hải Phòng", "Ninh Bình", "Hưng Yên", "Bắc Ninh",
-    "Quảng Ninh", "Thái Nguyên", "Phú Thọ", "Lào Cai", "Tuyên Quang",
-    "Lạng Sơn", "Điện Biên", "Lai Châu", "Sơn La", "Cao Bằng",
+    "Hà Nội", "Hải Phòng", "Quảng Ninh", "Cao Bằng", "Lạng Sơn",
+    "Lai Châu", "Điện Biên", "Sơn La", "Tuyên Quang", "Lào Cai",
+    "Thái Nguyên", "Phú Thọ", "Bắc Ninh", "Hưng Yên",
   ],
   "Trung Bộ": [
-    "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Quảng Trị", "Huế",
-    "Đà Nẵng", "Quảng Ngãi", "Bình Định", "Gia Lai", "Khánh Hòa",
-    "Lâm Đồng",
+    "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Ninh Bình", "Quảng Trị",
+    "Huế", "Đà Nẵng", "Quảng Ngãi", "Gia Lai", "Khánh Hòa",
+    "Lâm Đồng", "Đắk Lắk",
   ],
   "Nam Bộ": [
-    "Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Đồng Tháp",
-    "An Giang", "Vĩnh Long", "Cà Mau",
+    "Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ",
+    "Vĩnh Long", "Đồng Tháp", "An Giang", "Cà Mau",
   ],
 }
 
@@ -56,34 +56,94 @@ router.get("/partners", authenticateToken, async (req, res) => {
     )
 
     const isDealer = currentRoleRow?.role === 'dealer'
-    const targetRoles = isDealer ? "('user', 'dealer')" : "('dealer')"
 
-    // 4. Truy vấn với 3 cấp ưu tiên:
+    // 4. Lấy category_id của sản phẩm đang xem
+    const [[product]] = await pool.query(
+      "SELECT category_id FROM products WHERE id = ?",
+      [productId]
+    )
+
+    const productCategoryId = product?.category_id || null
+
+    // 5. Truy vấn với 3 cấp ưu tiên + ràng buộc danh mục thu mua
     //    priority 1 = cùng tỉnh, priority 2 = cùng miền, priority 3 = miền khác
-    let sql = `
-      SELECT 
-        u.id, 
-        u.name, 
-        u.avatar_url, 
-        u.role,
-        u.region AS user_region,
-        CASE 
-          WHEN u.region = ? AND u.region IS NOT NULL AND u.region != '' THEN 1
-          WHEN u.region IN (${sameGroupProvinces.map(() => '?').join(',') || "''"}) THEN 2
-          ELSE 3
-        END AS priority_level
-      FROM users u
-      WHERE u.id != ?
-        AND u.status = 'active'
-        AND u.role IN ${targetRoles}
-      ORDER BY priority_level ASC, u.created_at ASC 
-      LIMIT 20
-    `
+    let sql
+    let params
 
-    const params = [userRegion, ...sameGroupProvinces, req.user.id]
+    if (isDealer) {
+      // Đại lý xem sản phẩm → hiển thị nông dân cung ứng (không cần lọc theo dealer_categories)
+      sql = `
+        SELECT 
+          u.id, 
+          u.name, 
+          u.avatar_url, 
+          u.role,
+          u.region AS user_region,
+          CASE 
+            WHEN u.region = ? AND u.region IS NOT NULL AND u.region != '' THEN 1
+            WHEN u.region IN (${sameGroupProvinces.map(() => '?').join(',') || "''"}) THEN 2
+            ELSE 3
+          END AS priority_level
+        FROM users u
+        WHERE u.id != ?
+          AND u.status = 'active'
+          AND u.role IN ('user', 'dealer')
+        ORDER BY priority_level ASC, u.created_at ASC 
+        LIMIT 20
+      `
+      params = [userRegion, ...sameGroupProvinces, req.user.id]
+    } else {
+      // Nông dân xem sản phẩm → chỉ hiển thị đại lý CÓ ĐĂNG KÝ thu mua danh mục này
+      if (productCategoryId) {
+        sql = `
+          SELECT 
+            u.id, 
+            u.name, 
+            u.avatar_url, 
+            u.role,
+            u.region AS user_region,
+            CASE 
+              WHEN u.region = ? AND u.region IS NOT NULL AND u.region != '' THEN 1
+              WHEN u.region IN (${sameGroupProvinces.map(() => '?').join(',') || "''"}) THEN 2
+              ELSE 3
+            END AS priority_level
+          FROM users u
+          INNER JOIN dealer_categories dc ON dc.user_id = u.id AND dc.category_id = ?
+          WHERE u.id != ?
+            AND u.status = 'active'
+            AND u.role = 'dealer'
+          ORDER BY priority_level ASC, u.created_at ASC 
+          LIMIT 20
+        `
+        params = [userRegion, ...sameGroupProvinces, productCategoryId, req.user.id]
+      } else {
+        // Sản phẩm không có category → fallback hiển thị tất cả đại lý (tương thích ngược)
+        sql = `
+          SELECT 
+            u.id, 
+            u.name, 
+            u.avatar_url, 
+            u.role,
+            u.region AS user_region,
+            CASE 
+              WHEN u.region = ? AND u.region IS NOT NULL AND u.region != '' THEN 1
+              WHEN u.region IN (${sameGroupProvinces.map(() => '?').join(',') || "''"}) THEN 2
+              ELSE 3
+            END AS priority_level
+          FROM users u
+          WHERE u.id != ?
+            AND u.status = 'active'
+            AND u.role = 'dealer'
+          ORDER BY priority_level ASC, u.created_at ASC 
+          LIMIT 20
+        `
+        params = [userRegion, ...sameGroupProvinces, req.user.id]
+      }
+    }
+
     const [rows] = await pool.query(sql, params)
 
-    // 5. Thêm thông tin region_group cho mỗi đối tác
+    // 6. Thêm thông tin region_group cho mỗi đối tác
     const result = rows.map(row => ({
       ...row,
       region_group: getRegionGroup(row.user_region) || "Khác",

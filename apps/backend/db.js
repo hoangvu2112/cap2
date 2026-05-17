@@ -74,6 +74,26 @@ const initDB = async () => {
       console.log("✅ Đã thêm cột 'region' vào bảng 'users'.");
     }
 
+    // Đảm bảo cột name_changed_at tồn tại (giới hạn đổi tên)
+    const [nameChangedCol] = await pool.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'name_changed_at'
+    `, [DB_NAME]);
+    if (nameChangedCol.length === 0) {
+      await pool.query("ALTER TABLE users ADD COLUMN name_changed_at DATETIME DEFAULT NULL");
+      console.log("✅ Đã thêm cột 'name_changed_at' vào bảng 'users'.");
+    }
+
+    // Đảm bảo cột name_change_count tồn tại
+    const [nameCountCol] = await pool.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'name_change_count'
+    `, [DB_NAME]);
+    if (nameCountCol.length === 0) {
+      await pool.query("ALTER TABLE users ADD COLUMN name_change_count INT DEFAULT 0");
+      console.log("✅ Đã thêm cột 'name_change_count' vào bảng 'users'.");
+    }
+
     const [userCount] = await pool.query("SELECT COUNT(*) AS c FROM users")
     if (userCount[0].c === 0) {
       await pool.query(`
@@ -918,6 +938,20 @@ const initDB = async () => {
       console.log("✅ Đã nâng cấp enum status cho purchase_requests.")
     } catch { /* Bỏ qua nếu đã tồn tại */ }
 
+
+    // Bảng dealer_categories: lưu danh mục thu mua của đại lý (Many-to-Many)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dealer_categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        category_id INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_dealer_category (user_id, category_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+      )
+    `)
+    console.log("✅ Bảng 'dealer_categories' đã sẵn sàng.")
 
     console.log("✅ Tất cả bảng & dữ liệu mẫu đã được khởi tạo thành công.")
     return pool

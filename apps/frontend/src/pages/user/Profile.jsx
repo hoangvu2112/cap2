@@ -253,6 +253,10 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
+  // Overlay thông báo thanh toán thành công (luôn render trên cùng)
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [paymentError, setPaymentError] = useState("")
+
   // Toast in-page: { title, message } | null
   const [toast, setToast] = useState(null)
   // 'success' | 'error' | 'warning'
@@ -277,10 +281,22 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     }
   })
 
+  // Danh mục thu mua (multi-select)
+  const [availableCategories, setAvailableCategories] = useState([])
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState(() => {
+    const saved = localStorage.getItem("dealer_upgrade_categories")
+    return saved ? JSON.parse(saved) : []
+  })
+
   // Lưu nháp mỗi khi businessData thay đổi
   useEffect(() => {
     localStorage.setItem("dealer_upgrade_draft", JSON.stringify(businessData))
   }, [businessData])
+
+  // Lưu nháp danh mục thu mua
+  useEffect(() => {
+    localStorage.setItem("dealer_upgrade_categories", JSON.stringify(selectedCategoryIds))
+  }, [selectedCategoryIds])
 
   // Data Step 2
   const [selectedPlanId, setSelectedPlanId] = useState("")
@@ -316,6 +332,14 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
       } catch (err) {
         console.error("Lỗi tải lịch sử yêu cầu:", err)
       }
+
+      // Lấy danh sách categories cho multi-select
+      try {
+        const resCats = await api.get("/products/categories")
+        setAvailableCategories(resCats.data || [])
+      } catch (err) {
+        console.error("Lỗi tải danh mục:", err)
+      }
     } finally {
       setLoading(false)
     }
@@ -327,6 +351,7 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     if (!businessData.business_address.trim()) return "Vui lòng nhập địa chỉ trụ sở"
     if (!businessData.representative_name.trim()) return "Vui lòng nhập người đại diện"
     if (!/^\d{10,11}$/.test(businessData.phone_contact)) return "Số điện thoại không hợp lệ (10-11 số)"
+    if (selectedCategoryIds.length === 0) return "Vui lòng chọn ít nhất 1 danh mục nông sản thu mua"
     return null
   }
 
@@ -347,7 +372,8 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
       setError("")
       const res = await api.post("/dealer-upgrade/apply", {
         plan_id: selectedPlanId,
-        ...businessData
+        ...businessData,
+        category_ids: selectedCategoryIds
       })
 
       // Nếu Backend trả về checkoutUrl (PayOS), chuyển hướng người dùng
@@ -357,6 +383,7 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
       }
 
       localStorage.removeItem("dealer_upgrade_draft") // Xóa bản nháp sau khi thành công
+      localStorage.removeItem("dealer_upgrade_categories")
       setOpenRequest(res.data.request)
       setStep(3)
     } catch (err) {
@@ -378,31 +405,38 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     const status = urlParams.get("status")             // PayOS dùng status=success/cancel
     const id = urlParams.get("id")
     const resultCode = urlParams.get("resultCode")     // MoMo append vào URL (0=OK, khác=lỗi)
+    const simulate = urlParams.get("simulate")         // simulate=true khi PAYMENT_SIMULATE=true
+
+    // Không có params thanh toán → bỏ qua
+    if (!momoReturn && !status) return
 
     // Xóa query params ngay để không trigger lại khi F5
     window.history.replaceState({}, document.title, window.location.pathname)
 
-    // ── Xử lý MoMo return (momo-return=1) ──
-    if (momoReturn === "1" && id) {
-      const isSuccess = resultCode === "0"
+    const handlePaymentReturn = async () => {
+      // ── Xử lý MoMo return (momo-return=1) ──
+      if (momoReturn === "1" && id) {
+        const isSuccess = resultCode === "0"
 
-      if (isSuccess) {
-        // ✅ THÀNH CÔNG: hiện thông báo xanh, đợi webhook cập nhật DB, đăng xuất
-        showToast(
-          'success',
-          '🎉 Thanh toán thành công!',
-          'Tài khoản của bạn đã được nâng cấp lên Đại lý.\nBạn sẽ được đăng xuất sau 3 giây — vui lòng đăng nhập lại để kích hoạt quyền Đại lý.'
-        )
-        setTimeout(() => {
-          localStorage.removeItem("token")
-          localStorage.removeItem("user")
-          localStorage.removeItem("dealer_upgrade_draft")
-          window.location.replace("/login")
-        }, 3000)
+        if (isSuccess) {
+          // Gọi API confirm để update role (vì webhook MoMo không gọi được localhost)
+          try {
+            await api.post(`/dealer-upgrade/confirm-local-test/${id}`)
+          } catch (err) {
+            console.warn("[MoMo Confirm] Error:", err?.response?.data?.error || err?.message)
+          }
 
-      } else {
-        // ❌ HỦY / THẤT BẠI: xóa request pending, reset giao diện sạch về step 2
-        const handleCancel = async () => {
+          setPaymentSuccess(true)
+          setTimeout(() => {
+            localStorage.removeItem("token")
+            localStorage.removeItem("user")
+            localStorage.removeItem("dealer_upgrade_draft")
+            localStorage.removeItem("dealer_upgrade_categories")
+            window.location.replace("/login")
+          }, 4000)
+
+        } else {
+          // ❌ HỦY / THẤT BẠI
           try {
             await api.delete(`/dealer-upgrade/momo/cancel-return/${id}`)
           } catch (err) {
@@ -414,27 +448,32 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
           const msg = resultCode === "1006"
             ? "Bạn đã hủy thanh toán. Vui lòng chọn gói và thử lại."
             : `Giao dịch không thành công (mã ${resultCode || "N/A"}). Vui lòng thử lại.`
-          showToast('error', 'Thanh toán không thành công', msg)
+          setPaymentError(msg)
         }
-        handleCancel()
-      }
 
-    // ── Xử lý PayOS return (status=success/cancel) ──
-    } else if (status === "success" && id) {
-      showToast(
-        'success',
-        '🎉 Thanh toán thành công!',
-        'Tài khoản của bạn đã được nâng cấp lên Đại lý.\nBạn sẽ được đăng xuất sau 3 giây — vui lòng đăng nhập lại để kích hoạt quyền Đại lý.'
-      )
-      setTimeout(() => {
-        localStorage.removeItem("token")
-        localStorage.removeItem("user")
-        localStorage.removeItem("dealer_upgrade_draft")
-        window.location.replace("/login")
-      }, 3000)
+      // ── Xử lý PayOS / Simulate return (status=success/cancel) ──
+      } else if (status === "success" && id) {
+        // Gọi API để update role trong DB
+        try {
+          if (simulate === "true") {
+            await api.post(`/dealer-upgrade/simulate-success/${id}`)
+          } else {
+            await api.post(`/dealer-upgrade/confirm-local-test/${id}`)
+          }
+        } catch (err) {
+          console.warn("[Payment Confirm] Error:", err?.response?.data?.error || err?.message)
+        }
 
-    } else if (status === "cancel" && id) {
-      const handleCancel = async () => {
+        setPaymentSuccess(true)
+        setTimeout(() => {
+          localStorage.removeItem("token")
+          localStorage.removeItem("user")
+          localStorage.removeItem("dealer_upgrade_draft")
+          localStorage.removeItem("dealer_upgrade_categories")
+          window.location.replace("/login")
+        }, 4000)
+
+      } else if (status === "cancel" && id) {
         try {
           await api.delete(`/dealer-upgrade/momo/cancel-return/${id}`)
         } catch (err) {
@@ -443,10 +482,11 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
         setOpenRequest(null)
         setStep(2)
         await loadData()
-        showToast('error', 'Thanh toán không thành công', 'Bạn đã hủy thanh toán. Vui lòng chọn gói và thử lại.')
+        setPaymentError("Bạn đã hủy thanh toán. Vui lòng chọn gói và thử lại.")
       }
-      handleCancel()
     }
+
+    handlePaymentReturn()
   }, [])
 
 
@@ -504,6 +544,48 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   }
 
   if (user?.role === "admin") return null
+
+  // ===== OVERLAY THÔNG BÁO THANH TOÁN (luôn render trên cùng) =====
+  if (paymentSuccess) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 text-center shadow-2xl animate-in zoom-in duration-300">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-10 h-10 text-emerald-600" />
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 mb-2">🎉 Thanh toán thành công!</h2>
+          <p className="text-gray-600 mb-4">
+            Tài khoản của bạn đã được nâng cấp lên <span className="font-bold text-emerald-600">Đại lý</span>.
+          </p>
+          <p className="text-sm text-gray-500">
+            Bạn sẽ được đăng xuất sau vài giây — vui lòng đăng nhập lại để kích hoạt quyền Đại lý.
+          </p>
+          <div className="mt-4">
+            <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full animate-[shrink_4s_linear_forwards]" style={{ width: '100%', animation: 'shrink 4s linear forwards' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (paymentError) {
+    return (
+      <Card className="border-red-200 bg-red-50/30 rounded-3xl overflow-hidden">
+        <CardContent className="p-6 text-center">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <X className="w-6 h-6 text-red-600" />
+          </div>
+          <h3 className="text-lg font-bold text-red-800 mb-2">Thanh toán không thành công</h3>
+          <p className="text-sm text-red-600 mb-4">{paymentError}</p>
+          <Button onClick={() => setPaymentError("")} variant="outline" className="rounded-xl">
+            Thử lại
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   // Tìm yêu cầu đã được duyệt hoặc đang chờ xử lý
   const activeReq = requests.find(r => r.status === "approved" && new Date(r.expires_at) > new Date())
@@ -759,13 +841,42 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
                 />
               </div>
               <div className="md:col-span-2 space-y-1.5">
-                <Label className="ml-3 font-bold text-gray-600">Mặt hàng kinh doanh chính</Label>
-                <Input
-                  className="h-12 rounded-2xl bg-gray-50 border-gray-700 placeholder:text-gray-400 font-semibold"
-                  placeholder="Ví dụ: Cà phê, hồ tiêu, sầu riêng..."
-                  value={businessData.business_items}
-                  onChange={e => setBusinessData({ ...businessData, business_items: e.target.value })}
-                />
+                <Label className="ml-3 font-bold text-gray-600">Danh mục nông sản thu mua *</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-4 rounded-2xl bg-gray-50 border border-gray-200">
+                  {availableCategories.length === 0 ? (
+                    <p className="text-sm text-gray-400 col-span-full">Đang tải danh mục...</p>
+                  ) : (
+                    availableCategories.map((cat) => (
+                      <label
+                        key={cat.id}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all border ${
+                          selectedCategoryIds.includes(cat.id)
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                            : "bg-white border-gray-100 text-gray-600 hover:border-emerald-200 hover:bg-emerald-50/50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCategoryIds.includes(cat.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCategoryIds(prev => [...prev, cat.id])
+                            } else {
+                              setSelectedCategoryIds(prev => prev.filter(id => id !== cat.id))
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-sm font-semibold">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {selectedCategoryIds.length > 0 && (
+                  <p className="text-xs text-emerald-600 font-medium ml-3">
+                    Đã chọn {selectedCategoryIds.length} danh mục
+                  </p>
+                )}
               </div>
             </div>
 
@@ -838,35 +949,60 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
 }
 
 const VIETNAM_PROVINCES = [
-  // Bắc Bộ (15)
-  "Hà Nội", "Hải Phòng", "Ninh Bình", "Hưng Yên", "Bắc Ninh",
-  "Quảng Ninh", "Thái Nguyên", "Phú Thọ", "Lào Cai", "Tuyên Quang",
-  "Lạng Sơn", "Điện Biên", "Lai Châu", "Sơn La", "Cao Bằng",
-  // Trung Bộ (11)
-  "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Quảng Trị", "Huế",
-  "Đà Nẵng", "Quảng Ngãi", "Bình Định", "Gia Lai", "Khánh Hòa",
-  "Lâm Đồng",
-  // Nam Bộ (8)
-  "Hồ Chí Minh", "Đồng Nai", "Tây Ninh", "Cần Thơ", "Đồng Tháp",
-  "An Giang", "Vĩnh Long", "Cà Mau",
+  // 6 Thành phố trực thuộc Trung ương
+  "Hà Nội", "Hồ Chí Minh", "Hải Phòng", "Đà Nẵng", "Cần Thơ", "Huế",
+  // Miền Bắc (12 tỉnh)
+  "Quảng Ninh", "Cao Bằng", "Lạng Sơn", "Lai Châu", "Điện Biên", "Sơn La",
+  "Tuyên Quang", "Lào Cai", "Thái Nguyên", "Phú Thọ", "Bắc Ninh", "Hưng Yên",
+  // Miền Trung & Tây Nguyên (8 tỉnh)
+  "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Ninh Bình", "Quảng Trị",
+  "Quảng Ngãi", "Gia Lai", "Khánh Hòa",
+  // Nam Trung Bộ & Nam Bộ (8 tỉnh)
+  "Lâm Đồng", "Đắk Lắk", "Đồng Nai", "Tây Ninh",
+  "Vĩnh Long", "Đồng Tháp", "An Giang", "Cà Mau",
 ];
 
 export default function Profile() {
   const { user, setUser } = useAuth()
   const [name, setName] = useState(user?.name || "")
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || "")
   const [region, setRegion] = useState(user?.region || "")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef(null)
 
   useEffect(() => {
     if (user) {
       setName(user.name || "")
-      setAvatarUrl(user.avatar_url || "")
       setRegion(user.region || "")
     }
   }, [user])
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setUploadingAvatar(true)
+      setError("")
+      const formData = new FormData()
+      formData.append("avatar", file)
+
+      const res = await api.post("/users/me/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      })
+
+      setUser(res.data)
+      localStorage.setItem("user", JSON.stringify(res.data))
+      setMessage("Cập nhật ảnh đại diện thành công!")
+    } catch (err) {
+      setError(err.response?.data?.error || "Lỗi khi upload ảnh")
+    } finally {
+      setUploadingAvatar(false)
+      e.target.value = ""
+    }
+  }
 
   const handleSave = async () => {
     if (!user) {
@@ -879,11 +1015,7 @@ export default function Profile() {
       setMessage("")
       setError("")
 
-      const res = await api.put("/users/me", {
-        name,
-        avatar_url: avatarUrl,
-        region,
-      })
+      const res = await api.put("/users/me", { name, region })
 
       setUser(res.data)
       localStorage.setItem("user", JSON.stringify(res.data))
@@ -896,6 +1028,31 @@ export default function Profile() {
     }
   }
 
+  // Tính toán trạng thái đổi tên
+  const getNameChangeInfo = () => {
+    if (!user?.name_changed_at) return { canChange: true, remaining: 3 }
+    const lastChanged = new Date(user.name_changed_at)
+    const now = new Date()
+    const diffMs = now - lastChanged
+    const diffMinutes = diffMs / (1000 * 60)
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+    const count = user.name_change_count || 0
+
+    if (diffDays >= 30) return { canChange: true, remaining: 3 }
+    if (diffMinutes <= 15 && count < 3) return { canChange: true, remaining: 3 - count }
+    if (diffMinutes > 15) {
+      const unlockDate = new Date(lastChanged.getTime() + 30 * 24 * 60 * 60 * 1000)
+      return { canChange: false, remaining: 0, unlockDate }
+    }
+    return { canChange: false, remaining: 0 }
+  }
+
+  const nameInfo = getNameChangeInfo()
+
+  const avatarSrc = user?.avatar_url
+    ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, "") || "http://localhost:5000"}${user.avatar_url}`)
+    : null
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -903,18 +1060,39 @@ export default function Profile() {
         <h1 className="text-3xl font-bold text-foreground mb-6">Hồ sơ cá nhân</h1>
 
         <div className="bg-card rounded-xl shadow-sm p-6 space-y-6">
+          {/* Avatar - click để upload */}
           <div className="flex items-center gap-4">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="Avatar"
-                className="w-20 h-20 rounded-full object-cover border border-border"
-              />
-            ) : (
-              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
-                <User className="w-10 h-10 text-muted-foreground" />
+            <div
+              className="relative cursor-pointer group"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="Avatar"
+                  className="w-20 h-20 rounded-full object-cover border-2 border-border group-hover:border-primary transition-colors"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors border-2 border-dashed border-border group-hover:border-primary">
+                  <User className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
+              )}
+              <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="text-white text-xs font-bold">Đổi ảnh</span>
               </div>
-            )}
+              {uploadingAvatar && (
+                <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
 
             <div>
               <h2 className="text-lg font-semibold text-foreground">
@@ -927,17 +1105,27 @@ export default function Profile() {
                     ? "Đại lý"
                     : "Nông dân"}
               </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Nhấn vào ảnh để thay đổi</p>
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
               Tên hiển thị
+              {nameInfo.canChange ? (
+                <span className="text-xs text-muted-foreground ml-2">(Còn {nameInfo.remaining} lượt đổi trong 15 phút)</span>
+              ) : (
+                <span className="text-xs text-red-500 ml-2">
+                  (Đã khóa — mở lại {nameInfo.unlockDate?.toLocaleDateString("vi-VN") || "sau 30 ngày"})
+                </span>
+              )}
             </label>
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={!nameInfo.canChange}
+              className={!nameInfo.canChange ? "opacity-60 cursor-not-allowed" : ""}
             />
           </div>
 
@@ -959,22 +1147,10 @@ export default function Profile() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Avatar URL
-            </label>
-            <Input
-              type="text"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="https://example.com/avatar.jpg"
-            />
-          </div>
-
           {message && <p className="text-sm text-green-600">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || (!nameInfo.canChange && name !== user?.name)}>
             {saving ? "Đang lưu..." : "Lưu thay đổi"}
           </Button>
         </div>
