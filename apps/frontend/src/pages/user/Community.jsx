@@ -158,25 +158,46 @@ export default function Community() {
   }
 
   const handlePost = async () => {
-    if (!newPost.trim() && images.length === 0) return
+    if (!newPost.trim() && images.length === 0) {
+      alert("Vui lòng nhập nội dung hoặc chọn ảnh để đăng bài")
+      return
+    }
     if (isSubmitting) return
 
     setIsSubmitting(true)
     try {
       const formData = new FormData()
-      formData.append("content", newPost)
+      formData.append("content", newPost.trim() || "")
       formData.append("tags", JSON.stringify(selectedTags))
       images.forEach((img) => formData.append("images", img.file))
 
-      await api.post("/community/posts", formData)
+      console.log("Đang gửi bài viết...", {
+        content: newPost.trim(),
+        tags: selectedTags,
+        imageCount: images.length
+      })
+
+      const response = await api.post("/community/posts", formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      console.log("Đăng bài thành công:", response.data)
 
       setNewPost("")
       setImages([])
       setSelectedTags([])
       setShowTagSelector(false)
+      
+      // Refresh posts list
+      await fetchPosts()
     } catch (error) {
       console.error("Lỗi đăng bài:", error)
-      alert("Không thể đăng bài lúc này. Vui lòng thử lại.")
+      console.error("Chi tiết lỗi:", error.response?.data)
+      
+      const errorMessage = error.response?.data?.error || "Không thể đăng bài lúc này. Vui lòng thử lại."
+      alert(errorMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -229,7 +250,6 @@ export default function Community() {
                         {selectedTags.map((tag) => (
                           <Badge key={tag} className="bg-orange-50 text-orange-600 border-none px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
                             #{tag}
-                            <X className="h-3 w-3 cursor-pointer hover:text-orange-800" onClick={() => toggleTag(tag)} />
                           </Badge>
                         ))}
                       </div>

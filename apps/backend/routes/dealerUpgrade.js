@@ -202,7 +202,8 @@ router.post("/apply", authenticateToken, async (req, res) => {
           orderId: `${orderCode}_${Date.now()}`,
           amount: Number(created.price_vnd || 0),
           orderInfo: `Nang cap dai ly AgriTrend #${orderCode}`,
-          redirectUrl: `${frontendUrl}/profile?status=success&id=${orderCode}`,
+          redirectUrl: `${frontendUrl}/profile?momo-return=1&id=${orderCode}`,
+          cancelUrl: `${frontendUrl}/profile?momo-return=1&id=${orderCode}`,
           ipnUrl: `${backendUrl}/dealer-upgrade/momo/webhook`,
         })
         const paymentUrl = momoData.payUrl || momoData.deeplink || null
@@ -453,7 +454,9 @@ router.post("/:id/select-plan", authenticateToken, async (req, res) => {
         orderId: `${orderCode}_${Date.now()}`,
         amount: Number(plan.price_vnd),
         orderInfo: `Nang cap dai ly AgriTrend #${orderCode}`,
-        redirectUrl: `${frontendUrl}/profile?status=success&id=${orderCode}`,
+        // MoMo append resultCode vào redirectUrl cho cả success (0) và cancel/fail (!= 0)
+        redirectUrl: `${frontendUrl}/profile?momo-return=1&id=${orderCode}`,
+        cancelUrl: `${frontendUrl}/profile?momo-return=1&id=${orderCode}`,
         ipnUrl: `${backendUrl}/dealer-upgrade/momo/webhook`,
       })
       checkoutUrl = momoData.payUrl || momoData.deeplink || momoData.qrCodeUrl || ''
@@ -874,6 +877,43 @@ router.post("/momo/webhook", async (req, res) => {
   } catch (error) {
     console.error("[MoMo Webhook] Lỗi:", error.message)
     res.json({ success: false, error: error.message })
+  }
+})
+
+// ============================================================
+// MoMo Cancel Return — Xóa yêu cầu pending khi user hủy MoMo
+// Frontend gọi khi nhận ?status=cancel&id=...
+// ============================================================
+router.delete("/momo/cancel-return/:id", authenticateToken, async (req, res) => {
+  const requestId = Number(req.params.id)
+  if (!requestId) return res.status(400).json({ error: "Invalid request id" })
+
+  try {
+    const [[requestRow]] = await pool.query(
+      "SELECT id, user_id, status FROM dealer_upgrade_requests WHERE id = ? LIMIT 1",
+      [requestId]
+    )
+
+    if (!requestRow) {
+      // Đã xóa rồi thì OK
+      return res.json({ success: true, message: "Request not found (already removed)" })
+    }
+
+    // Chỉ cho phép xóa nếu thuộc về user này và đang chờ thanh toán
+    if (Number(requestRow.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Bạn không có quyền hủy yêu cầu này" })
+    }
+
+    if (requestRow.status !== "pending_payment") {
+      return res.status(400).json({ error: "Không thể hủy yêu cầu đã được xử lý" })
+    }
+
+    await pool.query("DELETE FROM dealer_upgrade_requests WHERE id = ?", [requestId])
+    console.log(`[MoMo Cancel] Đã xóa yêu cầu #${requestId} của user #${req.user.id}`)
+    res.json({ success: true })
+  } catch (err) {
+    console.error("[MoMo Cancel Return] Lỗi:", err.message)
+    res.status(500).json({ error: "Lỗi hệ thống" })
   }
 })
 

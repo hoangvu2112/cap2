@@ -446,21 +446,24 @@ router.post("/posts", authenticateToken, upload.array("images", 5), async (req, 
       imageUrls = req.files.map((file) => `/uploads/community/${file.filename}`)
     }
 
-    if (!content?.trim()) {
-      return res.status(400).json({ error: "Nội dung không được để trống" })
+    // Cho phép đăng bài chỉ có ảnh hoặc chỉ có nội dung
+    if (!content?.trim() && imageUrls.length === 0) {
+      return res.status(400).json({ error: "Vui lòng nhập nội dung hoặc chọn ảnh" })
     }
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
     const imagesToSave = JSON.stringify(imageUrls)
+    const contentToSave = content?.trim() || ""
 
+    // Sử dụng image_url thay vì images (theo schema DB)
     const [result] = await pool.query(
-      "INSERT INTO community_posts (user_id, content, tags, images) VALUES (?, ?, ?, ?)",
-      [userId, content, tagsToSave, imagesToSave]
+      "INSERT INTO community_posts (user_id, content, tags, image_url) VALUES (?, ?, ?, ?)",
+      [userId, contentToSave, tagsToSave, imagesToSave]
     )
 
     const [[newPost]] = await pool.query(
       `
-        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -485,7 +488,7 @@ router.get("/posts/featured", async (req, res) => {
     const [rows] = await pool.query(
       `
         SELECT
-          p.*, p.images AS image_url,
+          p.*,
           u.name AS author_name,
           u.avatar_url,
           (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
@@ -510,7 +513,7 @@ router.get("/posts/:id", async (req, res) => {
 
     const [[post]] = await pool.query(
       `
-        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?
@@ -573,14 +576,15 @@ router.put("/posts/:id", authenticateToken, upload.array("images", 5), async (re
 
     const tagsToSave = typeof tags === "string" ? tags : JSON.stringify(tags || [])
 
+    // Sử dụng image_url thay vì images (theo schema DB)
     await pool.query(
-      "UPDATE community_posts SET content = ?, tags = ?, images = ? WHERE id = ?",
+      "UPDATE community_posts SET content = ?, tags = ?, image_url = ? WHERE id = ?",
       [content, tagsToSave, JSON.stringify(finalImageUrls), postId]
     )
 
     const [[updated]] = await pool.query(
       `
-        SELECT p.*, p.images AS image_url, u.name AS author_name, u.avatar_url
+        SELECT p.*, u.name AS author_name, u.avatar_url
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
         WHERE p.id = ?

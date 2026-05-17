@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Navbar from "../../components/Navbar"
 import { useAuth } from "../../context/AuthContext"
-import { User, X } from "lucide-react" // <-- THÊM ICON 'X'
+import { User, X, AlertTriangle, XCircle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import api from "../../lib/api"
@@ -23,6 +23,79 @@ import {
   Clock,
   History
 } from "lucide-react"
+
+
+function PaymentAlert({ type = 'error', title, message, onClose, autoCloseMs }) {
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (autoCloseMs && onClose) {
+      timerRef.current = setTimeout(onClose, autoCloseMs)
+    }
+    return () => clearTimeout(timerRef.current)
+  }, [autoCloseMs, onClose])
+
+  const styles = {
+    success: {
+      wrapper: 'bg-emerald-50 border-emerald-300 shadow-emerald-100',
+      icon: <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />,
+      title: 'text-emerald-800',
+      message: 'text-emerald-700',
+      close: 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-100',
+      bar: 'bg-emerald-500',
+    },
+    error: {
+      wrapper: 'bg-red-50 border-red-300 shadow-red-100',
+      icon: <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />,
+      title: 'text-red-800',
+      message: 'text-red-700',
+      close: 'text-red-400 hover:text-red-600 hover:bg-red-100',
+      bar: 'bg-red-500',
+    },
+    warning: {
+      wrapper: 'bg-amber-50 border-amber-300 shadow-amber-100',
+      icon: <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />,
+      title: 'text-amber-800',
+      message: 'text-amber-700',
+      close: 'text-amber-400 hover:text-amber-600 hover:bg-amber-100',
+      bar: 'bg-amber-500',
+    },
+  }
+
+  const s = styles[type] || styles.error
+
+  return (
+    <div
+      className={cn(
+        'relative flex gap-3 rounded-2xl border-2 px-5 py-4 shadow-md text-left animate-in fade-in slide-in-from-top-2 duration-300',
+        s.wrapper
+      )}
+    >
+      {/* Thanh màu bên trái */}
+      <div className={cn('absolute left-0 top-0 h-full w-1.5 rounded-l-2xl', s.bar)} />
+
+      {/* Icon */}
+      {s.icon}
+
+      {/* Nội dung */}
+      <div className="flex-1 min-w-0 pl-1">
+        {title && <p className={cn('font-black text-sm leading-snug mb-0.5', s.title)}>{title}</p>}
+        <p className={cn('text-sm font-medium leading-relaxed whitespace-pre-line', s.message)}>{message}</p>
+      </div>
+
+      {/* Nút đóng */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className={cn('flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors mt-0.5', s.close)}
+          aria-label="Đóng thông báo"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
 
 
 function CostManager() {
@@ -180,6 +253,17 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
+  // Toast in-page: { title, message } | null
+  const [toast, setToast] = useState(null)
+  // 'success' | 'error' | 'warning'
+  const [toastType, setToastType] = useState('error')
+
+  const showToast = (type, title, message, autoCloseMs) => {
+    setToastType(type)
+    setToast({ title, message, autoCloseMs })
+  }
+  const closeToast = () => setToast(null)
+
   // Form Data Step 1 - Tự động load từ localStorage nếu có
   const [businessData, setBusinessData] = useState(() => {
     const saved = localStorage.getItem("dealer_upgrade_draft")
@@ -282,36 +366,100 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
     }
   }
 
-  // Xử lý các tham số trả về từ PayOS (status=success/cancel)
+  // ============================================================
+  // Xử lý kết quả redirect từ MoMo / PayOS
+  // MoMo luôn redirect về cùng 1 URL (redirectUrl hoặc cancelUrl)
+  // và append các param: resultCode, orderId, message, ...
+  // resultCode=0 → thành công | resultCode!=0 → hủy / thất bại
+  // ============================================================
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
-    const status = urlParams.get("status")
+    const momoReturn = urlParams.get("momo-return")   // marker URL generic của MoMo
+    const status = urlParams.get("status")             // PayOS dùng status=success/cancel
     const id = urlParams.get("id")
+    const resultCode = urlParams.get("resultCode")     // MoMo append vào URL (0=OK, khác=lỗi)
 
-    if (status === "success") {
-      setMessage("Thanh toán thành công! Tài khoản của bạn đang được nâng cấp.")
-      // Xóa query params để không hiện lại message khi F5
-      window.history.replaceState({}, document.title, window.location.pathname)
-      // Tải lại dữ liệu sau 1.5s để cập nhật role mới
+    // Xóa query params ngay để không trigger lại khi F5
+    window.history.replaceState({}, document.title, window.location.pathname)
+
+    // ── Xử lý MoMo return (momo-return=1) ──
+    if (momoReturn === "1" && id) {
+      const isSuccess = resultCode === "0"
+
+      if (isSuccess) {
+        // ✅ THÀNH CÔNG: hiện thông báo xanh, đợi webhook cập nhật DB, đăng xuất
+        showToast(
+          'success',
+          '🎉 Thanh toán thành công!',
+          'Tài khoản của bạn đã được nâng cấp lên Đại lý.\nBạn sẽ được đăng xuất sau 3 giây — vui lòng đăng nhập lại để kích hoạt quyền Đại lý.'
+        )
+        setTimeout(() => {
+          localStorage.removeItem("token")
+          localStorage.removeItem("user")
+          localStorage.removeItem("dealer_upgrade_draft")
+          window.location.replace("/login")
+        }, 3000)
+
+      } else {
+        // ❌ HỦY / THẤT BẠI: xóa request pending, reset giao diện sạch về step 2
+        const handleCancel = async () => {
+          try {
+            await api.delete(`/dealer-upgrade/momo/cancel-return/${id}`)
+          } catch (err) {
+            console.warn("[MoMo Cancel] Delete request:", err?.response?.data?.error || err?.message)
+          }
+          setOpenRequest(null)
+          setStep(2)
+          await loadData()
+          const msg = resultCode === "1006"
+            ? "Bạn đã hủy thanh toán. Vui lòng chọn gói và thử lại."
+            : `Giao dịch không thành công (mã ${resultCode || "N/A"}). Vui lòng thử lại.`
+          showToast('error', 'Thanh toán không thành công', msg)
+        }
+        handleCancel()
+      }
+
+    // ── Xử lý PayOS return (status=success/cancel) ──
+    } else if (status === "success" && id) {
+      showToast(
+        'success',
+        '🎉 Thanh toán thành công!',
+        'Tài khoản của bạn đã được nâng cấp lên Đại lý.\nBạn sẽ được đăng xuất sau 3 giây — vui lòng đăng nhập lại để kích hoạt quyền Đại lý.'
+      )
       setTimeout(() => {
-        loadData()
-        refreshMyProfile()
-      }, 1500)
-    } else if (status === "cancel") {
-      setError("Bạn đã hủy thanh toán. Bạn có thể thử lại bất cứ lúc nào.")
-      window.history.replaceState({}, document.title, window.location.pathname)
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        localStorage.removeItem("dealer_upgrade_draft")
+        window.location.replace("/login")
+      }, 3000)
+
+    } else if (status === "cancel" && id) {
+      const handleCancel = async () => {
+        try {
+          await api.delete(`/dealer-upgrade/momo/cancel-return/${id}`)
+        } catch (err) {
+          console.warn("[Cancel] Delete request:", err?.response?.data?.error || err?.message)
+        }
+        setOpenRequest(null)
+        setStep(2)
+        await loadData()
+        showToast('error', 'Thanh toán không thành công', 'Bạn đã hủy thanh toán. Vui lòng chọn gói và thử lại.')
+      }
+      handleCancel()
     }
   }, [])
+
+
 
   const markPaid = async (id) => {
     try {
       setSubmitting(true)
       const res = await api.post(`/dealer-upgrade/${id}/mark-paid`)
       setOpenRequest(res.data.request)
-      alert("Đã gửi xác nhận thanh toán. Vui lòng chờ Admin duyệt hồ sơ.")
+      showToast('warning', 'Xác nhận thanh toán', 'Đã gửi xác nhận thanh toán. Vui lòng chờ Admin duyệt hồ sơ.')
       loadData()
     } catch (err) {
-      alert(err.response?.data?.error || "Lỗi xác nhận thanh toán")
+      showToast('error', 'Lỗi', err.response?.data?.error || 'Lỗi xác nhận thanh toán')
     } finally {
       setSubmitting(false)
     }
@@ -326,7 +474,7 @@ function DealerUpgradeCard({ user, onRoleUpdated }) {
       setStep(1)
       loadData()
     } catch (err) {
-      alert(err.response?.data?.error || "Không thể hủy yêu cầu")
+      showToast('error', 'Lỗi', err.response?.data?.error || 'Không thể hủy yêu cầu')
     } finally {
       setSubmitting(false)
     }

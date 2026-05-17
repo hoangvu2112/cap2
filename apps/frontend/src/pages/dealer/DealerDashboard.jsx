@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { TrendingUp, TrendingDown, Heart, Search } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Search } from "lucide-react"
 import Navbar from "@/components/Navbar"
 import Footer from "@/components/Footer"
 import { Button } from "@/components/ui/button"
@@ -11,13 +11,12 @@ import api from "@/lib/api"
 import LivePriceTicker from "@/components/live-price-ticker.jsx"
 import PriceCard from "@/components/PriceCard"
 import { io } from "socket.io-client"
-// import { socket } from "@/socket"
-const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000")
 
 export default function Dashboard() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedRegion, setSelectedRegion] = useState("all")
   const [regions, setRegions] = useState(["all"])
@@ -29,55 +28,90 @@ export default function Dashboard() {
   const [totalPages, setTotalPages] = useState(1)
   const [categories, setCategories] = useState(["all"])
 
-  const fetchCategories = async () => {
-    try {
-      const res = await api.get("/products/categories") //
-      setCategories(["all", ...res.data.map(c => c.name)])
-    } catch (error) {
-      console.error("⚠️ Failed to fetch categories:", error)
-    }
-  }
+  // Cache favorites & costs (chỉ fetch 1 lần)
+  const [favoriteIds, setFavoriteIds] = useState([])
+  const [userCosts, setUserCosts] = useState(new Map())
+  const hasFetchedUserData = useRef(false)
 
-  const fetchRegions = async () => {
-    try {
-      const res = await api.get("/products/all")
-      const unique = Array.from(new Set((res.data || []).map((item) => item.region).filter(Boolean)))
-      setRegions(["all", ...unique])
-    } catch (error) {
-      console.error("⚠️ Failed to fetch regions:", error)
-    }
-  }
+  const socketRef = useRef(null)
 
+  // Debounce search - chờ 400ms sau khi user ngừng gõ mới gọi API
   useEffect(() => {
-    fetchProducts()
-    fetchCategories()
-    fetchRegions()
-    // socket.onAny((event, data) => {
-    //   console.log("📥 nhận event bất kỳ:", event, data);
-    // });
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setPage(1)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
-    socket.on("productAdded", (newProduct) => {
+  // Fetch categories & regions song song (chỉ 1 lần)
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [catRes, regionRes] = await Promise.all([
+          api.get("/products/categories"),
+          api.get("/products/regions")
+        ])
+        setCategories(["all", ...catRes.data.map(c => c.name)])
+        setRegions(["all", ...(regionRes.data || [])])
+      } catch (error) {
+        console.error("⚠️ Failed to fetch initial data:", error)
+      }
+    }
+    fetchInitialData()
+  }, [])
+
+  // Fetch favorites & costs 1 lần duy nhất
+  useEffect(() => {
+    if (hasFetchedUserData.current) return
+    const token = localStorage.getItem("token")
+    if (!token) return
+
+    hasFetchedUserData.current = true
+    const fetchUserData = async () => {
+      try {
+        const [favRes, costRes] = await Promise.all([
+          api.get("/favorites"),
+          api.get("/costs")
+        ])
+        setFavoriteIds(favRes.data.map(f => f.productId))
+        const costsMap = new Map()
+        costRes.data.forEach(c => costsMap.set(c.product_id, c.cost_price))
+        setUserCosts(costsMap)
+      } catch (err) {
+        console.warn("⚠️ Không thể tải favorites/costs:", err)
+      }
+    }
+    fetchUserData()
+  }, [])
+
+  // Socket.io - khởi tạo 1 lần, cleanup khi unmount
+  useEffect(() => {
+    const socketUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/api\/?$/, "")
+    socketRef.current = io(socketUrl, { transports: ["websocket", "polling"] })
+
+    socketRef.current.on("productAdded", (newProduct) => {
       setProducts((prev) => [...prev, newProduct])
     })
 
-    socket.on("productDeleted", (deleted) => {
+    socketRef.current.on("productDeleted", (deleted) => {
       setProducts((prev) => prev.filter((p) => p.id !== deleted.id))
     })
 
     return () => {
-      socket.off("productAdded")
-      socket.off("productDeleted")
+      socketRef.current?.disconnect()
     }
   }, [])
 
-  const fetchProducts = async () => {
+  // Fetch products - chỉ khi filter/page thay đổi
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
 
-      const response = await api.get("/products", { //
+      const response = await api.get("/products", {
         params: {
           page,
-          search: searchQuery,
+          search: debouncedSearch || undefined,
           category: selectedCategory === "all" ? undefined : selectedCategory,
           region: selectedRegion === "all" ? undefined : selectedRegion,
           harvestFrom: harvestFrom || undefined,
@@ -87,56 +121,30 @@ export default function Dashboard() {
         },
       })
 
-      const { data, totalPages } = response.data
-
-      const token = localStorage.getItem("token")
-      let favoriteIds = []
-      let userCosts = new Map()
-
-      if (token) {
-        try {
-          const [favResponse, costResponse] = await Promise.all([
-            api.get("/favorites"), //
-            // --- SỬA LỖI Ở ĐÂY: Bỏ "/api" ---
-            api.get("/costs")
-          ]);
-
-          favoriteIds = favResponse.data.map(f => f.productId)
-
-          costResponse.data.forEach(c => {
-            userCosts.set(c.product_id, c.cost_price);
-          });
-
-        } catch (err) {
-          console.warn("⚠️ Không thể tải danh sách yêu thích hoặc chi phí:", err)
-        }
-      }
+      const { data, totalPages: tp } = response.data
 
       const merged = data.map(p => {
-        const productId = p.id || p.productId;
-        const userCost = userCosts.get(productId) || 0;
-
+        const productId = p.id || p.productId
         return {
           ...p,
           id: productId,
           isFavorite: favoriteIds.includes(productId),
-          userCost: userCost,
-        };
-      });
+          userCost: userCosts.get(productId) || 0,
+        }
+      })
 
       setProducts(merged)
-      setTotalPages(totalPages)
+      setTotalPages(tp)
     } catch (error) {
       console.error("❌ Lỗi khi tải sản phẩm:", error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [debouncedSearch, selectedCategory, selectedRegion, harvestFrom, harvestTo, minPrice, maxPrice, page, favoriteIds, userCosts])
 
-  // Tự động gọi API khi thay đổi tìm kiếm, danh mục hoặc trang
   useEffect(() => {
     fetchProducts()
-  }, [searchQuery, selectedCategory, selectedRegion, harvestFrom, harvestTo, minPrice, maxPrice, page])
+  }, [fetchProducts])
 
   const handleNextPage = () => {
     if (page < totalPages) setPage(page + 1)
@@ -167,10 +175,7 @@ export default function Dashboard() {
                 <Input
                   placeholder="Tìm kiếm nông sản..."
                   value={searchQuery}
-                  onChange={(e) => {
-                    setPage(1)
-                    setSearchQuery(e.target.value)
-                  }}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>

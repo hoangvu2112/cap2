@@ -166,6 +166,7 @@ const initDB = async () => {
     await ensureProductColumn("harvest_start", "harvest_start DATE NULL")
     await ensureProductColumn("harvest_end", "harvest_end DATE NULL")
     await ensureProductColumn("farmer_user_id", "farmer_user_id INT NULL")
+    await ensureProductColumn("dealer_visibility_status", "dealer_visibility_status ENUM('visible','hidden') DEFAULT 'visible'")
 
     try {
       await pool.query("ALTER TABLE products ADD CONSTRAINT fk_products_farmer_user FOREIGN KEY (farmer_user_id) REFERENCES users(id) ON DELETE SET NULL")

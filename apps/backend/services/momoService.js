@@ -7,7 +7,7 @@ const DEFAULT_ENDPOINT = 'https://test-payment.momo.vn/v2/gateway/api/create'
  * Create a MoMo payment (sandbox/prod depending on env).
  * Returns object: { payUrl, qrCodeUrl, deeplink, raw }
  */
-export async function createMomoPayment({ orderId, amount, orderInfo, redirectUrl, ipnUrl, requestType = 'captureWallet' }) {
+export async function createMomoPayment({ orderId, amount, orderInfo, redirectUrl, cancelUrl, ipnUrl, requestType = 'captureWallet' }) {
   const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO'
   const accessKey = process.env.MOMO_ACCESS_KEY || ''
   const secretKey = process.env.MOMO_SECRET_KEY || ''
@@ -19,6 +19,7 @@ export async function createMomoPayment({ orderId, amount, orderInfo, redirectUr
 
   const requestId = `${partnerCode}-${Date.now()}`
   const extraData = ''
+  const effectiveCancelUrl = cancelUrl || redirectUrl
 
   const rawSignature =
     `accessKey=${accessKey}` +
@@ -42,6 +43,7 @@ export async function createMomoPayment({ orderId, amount, orderInfo, redirectUr
     orderId: String(orderId),
     orderInfo,
     redirectUrl,
+    cancelUrl: effectiveCancelUrl,
     ipnUrl,
     extraData,
     requestType,

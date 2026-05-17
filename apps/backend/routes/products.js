@@ -200,6 +200,22 @@ router.get("/categories", async (req, res) => {
   }
 });
 
+// Endpoint nhẹ chỉ lấy danh sách region (thay vì phải gọi /products/all)
+router.get("/regions", async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT DISTINCT region
+      FROM products
+      WHERE region IS NOT NULL AND region != ''
+      ORDER BY region ASC
+    `);
+    res.json(rows.map(r => r.region))
+  } catch (error) {
+    console.error("❌ Lỗi khi lấy danh sách khu vực:", error);
+    res.status(500).json({ error: "Lỗi máy chủ" });
+  }
+});
+
 router.get("/categorie", async (req, res) => {
   try {
     // Sửa lỗi: Chỉ lấy các category CÓ SẢN PHẨM

@@ -56,11 +56,11 @@ export default function AdminDashboard() {
       try {
         const [usersRes, productsRes] = await Promise.all([
           api.get("/users"),
-          api.get("/products/all")
+          api.get("/products", { params: { limit: 50 } })
         ])
 
         const usersData = usersRes.data || []
-        const productsData = productsRes.data || []
+        const productsData = productsRes.data?.data || productsRes.data || []
 
         const upCount = productsData.filter(p => p.trend === 'up').length
         const downCount = productsData.filter(p => p.trend === 'down').length
