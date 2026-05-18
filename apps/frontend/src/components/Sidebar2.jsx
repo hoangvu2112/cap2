@@ -2,8 +2,7 @@
 
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
-import { useState, useEffect } from "react"
-import api from "@/lib/api"
+import { useState } from "react"
 import {
   Home,
   Heart,
@@ -20,10 +19,6 @@ import {
   Package,
   Newspaper,
   Settings,
-  Star,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Shield,
   ShieldCheck,
   Handshake,
@@ -70,31 +65,6 @@ export default function Sidebar2() {
   const location = useLocation()
 
   const [collapsed, setCollapsed] = useState(false)
-  const [watchlist, setWatchlist] = useState([])
-
-  useEffect(() => {
-    const loadWatchlist = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        if (!token) return
-
-        const favRes = await api.get("/favorites")
-        const favIds = favRes.data.slice(0, 3).map((f) => f.productId)
-        if (!favIds.length) return
-
-        const prodRes = await api.get("/products/all")
-        const items = prodRes.data
-          .filter((p) => favIds.includes(p.id))
-          .slice(0, 3)
-
-        setWatchlist(items)
-      } catch {
-        // Optional widget, ignore errors
-      }
-    }
-
-    loadWatchlist()
-  }, [])
 
   const handleLogout = () => {
     try {
@@ -205,41 +175,7 @@ export default function Sidebar2() {
           </>
         )}
 
-        {!collapsed && user?.role !== "dealer" && watchlist.length > 0 && (
-          <>
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-5 pb-2">
-              <Star className="w-3 h-3 inline mr-1" />
-              Theo dõi nhanh
-            </p>
-            <div className="space-y-1 px-1">
-              {watchlist.map((item) => {
-                const change = item.currentPrice - (item.previousPrice || item.currentPrice)
-                const isUp = change > 0
-                const isDown = change < 0
 
-                return (
-                  <Link
-                    key={item.id}
-                    to={`/product/${item.id}`}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors group"
-                  >
-                    <span className="text-xs font-medium text-foreground truncate max-w-[130px]">
-                      {item.name}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {item.currentPrice?.toLocaleString("vi-VN")}
-                      </span>
-                      {isUp && <TrendingUp className="w-3 h-3 text-green-500" />}
-                      {isDown && <TrendingDown className="w-3 h-3 text-red-500" />}
-                      {!isUp && !isDown && <Minus className="w-3 h-3 text-muted-foreground" />}
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </>
-        )}
       </nav>
 
       <div className="border-t border-border/40 p-2 space-y-1 shrink-0">

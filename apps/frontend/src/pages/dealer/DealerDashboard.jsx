@@ -28,10 +28,10 @@ export default function Dashboard() {
   const [totalPages, setTotalPages] = useState(1)
   const [categories, setCategories] = useState(["all"])
 
-  // Cache favorites & costs (chỉ fetch 1 lần)
+  // Cache favorites & costs
   const [favoriteIds, setFavoriteIds] = useState([])
   const [userCosts, setUserCosts] = useState(new Map())
-  const hasFetchedUserData = useRef(false)
+  const [isUserDataReady, setIsUserDataReady] = useState(false)
 
   const socketRef = useRef(null)
 
@@ -61,13 +61,14 @@ export default function Dashboard() {
     fetchInitialData()
   }, [])
 
-  // Fetch favorites & costs 1 lần duy nhất
+  // Fetch favorites & costs - phải hoàn thành trước khi fetchProducts chạy
   useEffect(() => {
-    if (hasFetchedUserData.current) return
     const token = localStorage.getItem("token")
-    if (!token) return
+    if (!token) {
+      setIsUserDataReady(true)
+      return
+    }
 
-    hasFetchedUserData.current = true
     const fetchUserData = async () => {
       try {
         const [favRes, costRes] = await Promise.all([
@@ -80,6 +81,8 @@ export default function Dashboard() {
         setUserCosts(costsMap)
       } catch (err) {
         console.warn("⚠️ Không thể tải favorites/costs:", err)
+      } finally {
+        setIsUserDataReady(true)
       }
     }
     fetchUserData()
@@ -142,9 +145,11 @@ export default function Dashboard() {
     }
   }, [debouncedSearch, selectedCategory, selectedRegion, harvestFrom, harvestTo, minPrice, maxPrice, page, favoriteIds, userCosts])
 
+  // Chỉ fetch products sau khi favorites đã được load xong
   useEffect(() => {
+    if (!isUserDataReady) return
     fetchProducts()
-  }, [fetchProducts])
+  }, [fetchProducts, isUserDataReady])
 
   const handleNextPage = () => {
     if (page < totalPages) setPage(page + 1)
