@@ -5,31 +5,31 @@ import { SYSTEM_FEES } from "../utils/constants.js"
 
 const router = express.Router()
 
-// Lấy thông tin gói ghim từ cấu hình
-router.get("/plans", authenticateToken, async (req, res) => {
+// Lấy danh sách gói ghim
+router.get("/plans", (req, res) => {
   res.json({ plans: SYSTEM_FEES.BOOST_PACKAGES })
 })
 
 // Thanh toán ghim tin bằng Ví Nông Xu
-router.post("/create-payment", authenticateToken, requireRole("user", "farmer", "dealer"), async (req, res) => {
+router.post("/create-payment", authenticateToken, requireRole("user"), async (req, res) => {
   const connection = await pool.getConnection()
 
   try {
     const listingId = Number(req.body.listing_id)
-    const planId = req.body.plan_id // ID của gói (vd: 'boost_7d')
+    const planId = req.body.plan_id
     const userId = req.user.id
 
-    if (!listingId) {
-      return res.status(400).json({ error: "Thiếu nguồn hàng" })
+    if (!listingId || !planId) {
+      return res.status(400).json({ error: "Thiếu nguồn hàng hoặc gói ghim" })
     }
 
-    const pkg = SYSTEM_FEES.BOOST_PACKAGES.find(p => p.id === planId)
-    if (!pkg) {
+    const plan = SYSTEM_FEES.BOOST_PACKAGES.find(p => p.id === planId)
+    if (!plan) {
       return res.status(400).json({ error: "Gói ghim không hợp lệ" })
     }
 
-    const planPrice = pkg.price_vnd
-    const planDuration = pkg.duration_days
+    const planPrice = plan.price_vnd
+    const planDuration = plan.duration_days
 
     await connection.beginTransaction()
 
@@ -72,8 +72,11 @@ router.post("/create-payment", authenticateToken, requireRole("user", "farmer", 
     )
 
     if (!wallet) {
-      await connection.rollback()
-      return res.status(400).json({ error: "Bạn chưa có Ví Nông Xu, vui lòng nạp tiền trước" })
+      await connection.query(
+        "INSERT INTO wallets (user_id, balance, bonus_balance) VALUES (?, 0, 0)",
+        [userId]
+      );
+      wallet = { balance: 0, bonus_balance: 0 };
     }
 
     let currentBonus = Number(wallet.bonus_balance)
@@ -105,18 +108,18 @@ router.post("/create-payment", authenticateToken, requireRole("user", "farmer", 
       await connection.query(
         `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
          VALUES (?, ?, 'deduct', 'boost_pin', 'bonus_balance', ?)`,
-        [userId, deductBonus, `Thanh toán ${pkg.name} (trừ tiền thưởng)`]
+        [userId, deductBonus, `Thanh toán gói Ghim tin ${planDuration} ngày (trừ tiền thưởng)`]
       )
     }
     if (deductBalance > 0) {
       await connection.query(
         `INSERT INTO wallet_transactions (user_id, amount, type, purpose, source, note) 
          VALUES (?, ?, 'deduct', 'boost_pin', 'balance', ?)`,
-        [userId, deductBalance, `Thanh toán ${pkg.name} (trừ tiền nạp)`]
+        [userId, deductBalance, `Thanh toán gói Ghim tin ${planDuration} ngày (trừ tiền nạp)`]
       )
     }
 
-    // 4. Active gói ghim luôn
+    // 4. Active gói ghim luôn (Bỏ plan_id, payment_id)
     const [boostResult] = await connection.query(
       `
         INSERT INTO listing_boosts (listing_id, user_id, status, boost_start_at, boost_end_at)
@@ -134,7 +137,7 @@ router.post("/create-payment", authenticateToken, requireRole("user", "farmer", 
 
     res.status(201).json({
       success: true,
-      message: `Thanh toán thành công và đã kích hoạt ${pkg.name}`,
+      message: "Thanh toán thành công và đã kích hoạt gói ghim",
       boost,
       payment: {
         amount: planPrice,
