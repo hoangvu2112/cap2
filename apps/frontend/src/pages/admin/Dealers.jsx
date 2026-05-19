@@ -7,8 +7,9 @@ import { ShieldCheck, RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function AdminDealers() {
+  // Hiển thị thông báo
   const { toast } = useToast()
-
+// State để quản lý danh sách yêu cầu nâng cấp đại lý và báo cáo gian lận
   const [dealerRequests, setDealerRequests] = useState([])
   const [dealerLoading, setDealerLoading] = useState(false)
   const [reviewingId, setReviewingId] = useState(null)

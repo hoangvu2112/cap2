@@ -38,7 +38,7 @@ const chartConfig = {
     color: "hsl(var(--chart-2))",
   },
 }
-
+// Dashboard tổng hợp các chỉ số chính, biểu đồ tăng trưởng và bảng giá sản phẩm
 export default function AdminDashboard() {
   const navigate = useNavigate() // 2. Khởi tạo navigate
   const [stats, setStats] = useState({

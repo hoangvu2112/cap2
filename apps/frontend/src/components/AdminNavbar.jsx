@@ -16,14 +16,14 @@ export default function AdminNavbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
+// console.log("📍 Vị trí hiện tại:", location.pathname)
   const handleLogout = () => {
     logout()
     navigate("/login")
   }
 
   const isActive = (path) => location.pathname === path
-
+// hiển thị các mục điều hướng trong AdminNavbar
   const navItems = [
     { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
     { path: "/admin/products", icon: Package, label: "Sản phẩm" },
@@ -45,6 +45,7 @@ export default function AdminNavbar() {
             <span className="font-bold text-xl">Admin Panel</span>
           </Link>
 
+
           <div className="hidden md:flex items-center gap-6">
             {navItems.map((item) => (
               <Link
@@ -58,7 +59,7 @@ export default function AdminNavbar() {
               </Link>
             ))}
           </div>
-
+// hiển thị thông tin người dùng và nút đăng xuất
           <div className="flex items-center gap-4">
             <span className="hidden md:block text-sm text-gray-300">{user?.email}</span>
             <button
