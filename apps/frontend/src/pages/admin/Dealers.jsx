@@ -3,29 +3,32 @@ import AdminNavbar from "@/components/AdminNavbar"
 import api from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ShieldCheck, RefreshCw } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { ShieldCheck, RefreshCw, Search, UserX, Users } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
 export default function AdminDealers() {
-  const { toast } = useToast()
+  const [dealers, setDealers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [revokingId, setRevokingId] = useState(null)
+  const [message, setMessage] = useState("")
 
-  const [dealerRequests, setDealerRequests] = useState([])
-  const [dealerLoading, setDealerLoading] = useState(false)
-  const [reviewingId, setReviewingId] = useState(null)
+  // Báo cáo gian lận
   const [dealerReports, setDealerReports] = useState([])
   const [reportLoading, setReportLoading] = useState(false)
   const [reportReviewingId, setReportReviewingId] = useState(null)
 
-  const loadDealerRequests = async () => {
+  const loadDealers = async () => {
     try {
-      setDealerLoading(true)
-      const res = await api.get("/dealer-upgrade/admin/requests")
-      setDealerRequests(res.data?.requests || [])
+      setLoading(true)
+      const res = await api.get("/users")
+      const allUsers = res.data || []
+      const dealerList = allUsers.filter(u => u.role === "dealer")
+      setDealers(dealerList)
     } catch (error) {
-      const msg = error.response?.data?.error || "Không thể tải yêu cầu nâng cấp đại lý"
-      toast({ title: "Lỗi", description: msg, variant: "destructive" })
+      console.error("Lỗi tải danh sách đại lý:", error)
     } finally {
-      setDealerLoading(false)
+      setLoading(false)
     }
   }
 
@@ -35,67 +38,48 @@ export default function AdminDealers() {
       const res = await api.get("/purchase-requests/admin/reports")
       setDealerReports(res.data?.reports || [])
     } catch (error) {
-      const msg = error.response?.data?.error || "Không thể tải báo cáo"
-      toast({ title: "Lỗi", description: msg, variant: "destructive" })
+      console.warn("Không thể tải báo cáo:", error.message)
+      setDealerReports([])
     } finally {
       setReportLoading(false)
     }
   }
 
   useEffect(() => {
-    loadDealerRequests()
+    loadDealers()
     loadDealerReports()
   }, [])
 
-  const handleReviewRequest = async (requestId, action) => {
-    if (action === "revoke") {
-      const confirmRevoke = window.confirm("Bạn có chắc chắn muốn hủy vai trò đại lý của người dùng này? Role sẽ quay về 'user'.")
-      if (!confirmRevoke) return
-    }
-
-    const adminNote = window.prompt(
-      action === "approve"
-        ? "Ghi chú duyệt (tuỳ chọn)"
-        : action === "revoke"
-        ? "Lý do hủy vai trò (tuỳ chọn)"
-        : "Lý do từ chối (tuỳ chọn)",
-      ""
-    )
+  const handleRevokeDealer = async (userId, userName) => {
+    const reason = window.prompt(`Lý do hủy vai trò đại lý của "${userName}" (tuỳ chọn):`, "")
+    if (reason === null) return // User bấm Cancel
 
     try {
-      setReviewingId(requestId)
-      const res = await api.patch(`/dealer-upgrade/admin/requests/${requestId}/review`, {
-        action,
-        admin_note: adminNote || "",
-      })
-
-      const updated = res.data?.request
-      setDealerRequests((prev) => prev.map((item) => (item.id === requestId ? updated : item)))
-      toast({
-        title: "Thành công",
-        description:
-          action === "approve"
-            ? "Đã duyệt yêu cầu đại lý"
-            : action === "revoke"
-            ? "Đã hủy vai trò đại lý"
-            : "Đã từ chối yêu cầu đại lý",
-      })
+      setRevokingId(userId)
+      await api.put(`/users/${userId}`, { role: "user" })
+      setMessage(`✅ Đã hủy vai trò đại lý của ${userName}`)
+      setDealers(prev => prev.filter(d => d.id !== userId))
+      setTimeout(() => setMessage(""), 4000)
     } catch (error) {
-      const msg = error.response?.data?.error || "Không thể xử lý yêu cầu"
-      toast({ title: "Lỗi", description: msg, variant: "destructive" })
+      const msg = error.response?.data?.error || "Không thể hủy vai trò"
+      setMessage(`❌ ${msg}`)
+      setTimeout(() => setMessage(""), 4000)
     } finally {
-      setReviewingId(null)
+      setRevokingId(null)
     }
   }
 
   const handleReportReview = async (reportId, status, reportedUserId) => {
-    const adminNote = window.prompt(status === "resolved" ? "Ghi chú xử lý (tuỳ chọn)" : "Ghi chú từ chối (tuỳ chọn)", "")
+    const adminNote = window.prompt(
+      status === "resolved" ? "Ghi chú xử lý (tuỳ chọn)" : "Ghi chú từ chối (tuỳ chọn)", ""
+    )
+    if (adminNote === null) return
 
     try {
       setReportReviewingId(reportId)
 
       if (status === "resolved") {
-        const shouldBan = window.confirm("Khóa tài khoản user bị báo cáo sau khi xử lý?")
+        const shouldBan = window.confirm("Khóa tài khoản user bị báo cáo?")
         if (shouldBan) {
           await api.put(`/users/${reportedUserId}`, { status: "banned" })
         }
@@ -107,123 +91,132 @@ export default function AdminDealers() {
       })
 
       const updated = res.data?.report
-      setDealerReports((prev) => prev.map((item) => (item.id === reportId ? updated : item)))
-      toast({
-        title: "Thành công",
-        description: status === "resolved" ? "Đã xử lý báo cáo" : "Đã từ chối báo cáo",
-      })
+      setDealerReports(prev => prev.map(item => item.id === reportId ? updated : item))
+      setMessage(status === "resolved" ? "✅ Đã xử lý báo cáo" : "✅ Đã từ chối báo cáo")
+      setTimeout(() => setMessage(""), 4000)
     } catch (error) {
       const msg = error.response?.data?.error || "Không thể xử lý báo cáo"
-      toast({ title: "Lỗi", description: msg, variant: "destructive" })
+      setMessage(`❌ ${msg}`)
+      setTimeout(() => setMessage(""), 4000)
     } finally {
       setReportReviewingId(null)
     }
   }
 
-  const openRequests = dealerRequests.filter((request) => ["pending_payment", "pending_review"].includes(request.status))
+  const filteredDealers = dealers.filter(d => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return (
+      (d.name || "").toLowerCase().includes(q) ||
+      (d.email || "").toLowerCase().includes(q) ||
+      (d.region || "").toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className="min-h-screen bg-[#fcfaf8]">
       <AdminNavbar />
       <main className="max-w-7xl mx-auto px-6 py-8">
-        
+
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Quản lý Đại Lý</h1>
+
+        {message && (
+          <div className={`mb-4 p-3 rounded-xl text-sm font-medium ${
+            message.startsWith("✅") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
+          }`}>
+            {message}
+          </div>
+        )}
 
         <div className="space-y-6">
 
+          {/* Danh sách Đại lý hiện tại */}
           <Card className="border-none shadow-sm bg-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                Duyệt nâng cấp đại lý
+                <Users className="w-5 h-5 text-emerald-600" />
+                Đại lý trong hệ thống
               </CardTitle>
               <CardDescription>
-                Xử lý các yêu cầu user gửi lên để được chuyển sang vai trò đại lý sau thanh toán.
+                Danh sách tất cả người dùng có vai trò đại lý. Bạn có thể hủy vai trò nếu cần.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm text-gray-500">
-                  {dealerLoading ? "Đang tải yêu cầu..." : `${openRequests.length} yêu cầu đang chờ xử lý`}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo tên, email, khu vực..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
                 </div>
-                <Button variant="outline" size="sm" onClick={loadDealerRequests} disabled={dealerLoading}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${dealerLoading ? "animate-spin" : ""}`} />
+                <Button variant="outline" size="sm" onClick={loadDealers} disabled={loading}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
                   Làm mới
                 </Button>
               </div>
 
-              <div className="space-y-4 max-h-[700px] overflow-auto pr-2">
-                {dealerRequests.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                {loading ? "Đang tải..." : `${filteredDealers.length} đại lý`}
+              </div>
+
+              <div className="space-y-3 max-h-[600px] overflow-auto pr-1">
+                {filteredDealers.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-gray-200 p-8 text-sm text-gray-500 text-center">
-                    Chưa có yêu cầu nâng cấp đại lý.
+                    {dealers.length === 0 ? "Chưa có đại lý nào trong hệ thống." : "Không tìm thấy đại lý phù hợp."}
                   </div>
                 ) : (
-                  dealerRequests.map((request) => (
-                    <div key={request.id} className="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                        <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                          <div>
-                            <div className="font-semibold text-gray-900 text-base">{request.applicant_name || request.applicant_email}</div>
-                            <div className="text-xs text-gray-500 mt-0.5">{request.applicant_email}</div>
+                  filteredDealers.map((dealer) => (
+                    <div key={dealer.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex items-center gap-4">
+                      {/* Avatar */}
+                      <div className="shrink-0">
+                        {dealer.avatar_url ? (
+                          <img
+                            src={dealer.avatar_url.startsWith("http") ? dealer.avatar_url : `${(import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "")}${dealer.avatar_url}`}
+                            alt={dealer.name}
+                            className="w-11 h-11 rounded-full object-cover border-2 border-emerald-200"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-lg">
+                            {(dealer.name || "D").charAt(0).toUpperCase()}
                           </div>
-                          <div className="text-xs text-gray-600 sm:pl-5 sm:border-l sm:border-gray-200">
-                            <div className="font-medium text-gray-800 text-sm">Gói: {request.plan_name}</div>
-                            <div className="text-gray-500 mt-0.5">{Number(request.price_vnd || 0).toLocaleString()} đ / {request.duration_days} ngày</div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          {["pending_payment", "pending_review"].includes(request.status) ? (
-                            <>
-                              <Button
-                                size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4"
-                                onClick={() => handleReviewRequest(request.id, "approve")}
-                                disabled={reviewingId === request.id}
-                              >
-                                {reviewingId === request.id ? "Đang xử lý..." : "Duyệt đại lý"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-9 px-4"
-                                onClick={() => handleReviewRequest(request.id, "reject")}
-                                disabled={reviewingId === request.id}
-                              >
-                                Từ chối
-                              </Button>
-                            </>
-                          ) : request.status === "approved" ? (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="h-9 px-4"
-                              onClick={() => handleReviewRequest(request.id, "revoke")}
-                              disabled={reviewingId === request.id}
-                            >
-                              {reviewingId === request.id ? "Đang xử lý..." : "Hủy vai trò"}
-                            </Button>
-                          ) : null}
-                        </div>
+                        )}
                       </div>
 
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Trạng thái: <span className={['pending_review', 'pending_payment'].includes(request.status) ? 'text-amber-600' : request.status === 'approved' ? 'text-emerald-600' : request.status === 'revoked' ? 'text-rose-600' : 'text-gray-700'}>{request.status}</span></span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 font-medium">Thanh toán: <span className={request.payment_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}>{request.payment_status}</span></span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-600">Ngày gửi: {new Date(request.created_at).toLocaleString('vi-VN')}</span>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900 truncate">{dealer.name || "Chưa đặt tên"}</h3>
+                          <Badge className="bg-emerald-100 text-emerald-700 border-none text-[10px] px-2">Đại lý</Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">{dealer.email}</p>
+                        {dealer.region && (
+                          <p className="text-xs text-gray-400 mt-0.5">📍 {dealer.region}</p>
+                        )}
                       </div>
 
-                      {request.note ? (
-                        <div className="text-sm text-gray-700 bg-white border border-gray-200 rounded-lg p-3">
-                          {request.note}
-                        </div>
-                      ) : null}
+                      {/* Ngày tham gia */}
+                      <div className="text-right hidden sm:block">
+                        <p className="text-xs text-gray-400">Tham gia</p>
+                        <p className="text-xs text-gray-600 font-medium">
+                          {dealer.created_at ? new Date(dealer.created_at).toLocaleDateString("vi-VN") : "N/A"}
+                        </p>
+                      </div>
 
-                      {request.admin_note ? (
-                        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                          <span className="font-medium">Ghi chú của Admin:</span> {request.admin_note}
-                        </div>
-                      ) : null}
+                      {/* Nút hủy vai trò */}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="shrink-0 h-9 px-3 gap-1.5"
+                        onClick={() => handleRevokeDealer(dealer.id, dealer.name || dealer.email)}
+                        disabled={revokingId === dealer.id}
+                      >
+                        <UserX className="w-3.5 h-3.5" />
+                        {revokingId === dealer.id ? "Đang xử lý..." : "Hủy vai trò"}
+                      </Button>
                     </div>
                   ))
                 )}
@@ -231,6 +224,7 @@ export default function AdminDealers() {
             </CardContent>
           </Card>
 
+          {/* Báo cáo gian lận */}
           <Card className="border-none shadow-sm bg-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -238,13 +232,13 @@ export default function AdminDealers() {
                 Báo cáo gian lận từ đại lý
               </CardTitle>
               <CardDescription>
-                Admin xem các báo cáo do đại lý gửi lên và quyết định xử lý thủ công.
+                Các báo cáo do đại lý gửi lên, admin quyết định xử lý.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm text-gray-500">
-                  {reportLoading ? "Đang tải báo cáo..." : `${dealerReports.filter((r) => r.status === "pending").length} báo cáo chờ xử lý`}
+                  {reportLoading ? "Đang tải..." : `${dealerReports.filter(r => r.status === "pending").length} báo cáo chờ xử lý`}
                 </div>
                 <Button variant="outline" size="sm" onClick={loadDealerReports} disabled={reportLoading}>
                   <RefreshCw className={`w-4 h-4 mr-2 ${reportLoading ? "animate-spin" : ""}`} />
@@ -252,69 +246,66 @@ export default function AdminDealers() {
                 </Button>
               </div>
 
-              <div className="space-y-4 max-h-[700px] overflow-auto pr-2">
+              <div className="space-y-3 max-h-[500px] overflow-auto pr-1">
                 {dealerReports.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-gray-200 p-8 text-sm text-gray-500 text-center">
                     Chưa có báo cáo nào.
                   </div>
                 ) : (
                   dealerReports.map((report) => (
-                    <div key={report.id} className="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
-                      
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                        <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                          <div>
-                            <div className="font-semibold text-gray-900 text-base">
-                              {report.reporter_name} <span className="font-normal text-gray-500 mx-1 text-sm">báo cáo</span> {report.reported_user_name}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5">{report.reporter_email} • {new Date(report.created_at).toLocaleString('vi-VN')}</div>
+                    <div key={report.id} className="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="font-semibold text-gray-900">
+                            {report.reporter_name} <span className="font-normal text-gray-500 text-sm">báo cáo</span> {report.reported_user_name}
                           </div>
-                          
-                          <div className="text-xs text-gray-600 sm:pl-5 sm:border-l sm:border-gray-200">
-                            <div className="font-medium text-gray-800 text-sm">Sản phẩm: {report.product_name}</div>
-                            <div className="text-gray-500 mt-0.5">Trạng thái báo cáo: <span className={report.status === "pending" ? "text-amber-600 font-medium" : "font-medium"}>{report.status}</span></div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {report.reporter_email} • {new Date(report.created_at).toLocaleString("vi-VN")}
                           </div>
+                          <div className="text-sm text-gray-700 mt-1">Sản phẩm: {report.product_name}</div>
                         </div>
-                        
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            className="bg-rose-600 hover:bg-rose-700 h-9 px-4"
-                            onClick={() => handleReportReview(report.id, "resolved", report.reported_user_id)}
-                            disabled={reportReviewingId === report.id || report.status !== "pending"}
-                          >
-                            {reportReviewingId === report.id ? "Đang xử lý..." : "Hợp lệ & Khóa user"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-9 px-4"
-                            onClick={() => handleReportReview(report.id, "rejected", report.reported_user_id)}
-                            disabled={reportReviewingId === report.id || report.status !== "pending"}
-                          >
-                            Từ chối
-                          </Button>
-                        </div>
+
+                        {report.status === "pending" && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              size="sm"
+                              className="bg-rose-600 hover:bg-rose-700 h-8 px-3 text-xs"
+                              onClick={() => handleReportReview(report.id, "resolved", report.reported_user_id)}
+                              disabled={reportReviewingId === report.id}
+                            >
+                              Xử lý & Khóa
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => handleReportReview(report.id, "rejected", report.reported_user_id)}
+                              disabled={reportReviewingId === report.id}
+                            >
+                              Từ chối
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-medium">Lý do: {report.reason}</span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200">Đơn hàng: #{report.request_id}</span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200">User bị báo cáo: {report.reported_user_status}</span>
-                        <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200">Phí đại lý: {Number(report.dealer_fee_amount || 0).toLocaleString()} đ</span>
+                        <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-medium">
+                          Lý do: {report.reason}
+                        </span>
+                        <span className={`px-2 py-1 rounded-full border font-medium ${
+                          report.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                          report.status === "resolved" ? "bg-green-50 text-green-700 border-green-200" :
+                          "bg-gray-100 text-gray-600 border-gray-200"
+                        }`}>
+                          {report.status === "pending" ? "Chờ xử lý" : report.status === "resolved" ? "Đã xử lý" : "Từ chối"}
+                        </span>
                       </div>
 
-                      {report.note ? (
-                        <div className="text-sm text-gray-700 bg-white border border-gray-200 rounded-lg p-3">
-                          <span className="italic">" {report.note} "</span>
+                      {report.admin_note && (
+                        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                          <span className="font-medium">Admin:</span> {report.admin_note}
                         </div>
-                      ) : null}
-
-                      {report.admin_note ? (
-                        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                          <span className="font-medium">Ghi chú xử lý:</span> {report.admin_note}
-                        </div>
-                      ) : null}
+                      )}
                     </div>
                   ))
                 )}

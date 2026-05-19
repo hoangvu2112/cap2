@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from "react"
-import { useNavigate } from "react-router-dom" // 1. Import hook điều hướng
+import { useNavigate } from "react-router-dom"
 import AdminNavbar from "@/components/AdminNavbar"
 import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Users, Package, TrendingUp, TrendingDown, Calendar, PlusCircle, ArrowRight } from "lucide-react"
+import { Users, Package, TrendingUp, TrendingDown, Calendar, PlusCircle, ArrowRight, Wallet, Pin, ShieldCheck, DollarSign, RefreshCw } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -22,7 +22,12 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  AreaChart,
+  Area,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
 } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
@@ -40,7 +45,8 @@ const chartConfig = {
 }
 
 export default function AdminDashboard() {
-  const navigate = useNavigate() // 2. Khởi tạo navigate
+  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState("overview") // "overview" | "finance"
   const [stats, setStats] = useState({
     users: 0,
     products: 0,
@@ -82,6 +88,40 @@ export default function AdminDashboard() {
     }
     fetchData()
   }, [])
+
+  // === Finance Tab State ===
+  const [financeData, setFinanceData] = useState(null)
+  const [financeDays, setFinanceDays] = useState("all")
+  const [financeLoading, setFinanceLoading] = useState(false)
+
+  const fetchFinanceData = async (days = "all") => {
+    try {
+      setFinanceLoading(true)
+      const res = await api.get("/admin/statistics", { params: { days } })
+      if (res.data.success) {
+        setFinanceData(res.data.data)
+      }
+    } catch (err) {
+      console.error("Lỗi tải thống kê tài chính:", err)
+    } finally {
+      setFinanceLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "finance" && !financeData) {
+      fetchFinanceData(financeDays)
+    }
+  }, [activeTab])
+
+  const handleDaysChange = (days) => {
+    setFinanceDays(days)
+    fetchFinanceData(days)
+  }
+
+  const formatVND = (amount) => {
+    return Number(amount || 0).toLocaleString("vi-VN") + " ₫"
+  }
 
   const userGrowthData = useMemo(() => {
     const last7Days = [...Array(7)].map((_, i) => {
@@ -143,12 +183,35 @@ export default function AdminDashboard() {
              <Button onClick={() => navigate('/admin/products')} className="bg-green-600 hover:bg-green-700">
                 <PlusCircle className="w-4 h-4 mr-2" /> Thêm sản phẩm
              </Button>
-             <Button onClick={() => navigate('/admin/settings')} variant="outline">
-               Duyệt đại lý
-             </Button>
           </div>
         </div>
 
+        {/* TAB SWITCHER */}
+        <div className="flex gap-2 border-b border-border pb-2">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+              activeTab === "overview"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Tổng quan hệ thống
+          </button>
+          <button
+            onClick={() => setActiveTab("finance")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+              activeTab === "finance"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Báo cáo Tài chính & Doanh thu
+          </button>
+        </div>
+
+        {activeTab === "overview" && (
+        <>
         {/* STATS CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title="Tổng Người dùng" value={stats.users} sub="Thành viên" icon={Users} trend="+12% tháng này" trendColor="text-green-600" bg="bg-blue-50 text-blue-600" />
@@ -317,6 +380,162 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+        </>
+        )}
+
+        {activeTab === "finance" && (
+          <div className="space-y-6">
+            {/* Bộ lọc thời gian */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { label: "Tất cả", value: "all" },
+                { label: "7 ngày", value: "7" },
+                { label: "14 ngày", value: "14" },
+                { label: "30 ngày", value: "30" },
+              ].map(opt => (
+                <Button
+                  key={opt.value}
+                  variant={financeDays === opt.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleDaysChange(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => fetchFinanceData(financeDays)}
+                disabled={financeLoading}
+                className="ml-auto gap-1.5"
+              >
+                <RefreshCw className={`w-4 h-4 ${financeLoading ? "animate-spin" : ""}`} />
+                Tải lại
+              </Button>
+            </div>
+
+            {financeLoading && !financeData ? (
+              <div className="text-center py-16">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                <p className="text-muted-foreground mt-4">Đang tải dữ liệu tài chính...</p>
+              </div>
+            ) : financeData ? (
+              <>
+                {/* Stat Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <StatCard
+                    title="Tổng tiền nạp"
+                    value={formatVND(financeData.summary.totalDeposit)}
+                    sub=""
+                    icon={Wallet}
+                    bg="bg-blue-50 text-blue-600"
+                  />
+                  <StatCard
+                    title="Doanh thu Hoa hồng"
+                    value={formatVND(financeData.summary.revenueBreakdown.commission)}
+                    sub=""
+                    icon={DollarSign}
+                    bg="bg-amber-50 text-amber-600"
+                  />
+                  <StatCard
+                    title="Doanh thu Ghim bài"
+                    value={formatVND(financeData.summary.revenueBreakdown.pinPost)}
+                    sub=""
+                    icon={Pin}
+                    bg="bg-purple-50 text-purple-600"
+                  />
+                  <StatCard
+                    title="Doanh thu Nâng cấp Đại lý"
+                    value={formatVND(financeData.summary.revenueBreakdown.upgradeRole)}
+                    sub=""
+                    icon={ShieldCheck}
+                    bg="bg-indigo-50 text-indigo-600"
+                  />
+                  <Card className="border-none shadow-sm bg-gradient-to-br from-green-50 to-emerald-50 hover:shadow-md transition-all">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-xl bg-green-100 text-green-700">
+                          <TrendingUp className="w-6 h-6" />
+                        </div>
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Tổng doanh thu thực</p>
+                      <h3 className="text-xl font-bold text-green-700">{formatVND(financeData.summary.totalRevenue)}</h3>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Biểu đồ */}
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+                  {/* Area Chart - Dòng tiền theo ngày */}
+                  <Card className="lg:col-span-4 border-none shadow-sm">
+                    <CardHeader>
+                      <CardTitle>Dòng tiền theo thời gian</CardTitle>
+                      <CardDescription>Tiền nạp và doanh thu theo ngày</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={financeData.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorDeposit" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
+                          <YAxis tickLine={false} axisLine={false} fontSize={11} tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                          <Tooltip formatter={(value) => formatVND(value)} />
+                          <Area type="monotone" dataKey="deposit" name="Tiền nạp" stroke="#3b82f6" fillOpacity={1} fill="url(#colorDeposit)" />
+                          <Area type="monotone" dataKey="revenue" name="Doanh thu" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Pie Chart - Tiền nạp theo vai trò */}
+                  <Card className="lg:col-span-3 border-none shadow-sm">
+                    <CardHeader>
+                      <CardTitle>Tiền nạp theo vai trò</CardTitle>
+                      <CardDescription>Phân bổ nguồn tiền nạp</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={financeData.roleStats}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={4}
+                            dataKey="totalDeposited"
+                            nameKey="role"
+                            label={({ role, totalDeposited }) => `${role}: ${formatVND(totalDeposited)}`}
+                            labelLine={false}
+                          >
+                            {financeData.roleStats.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => formatVND(value)} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-16 text-muted-foreground">
+                Không có dữ liệu tài chính. Hãy kiểm tra bảng wallet_transactions.
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   )

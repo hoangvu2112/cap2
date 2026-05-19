@@ -51,30 +51,35 @@ function forceLogoutDealer(io, userId, message) {
 export async function checkDealerExpiration(io) {
   console.log("⏱️ Cảnh báo & Hết hạn Đại Lý: Đang kiểm tra...");
   try {
-    // 1. Quét cảnh báo (Còn đúng 3 ngày)
-    const [warnings] = await pool.query(`
-      SELECT id, email, name, dealer_expires_at
-      FROM users
-      WHERE role = 'dealer' 
-        AND dealer_expires_at IS NOT NULL
-        AND DATE(dealer_expires_at) = DATE(DATE_ADD(NOW(), INTERVAL 3 DAY))
-    `);
+    // 1. Quét cảnh báo (Còn ≤ 3 ngày) — chỉ gửi email 1 lần/ngày (lúc 7-9h sáng)
+    const currentHour = new Date().getHours()
+    if (currentHour >= 7 && currentHour <= 9) {
+      const [warnings] = await pool.query(`
+        SELECT id, email, name, dealer_expires_at
+        FROM users
+        WHERE role = 'dealer' 
+          AND dealer_expires_at IS NOT NULL
+          AND dealer_expires_at > NOW()
+          AND dealer_expires_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)
+      `);
 
-    for (const user of warnings) {
-      try {
-        const emailHtml = `
-          <h2>Cảnh báo hết hạn gói Đại lý</h2>
-          <p>Chào <b>${user.name || user.email}</b>,</p>
-          <p>Gói đại lý của bạn sẽ hết hạn vào <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>.</p>
-          <p>Vui lòng đăng nhập và thanh toán phí Nông Xu để tiếp tục giữ hạng đại lý nhé.</p>
-        `;
-        await sendDealerEmail(user.email, "⚠️ Gói Đại Lý sắp hết hạn", emailHtml);
-        console.log(`📩 Đã gửi cảnh báo hết hạn tới ${user.email}`);
-      } catch (err) {
-        if (err.message === "SMTP_NOT_CONFIGURED") {
-            console.warn("⚠️ Bỏ qua gửi email cảnh báo đại lý: SMTP chưa cấu hình.");
-        } else {
-            console.error("❌ Lỗi gửi email cảnh báo đại lý:", err.message);
+      for (const user of warnings) {
+        try {
+          const daysLeft = Math.ceil((new Date(user.dealer_expires_at) - new Date()) / (1000 * 60 * 60 * 24))
+          const emailHtml = `
+            <h2>⚠️ Cảnh báo hết hạn gói Đại lý</h2>
+            <p>Chào <b>${user.name || user.email}</b>,</p>
+            <p>Gói đại lý của bạn sẽ hết hạn sau <b>${daysLeft} ngày</b> (vào <b>${new Date(user.dealer_expires_at).toLocaleString("vi-VN")}</b>).</p>
+            <p>Vui lòng đăng nhập và gia hạn gói để tiếp tục giữ vai trò đại lý.</p>
+          `;
+          await sendDealerEmail(user.email, `⚠️ Gói Đại Lý còn ${daysLeft} ngày — Hãy gia hạn ngay`, emailHtml);
+          console.log(`📩 Đã gửi cảnh báo hết hạn (còn ${daysLeft} ngày) tới ${user.email}`);
+        } catch (err) {
+          if (err.message === "SMTP_NOT_CONFIGURED") {
+              console.warn("⚠️ Bỏ qua gửi email cảnh báo đại lý: SMTP chưa cấu hình.");
+          } else {
+              console.error("❌ Lỗi gửi email cảnh báo đại lý:", err.message);
+          }
         }
       }
     }

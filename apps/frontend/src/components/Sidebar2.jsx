@@ -36,7 +36,7 @@ const USER_NAV = [
   { path: "/news", icon: Newspaper, label: "Tin tức" },
   { path: "/favorites", icon: Heart, label: "Yêu thích" },
   { path: "/alerts", icon: Bell, label: "Cảnh báo" },
-  { path: "/map", icon: Map, label: "Bản đồ giá" },
+  { path: "/map", icon: Map, label: "Bản đồ đại lý" },
 ]
 
 const DEALER_NAV = [
@@ -47,6 +47,7 @@ const DEALER_NAV = [
   { path: "/community", icon: Users, label: "Cộng đồng" },
   { path: "/chat", icon: MessageSquare, label: "Trò chuyện" },
   { path: "/purchase-requests", icon: Package, label: "Yêu cầu mua" },
+  { path: "/map", icon: Map, label: "Bản đồ đại lý" },
 ]
 
 const ADMIN_NAV = [
@@ -219,8 +220,8 @@ export default function Sidebar2() {
                   {user.role === "admin"
                     ? "Quản trị viên"
                     : user.role === "dealer"
-                    ? "Đại lý"
-                    : "Nông dân"}
+                      ? "Đại lý"
+                      : "Nông dân"}
                 </p>
               </div>
             )}

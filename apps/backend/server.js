@@ -20,15 +20,13 @@ import newsRoutes from "./routes/news.js";
 import communityRoutes, { ioRef as communityIoRef } from "./routes/community.js";
 import favoritesRouter from "./routes/favorites.js";
 import costRoutes from "./routes/costs.js";
-import chatbotRoutes from "./routes/chatbot.js";
+// chatbotRoutes removed — merged into /api/chat (same module, was duplicate)
 import statsRoutes from "./routes/stats.js";
+import statisticsRoutes from "./routes/statistics.js";
 import chatRouter from "./routes/chat.js";
 import purchaseRequestRoutes from "./routes/purchaseRequests.js";
 import dealerUpgradeRoutes from "./routes/dealerUpgrade.js";
-import listingBoostsRoutes from "./routes/listingBoosts.js";
-import dealerSuppliesRoutes from "./routes/dealerSupplies.js";
-import ordersRoutes from "./routes/orders.js";
-import walletRoutes from "./routes/wallet.js";
+import dealerLocationsRoutes from "./routes/dealerLocations.js";
 import pool from "./db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,7 +34,6 @@ const __dirname = path.dirname(__filename);
 import { syncProducts } from "./cron/syncProducts.js";
 import { syncChatbotKnowledge } from "./cron/syncChatbot.js";
 import { checkDealerExpiration } from "./cron/checkDealerExpiration.js";
-import { scrapePdfReports } from "./scraped/scrapePdf.js";
 import { authenticateToken, isAdmin } from "./middleware/auth.js";
 
 dotenv.config();
@@ -50,7 +47,23 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Protected uploads — phải đăng nhập mới xem được ảnh
+app.use("/uploads", (req, res, next) => {
+  // Lấy token từ header hoặc query param (img src không gửi được header)
+  const authHeader = req.headers["authorization"]
+  const token = (authHeader && authHeader.split(" ")[1]) || req.query.token
+  
+  if (!token) {
+    return res.status(401).json({ error: "Cần đăng nhập để xem ảnh" })
+  }
+  
+  try {
+    jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production")
+    next()
+  } catch {
+    return res.status(403).json({ error: "Token không hợp lệ" })
+  }
+}, express.static(path.join(__dirname, "uploads")));
 
 app.set("io", io);
 communityIoRef.io = io;
@@ -65,15 +78,13 @@ app.use("/api/news", newsRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/favorites", favoritesRouter);
 app.use("/api/costs", costRoutes);
-app.use("/api/chatbot", chatbotRoutes);
-app.use("/api/stats", statsRoutes); 
+// /api/chatbot removed — use /api/chat instead (same chatbot module)
+app.use("/api/stats", statsRoutes);
+app.use("/api/admin", statisticsRoutes);
 app.use("/api/chat", chatRouter);
 app.use("/api/purchase-requests", purchaseRequestRoutes);
 app.use("/api/dealer-upgrade", dealerUpgradeRoutes);
-app.use("/api/listing-boosts", listingBoostsRoutes);
-app.use("/api/dealer-supplies", dealerSuppliesRoutes);
-app.use("/api/orders", ordersRoutes);
-app.use("/api/wallet", walletRoutes);
+app.use("/api/dealer-locations", dealerLocationsRoutes);
 
 io.use((socket, next) => {
   try {
@@ -251,7 +262,8 @@ async function checkAndScrapeIfNeeded() {
       );
 
       if (!oldRegion) {
-        // console.log(`⏩ [Scraper] Bỏ qua vùng mới phát hiện: ${region.name} (${region.region})`);
+        console.log(`✨ [Scraper] Phát hiện vùng mới: ${region.name} (${region.region}). Đang thêm vào hệ thống.`);
+        oldData.regions.push(region);
         continue;
       }
 
@@ -310,15 +322,15 @@ function removeDuplicateRows(arr) {
 
 (async () => {
   await checkAndScrapeIfNeeded();
-  await checkDealerExpiration(io);
+  await checkDealerExpiration();
 })();
 
 // ⏱️ Cron chạy mỗi 5 phút, delay 1 phút để tránh trùng
 setTimeout(() => {
-  cron.schedule("*/30 * * * *", async () => {
+  cron.schedule("0 * * * *", async () => {
     await checkAndScrapeIfNeeded();
   });
-  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi 30 phút).");
+  console.log("⏱️ Cron kiểm tra dữ liệu đã bật (chạy mỗi giờ).");
 
   cron.schedule("17 */6 * * *", async () => {
     await syncChatbotKnowledge({ reason: "scheduled", io });
@@ -326,18 +338,9 @@ setTimeout(() => {
   console.log("⏱️ Cron đồng bộ chatbot đã bật (chạy mỗi 6 giờ).")
 
   cron.schedule("0 * * * *", async () => {
-    await checkDealerExpiration(io);
+    await checkDealerExpiration();
   });
   console.log("⏱️ Cron kiểm tra gia hạn đại lý đã bật (chạy mỗi giờ).")
-
-  // Cào PDF báo cáo tuần từ thitruongnongsan.gov.vn — mỗi Chủ nhật lúc 6h sáng
-  cron.schedule("0 6 * * 0", async () => {
-    console.log("📄 [Cron] Bắt đầu cào PDF báo cáo tuần...");
-    try { await scrapePdfReports(); } catch (err) {
-      console.error("❌ [Cron] Lỗi cào PDF:", err.message);
-    }
-  });
-  console.log("⏱️ Cron cào PDF báo cáo tuần đã bật (Chủ nhật 6h sáng).")
 }, 60_000);
 
 const PORT = process.env.PORT || 5000;
